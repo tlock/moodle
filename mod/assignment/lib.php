@@ -1298,6 +1298,42 @@ class assignment_base {
         $table->setup();
 
         /// Construct the SQL
+        if (empty($users)) {
+            echo $OUTPUT->heading(get_string('nosubmitusers','assignment'));
+            echo '</div>';
+
+            /// Mini form for setting user preference
+
+            $formaction = new moodle_url('/mod/assignment/submissions.php', array('id'=>$this->cm->id));
+            $mform = new MoodleQuickForm('optionspref', 'post', $formaction, '', array('class'=>'optionspref'));
+
+            $mform->addElement('hidden', 'updatepref');
+            $mform->setDefault('updatepref', 1);
+            $mform->addElement('header', 'qgprefs', get_string('optionalsettings', 'assignment'));
+            $mform->addElement('select', 'filter', get_string('show'),  $filters);
+
+            $mform->setDefault('filter', $filter);
+
+            $mform->addElement('text', 'perpage', get_string('pagesize', 'assignment'), array('size'=>1));
+            $mform->setDefault('perpage', $perpage);
+
+            $mform->addElement('checkbox', 'quickgrade', get_string('quickgrade','assignment'));
+            $mform->setDefault('quickgrade', $quickgrade);
+            $mform->addHelpButton('quickgrade', 'quickgrade', 'assignment');
+
+            $mform->addElement('submit', 'savepreferences', get_string('savepreferences'));
+
+            $mform->display();
+
+            echo $OUTPUT->footer();
+
+            return true;
+        }
+        if ($this->assignment->assignmenttype=='upload' || $this->assignment->assignmenttype=='online' || $this->assignment->assignmenttype=='uploadsingle') { //TODO: this is an ugly hack, where is the plugin spirit? (skodak)
+            echo '<div style="text-align:right"><a href="submissions.php?id='.$this->cm->id.'&amp;download=zip">'.get_string('downloadall', 'assignment').'</a></div>';
+        }
+    /// Construct the SQL
+
         list($where, $params) = $table->get_sql_where();
         if ($where) {
             $where .= ' AND ';
