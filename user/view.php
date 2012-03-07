@@ -239,7 +239,7 @@ if ($currentuser
    or $user->maildisplay == 1 //allow everyone to see email address
    or ($user->maildisplay == 2 && is_enrolled($coursecontext, $USER)) //fellow course members can see email. Already know $user is enrolled
    or has_capability('moodle/course:useremail', $coursecontext)) {
-    print_row(get_string("email").":", obfuscate_mailto($user->email, ''));
+    print_row(get_string("email").":", obfuscate_mailto($user->email, '', $user->emailstop, $course->shortname));
 }
 
 // Show last time this user accessed this course

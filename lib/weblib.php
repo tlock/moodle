@@ -2442,7 +2442,7 @@ function obfuscate_text($plaintext) {
  * @param boolean $dimmed If true then use css class 'dimmed' for hyperlink
  * @return string The obfuscated mailto link
  */
-function obfuscate_mailto($email, $label='', $dimmed=false) {
+function obfuscate_mailto($email, $label='', $dimmed=false, $subject=null) {
 
     if (empty($label)) {
         $label = $email;
@@ -2455,7 +2455,7 @@ function obfuscate_mailto($email, $label='', $dimmed=false) {
         $dimmed = '';
     }
     return sprintf("<a href=\"%s:%s\" $dimmed title=\"$title\">%s</a>",
-                    obfuscate_text('mailto'), obfuscate_email($email),
+                    obfuscate_text('mailto'), obfuscate_email($email).$subject,
                     obfuscate_text($label));
 }
 
