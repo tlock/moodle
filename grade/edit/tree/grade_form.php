@@ -181,7 +181,9 @@ class edit_grade_form extends moodleform {
                 $mform->hardFreeze('locktime');
             }
 
-            $mform->hardFreeze('overridden');
+            if ($grade_item->is_overridable_item()) {
+                $mform->hardFreeze('overridden');
+            }
             $mform->hardFreeze('finalgrade');
             $mform->hardFreeze('feedback');
 
