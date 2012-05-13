@@ -28,6 +28,8 @@ require_once($CFG->dirroot.'/course/lib.php');
 require_once($CFG->dirroot.'/report/log/locallib.php');
 require_once($CFG->libdir.'/adminlib.php');
 
+raise_memory_limit(MEMORY_EXTRA);
+
 $id          = optional_param('id', 0, PARAM_INT);// Course ID
 $host_course = optional_param('host_course', '', PARAM_PATH);// Course ID
 
