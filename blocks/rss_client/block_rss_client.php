@@ -308,6 +308,9 @@
             // set timeout for longer than normal to be agressive at
             // fetching feeds if possible..
             $feed->set_timeout(40);
+            if(isset($CFG->block_rss_client_timeout)){
+                $feed->set_timeout($CFG->block_rss_client_timeout);
+            }
             $feed->set_cache_duration(0);
             $feed->set_feed_url($rec->url);
             $feed->init();
