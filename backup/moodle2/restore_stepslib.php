@@ -1108,11 +1108,11 @@ class restore_section_structure_step extends restore_structure_step {
         // Note: We keep the code here, to know about and because of the possibility of making this
         // optional based on some setting/attribute in the future
         // If needed, adjust course->numsections
-        //if ($numsections = $DB->get_field('course', 'numsections', array('id' => $this->get_courseid()))) {
-        //    if ($numsections < $section->section) {
-        //        $DB->set_field('course', 'numsections', $section->section, array('id' => $this->get_courseid()));
-        //    }
-        //}
+        if ($numsections = $DB->get_field('course', 'numsections', array('id' => $this->get_courseid()))) {
+            if ($numsections < $section->section) {
+                $DB->set_field('course', 'numsections', $section->section, array('id' => $this->get_courseid()));
+            }
+        }
     }
 
     public function process_availability($data) {
