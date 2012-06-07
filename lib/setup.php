@@ -130,15 +130,6 @@ if (!defined('NO_OUTPUT_BUFFERING')) {
     define('NO_OUTPUT_BUFFERING', false);
 }
 
-// Servers should define a default timezone in php.ini, but if they don't then make sure something is defined.
-// This is a quick hack.  Ideally we should ask the admin for a value.  See MDL-22625 for more on this.
-if (function_exists('date_default_timezone_set') and function_exists('date_default_timezone_get')) {
-    $olddebug = error_reporting(0);
-    date_default_timezone_set(date_default_timezone_get());
-    error_reporting($olddebug);
-    unset($olddebug);
-}
-
 // PHPUnit scripts are a special case, for now we treat them as normal CLI scripts,
 // please note you must install PHPUnit library separately via PEAR
 if (!defined('PHPUNIT_SCRIPT')) {
@@ -472,6 +463,18 @@ if (isset($CFG->debug)) {
 
 // Load up any configuration from the config table
 initialise_cfg();
+
+// Servers should define a default timezone in php.ini, but if they don't then make sure something is defined.
+// This is a quick hack.  Ideally we should ask the admin for a value.  See MDL-22625 for more on this.
+if (function_exists('date_default_timezone_set') and function_exists('date_default_timezone_get')) {
+    $olddebug = error_reporting(0);
+    if (is_numeric($CFG->timezone))
+        date_default_timezone_set(date_default_timezone_get());
+    else
+        date_default_timezone_set($CFG->timezone);
+    error_reporting($olddebug);
+    unset($olddebug);
+}
 
 // Verify upgrade is not running unless we are in a script that needs to execute in any case
 if (!defined('NO_UPGRADE_CHECK') and isset($CFG->upgraderunning)) {
