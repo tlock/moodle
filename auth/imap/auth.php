@@ -60,6 +60,10 @@ class auth_plugin_imap extends auth_plugin_base {
                     $host = '{'.$host.":{$this->config->port}/imap/ssl/novalidate-cert}";
                 break;
 
+                case 'imapnosslcert':
+                    $host = '{'.$host.":{$this->config->port}/imap/novalidate-cert}";
+                break;
+
                 case 'imaptls':
                     $host = '{'.$host.":{$this->config->port}/imap/tls}";
                 break;
