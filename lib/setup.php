@@ -138,15 +138,6 @@ if (!defined('PHPUNIT_TEST')) {
     define('PHPUNIT_TEST', false);
 }
 
-// Servers should define a default timezone in php.ini, but if they don't then make sure something is defined.
-// This is a quick hack.  Ideally we should ask the admin for a value.  See MDL-22625 for more on this.
-if (function_exists('date_default_timezone_set') and function_exists('date_default_timezone_get')) {
-    $olddebug = error_reporting(0);
-    date_default_timezone_set(date_default_timezone_get());
-    error_reporting($olddebug);
-    unset($olddebug);
-}
-
 // Detect CLI scripts - CLI scripts are executed from command line, do not have session and we do not want HTML in output
 // In your new CLI scripts just add "define('CLI_SCRIPT', true);" before requiring config.php.
 // Please note that one script can not be accessed from both CLI and web interface.
@@ -507,6 +498,18 @@ if (PHPUNIT_TEST) {
     phpunit_util::initialise_cfg();
 } else {
     initialise_cfg();
+}
+
+// Servers should define a default timezone in php.ini, but if they don't then make sure something is defined.
+// This is a quick hack.  Ideally we should ask the admin for a value.  See MDL-22625 for more on this.
+if (function_exists('date_default_timezone_set') and function_exists('date_default_timezone_get')) {
+    $olddebug = error_reporting(0);
+    if (is_numeric($CFG->timezone))
+        date_default_timezone_set(date_default_timezone_get());
+    else
+        date_default_timezone_set($CFG->timezone);
+    error_reporting($olddebug);
+    unset($olddebug);
 }
 
 // Verify upgrade is not running unless we are in a script that needs to execute in any case
