@@ -76,7 +76,7 @@ class lesson_page_type_truefalse extends lesson_page {
 
         $result = parent::check_answer();
 
-        $answerid = $data->answerid;
+        $answerid = (isset($data->answerid)) ? $data->answerid : false;
         if ($answerid === false) {
             $result->noanswer = true;
             return $result;
