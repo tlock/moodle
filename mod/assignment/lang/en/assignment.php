@@ -23,6 +23,7 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+$string['activityoverview'] = 'You have assignments that need attention';
 $string['allowdeleting'] = 'Allow deleting';
 $string['allowdeleting_help'] = 'If enabled, students may delete uploaded files at any time before submitting for grading.';
 $string['allowmaxfiles'] = 'Maximum number of uploaded files';
@@ -56,6 +57,7 @@ $string['assignment:view'] = 'View assignment';
 $string['availabledate'] = 'Available from';
 $string['cannotdeletefiles'] = 'An error occurred and files could not be deleted';
 $string['cannotviewassignment'] = 'You can not view this assignment';
+$string['changegradewarning'] = 'This assignment has graded submissions and changing the grade will not automatically re-calculate existing submission grades. You must re-grade all existing submissions, if you wish to change the grade.';
 $string['comment'] = 'Comment';
 $string['commentinline'] = 'Comment inline';
 $string['commentinline_help'] = 'If enabled, the submission text will be copied into the feedback comment field during grading, making it easier to comment inline (using a different colour, perhaps) or to edit the original text.';

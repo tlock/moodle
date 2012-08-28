@@ -33,15 +33,15 @@ require_once($CFG->libdir . '/conditionlib.php');
 require_once('editsection_form.php');
 
 $id = required_param('id',PARAM_INT);    // Week/topic ID
-$sectionreturn = optional_param('sectionreturn', 0, PARAM_BOOL);
+$sectionreturn = optional_param('sr', 0, PARAM_INT);
 
-$PAGE->set_url('/course/editsection.php', array('id'=>$id, 'sectionreturn'=> $sectionreturn));
+$PAGE->set_url('/course/editsection.php', array('id'=>$id, 'sr'=> $sectionreturn));
 
 $section = $DB->get_record('course_sections', array('id' => $id), '*', MUST_EXIST);
 $course = $DB->get_record('course', array('id' => $section->course), '*', MUST_EXIST);
 
 require_login($course);
-$context = get_context_instance(CONTEXT_COURSE, $course->id);
+$context = context_course::instance($course->id);
 require_capability('moodle/course:update', $context);
 
 $editoroptions = array('context'=>$context ,'maxfiles' => EDITOR_UNLIMITED_FILES, 'maxbytes'=>$CFG->maxbytes, 'trusttext'=>false, 'noclean'=>true);
@@ -54,17 +54,14 @@ if (!empty($CFG->enableavailability)) {
     $sectioninfo = $modinfo->get_section_info($section->section);
     $section->conditionsgrade = $sectioninfo->conditionsgrade;
     $section->conditionscompletion = $sectioninfo->conditionscompletion;
+    $section->conditionsfield = $sectioninfo->conditionsfield;
 }
 
 $mform = new editsection_form($PAGE->url, array('course' => $course, 'editoroptions' => $editoroptions,
         'cs' => $section, 'showavailability' => $section->showavailability));
 $mform->set_data($section); // set current value
 
-if ($sectionreturn) {
-    $returnurl = course_get_url($course, $section->section);
-} else {
-    $returnurl = course_get_url($course);
-}
+$returnurl = course_get_url($course, $sectionreturn);
 
 /// If data submitted, then process and store.
 if ($mform->is_cancelled()){

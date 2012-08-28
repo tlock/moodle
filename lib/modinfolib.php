@@ -202,9 +202,17 @@ class course_modinfo extends stdClass {
     /**
      * Gets data about specific numbered section.
      * @param int $sectionnumber Number (not id) of section
-     * @return section_info Information for numbered section
+     * @param int $strictness Use MUST_EXIST to throw exception if it doesn't
+     * @return section_info Information for numbered section or null if not found
      */
-    public function get_section_info($sectionnumber) {
+    public function get_section_info($sectionnumber, $strictness = IGNORE_MISSING) {
+        if (!array_key_exists($sectionnumber, $this->sectioninfo)) {
+            if ($strictness === MUST_EXIST) {
+                throw new moodle_exception('sectionnotexist');
+            } else {
+                return null;
+            }
+        }
         return $this->sectioninfo[$sectionnumber];
     }
 
@@ -597,6 +605,12 @@ class cm_info extends stdClass {
     public $conditionsgrade;
 
     /**
+     * Availability conditions for this course-module based on user fields
+     * @var array
+     */
+    public $conditionsfield;
+
+    /**
      * Plural name of module type, e.g. 'Forums' - from lang file
      * @deprecated Do not use this value (you can obtain it by calling get_string instead); it
      *   will be removed in a future version (see later TODO in this file)
@@ -959,7 +973,7 @@ class cm_info extends stdClass {
         $this->icon             = isset($mod->icon) ? $mod->icon : '';
         $this->iconcomponent    = isset($mod->iconcomponent) ? $mod->iconcomponent : '';
         $this->customdata       = isset($mod->customdata) ? $mod->customdata : '';
-        $this->context          = get_context_instance(CONTEXT_MODULE, $mod->cm);
+        $this->context          = context_module::instance($mod->cm);
         $this->showdescription  = isset($mod->showdescription) ? $mod->showdescription : 0;
         $this->state = self::STATE_BASIC;
 
@@ -996,6 +1010,8 @@ class cm_info extends stdClass {
                 ? $mod->conditionscompletion : array();
         $this->conditionsgrade = isset($mod->conditionsgrade)
                 ? $mod->conditionsgrade : array();
+        $this->conditionsfield = isset($mod->conditionsfield)
+                ? $mod->conditionsfield : array();
 
         // Get module plural name.
         // TODO This was a very old performance hack and should now be removed as the information
@@ -1075,21 +1091,27 @@ class cm_info extends stdClass {
      */
     private function update_user_visible() {
         global $CFG;
-        $modcontext = get_context_instance(CONTEXT_MODULE, $this->id);
+        $modcontext = context_module::instance($this->id);
         $userid = $this->modinfo->get_user_id();
         $this->uservisible = true;
+        // Check visibility/availability conditions.
         if ((!$this->visible or !$this->available) and
                 !has_capability('moodle/course:viewhiddenactivities', $modcontext, $userid)) {
             // If the activity is hidden or unavailable, and you don't have viewhiddenactivities,
-            // set it so that user can't see or access it
+            // set it so that user can't see or access it.
             $this->uservisible = false;
-        } else if (!empty($CFG->enablegroupmembersonly) and !empty($this->groupmembersonly)
+        }
+        // Check group membership. The grouping option makes the activity
+        // completely invisible as it does not apply to the user at all.
+        if (!empty($CFG->enablegroupmembersonly) and !empty($this->groupmembersonly)
                 and !has_capability('moodle/site:accessallgroups', $modcontext, $userid)) {
             // If the activity has 'group members only' and you don't have accessallgroups...
             $groups = $this->modinfo->get_groups($this->groupingid);
             if (empty($groups)) {
                 // ...and you don't belong to a group, then set it so you can't see/access it
                 $this->uservisible = false;
+                // Ensure activity is completely hidden from user.
+                $this->showavailability = 0;
             }
         }
     }
@@ -1489,6 +1511,8 @@ class section_info extends stdClass {
                 ? $data->conditionscompletion : array();
         $this->conditionsgrade = isset($data->conditionsgrade)
                 ? $data->conditionsgrade : array();
+        $this->conditionsfield = isset($data->conditionsfield)
+                ? $data->conditionsfield : array();
 
         // Other data from other places
         $this->course = $courseid;

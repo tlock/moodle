@@ -110,7 +110,7 @@ abstract class backup_cron_automated_helper {
             $nextstarttime = backup_cron_automated_helper::calculate_next_automated_backup($admin->timezone, $now);
             $showtime = "undefined";
             if ($nextstarttime > 0) {
-                $showtime = userdate($nextstarttime,"",$admin->timezone);
+                $showtime = date('r', $nextstarttime);
             }
 
             $rs = $DB->get_recordset('course');
@@ -124,7 +124,14 @@ abstract class backup_cron_automated_helper {
                 }
 
                 // Skip courses that do not yet need backup
-                $skipped = !(($backupcourse->nextstarttime >= 0 && $backupcourse->nextstarttime < $now) || $rundirective == self::RUN_IMMEDIATELY);
+                $skipped = !(($backupcourse->nextstarttime > 0 && $backupcourse->nextstarttime < $now) || $rundirective == self::RUN_IMMEDIATELY);
+                if ($skipped && $backupcourse->nextstarttime != $nextstarttime) {
+                    $backupcourse->nextstarttime = $nextstarttime;
+                    $backupcourse->laststatus = backup_cron_automated_helper::BACKUP_STATUS_SKIPPED;
+                    $DB->update_record('backup_courses', $backupcourse);
+                    mtrace('Backup of \'' . $course->fullname . '\' is scheduled on ' . $showtime);
+                }
+
                 // Skip backup of unavailable courses that have remained unmodified in a month
                 if (!$skipped && empty($course->visible) && ($now - $course->timemodified) > 31*24*60*60) {  //Hidden + settings were unmodified last month
                     //Check log if there were any modifications to the course content
@@ -139,9 +146,10 @@ abstract class backup_cron_automated_helper {
                         $skipped = true;
                     }
                 }
+
                 //Now we backup every non-skipped course
                 if (!$skipped) {
-                    mtrace('Backing up '.$course->fullname, '...');
+                    mtrace('Backing up '.$course->fullname.'...');
 
                     //We have to send a email because we have included at least one backup
                     $emailpending = true;
@@ -207,7 +215,7 @@ abstract class backup_cron_automated_helper {
 
             //Build the message subject
             $site = get_site();
-            $prefix = format_string($site->shortname, true, array('context' => get_context_instance(CONTEXT_COURSE, SITEID))).": ";
+            $prefix = format_string($site->shortname, true, array('context' => context_course::instance(SITEID))).": ";
             if ($haserrors) {
                 $prefix .= "[".strtoupper(get_string('error'))."] ";
             }
@@ -255,7 +263,7 @@ abstract class backup_cron_automated_helper {
             self::BACKUP_STATUS_SKIPPED => 0,
         );
 
-        $statuses = $DB->get_records_sql('SELECT DISTINCT bc.laststatus, COUNT(bc.courseid) statuscount FROM {backup_courses} bc GROUP BY bc.laststatus');
+        $statuses = $DB->get_records_sql('SELECT DISTINCT bc.laststatus, COUNT(bc.courseid) AS statuscount FROM {backup_courses} bc GROUP BY bc.laststatus');
 
         foreach ($statuses as $status) {
             if (empty($status->statuscount)) {
@@ -270,36 +278,47 @@ abstract class backup_cron_automated_helper {
     /**
      * Works out the next time the automated backup should be run.
      *
-     * @param mixed $timezone
-     * @param int $now
-     * @return int
+     * @param mixed $timezone user timezone
+     * @param int $now timestamp, should not be in the past, most likely time()
+     * @return int timestamp of the next execution at server time
      */
     public static function calculate_next_automated_backup($timezone, $now) {
 
-        $result = -1;
+        $result = 0;
         $config = get_config('backup');
-        $midnight = usergetmidnight($now, $timezone);
+        $autohour = $config->backup_auto_hour;
+        $automin = $config->backup_auto_minute;
+
+        // Gets the user time relatively to the server time.
         $date = usergetdate($now, $timezone);
+        $usertime = mktime($date['hours'], $date['minutes'], $date['seconds'], $date['mon'], $date['mday'], $date['year']);
+        $diff = $now - $usertime;
 
-        //Get number of days (from today) to execute backups
-        $automateddays = substr($config->backup_auto_weekdays,$date['wday']) . $config->backup_auto_weekdays;
-        $daysfromtoday = strpos($automateddays, "1");
-        if (empty($daysfromtoday)) {
-            $daysfromtoday = 1;
+        // Get number of days (from user's today) to execute backups.
+        $automateddays = substr($config->backup_auto_weekdays, $date['wday']) . $config->backup_auto_weekdays;
+        $daysfromnow = strpos($automateddays, "1");
+
+        // Error, there are no days to schedule the backup for.
+        if ($daysfromnow === false) {
+            return 0;
         }
 
-        //If some day has been found
-        if ($daysfromtoday !== false) {
-            //Calculate distance
-            $dist = ($daysfromtoday * 86400) +                //Days distance
-                    ($config->backup_auto_hour * 3600) +      //Hours distance
-                    ($config->backup_auto_minute * 60);       //Minutes distance
-            $result = $midnight + $dist;
+        // Checks if the date would happen in the future (of the user).
+        $userresult = mktime($autohour, $automin, 0, $date['mon'], $date['mday'] + $daysfromnow, $date['year']);
+        if ($userresult <= $usertime) {
+            // If not, we skip the first scheduled day, that should fix it.
+            $daysfromnow = strpos($automateddays, "1", 1);
+            $userresult = mktime($autohour, $automin, 0, $date['mon'], $date['mday'] + $daysfromnow, $date['year']);
         }
 
-        //If that time is past, call the function recursively to obtain the next valid day
-        if ($result > 0 && $result < time()) {
-            $result = self::calculate_next_automated_backup($timezone, $result);
+        // Now we generate the time relative to the server.
+        $result = $userresult + $diff;
+
+        // If that time is past, call the function recursively to obtain the next valid day.
+        if ($result <= $now) {
+            // Checking time() in here works, but makes PHPUnit Tests extremely hard to predict.
+            // $now should never be earlier than time() anyway...
+            $result = self::calculate_next_automated_backup($timezone, $now + DAYSECS);
         }
 
         return $result;
@@ -409,7 +428,12 @@ abstract class backup_cron_automated_helper {
 
         $config = get_config('backup');
         $active = (int)$config->backup_auto_active;
-        if ($active === self::AUTO_BACKUP_DISABLED || ($rundirective == self::RUN_ON_SCHEDULE && $active === self::AUTO_BACKUP_MANUAL)) {
+        $weekdays = (string)$config->backup_auto_weekdays;
+
+        // In case of automated backup also check that it is scheduled for at least one weekday.
+        if ($active === self::AUTO_BACKUP_DISABLED ||
+                ($rundirective == self::RUN_ON_SCHEDULE && $active === self::AUTO_BACKUP_MANUAL) ||
+                ($rundirective == self::RUN_ON_SCHEDULE && strpos($weekdays, '1') === false)) {
             return self::STATE_DISABLED;
         } else if (!empty($config->backup_auto_running)) {
             // Detect if the backup_auto_running semaphore is a valid one
@@ -476,7 +500,7 @@ abstract class backup_cron_automated_helper {
         // Clean up excess backups in the course backup filearea
         if ($storage == 0 || $storage == 2) {
             $fs = get_file_storage();
-            $context = get_context_instance(CONTEXT_COURSE, $course->id);
+            $context = context_course::instance($course->id);
             $component = 'backup';
             $filearea = 'automated';
             $itemid = 0;
@@ -506,7 +530,18 @@ abstract class backup_cron_automated_helper {
         if (!empty($dir) && ($storage == 1 || $storage == 2)) {
             // Calculate backup filename regex, ignoring the date/time/info parts that can be
             // variable, depending of languages, formats and automated backup settings
-            $filename = $backupword . '-' . backup::FORMAT_MOODLE . '-' . backup::TYPE_1COURSE . '-' .$course->id . '-';
+
+
+            // MDL-33531: use different filenames depending on backup_shortname option
+            if ( !empty($config->backup_shortname) ) {
+                $context = get_context_instance(CONTEXT_COURSE, $course->id);
+                $courseref = format_string($course->shortname, true, array('context' => $context));
+                $courseref = str_replace(' ', '_', $courseref);
+                $courseref = textlib::strtolower(trim(clean_filename($courseref), '_'));
+            } else {
+                $courseref = $course->id;
+            }
+            $filename = $backupword . '-' . backup::FORMAT_MOODLE . '-' . backup::TYPE_1COURSE . '-' .$courseref . '-';
             $regex = '#^'.preg_quote($filename, '#').'.*\.mbz$#';
 
             // Store all the matching files into fullpath => timemodified array

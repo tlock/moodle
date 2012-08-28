@@ -65,7 +65,7 @@ class course_completion_form extends moodleform {
         $mform->setDefault('overall_aggregation', $completion->get_aggregation_method());
 
         // Course prerequisite completion criteria
-        $mform->addElement('header', 'courseprerequisites', get_string('courseprerequisites', 'completion'));
+        $mform->addElement('header', 'courseprerequisites', get_string('completiondependencies', 'completion'));
 
         // Get applicable courses
         $courses = $DB->get_records_sql(
@@ -105,7 +105,7 @@ class course_completion_form extends moodleform {
             $selectbox = array();
             $selected = array();
             foreach ($courses as $c) {
-                $selectbox[$c->id] = $list[$c->category] . ' / ' . format_string($c->fullname, true, array('context' => get_context_instance(CONTEXT_COURSE, $c->id)));
+                $selectbox[$c->id] = $list[$c->category] . ' / ' . format_string($c->fullname, true, array('context' => context_course::instance($c->id)));
 
                 // If already selected
                 if ($c->selected) {
@@ -134,7 +134,7 @@ class course_completion_form extends moodleform {
         // Role completion criteria
         $mform->addElement('header', 'roles', get_string('manualcompletionby', 'completion'));
 
-        $roles = get_roles_with_capability('moodle/course:markcomplete', CAP_ALLOW, get_context_instance(CONTEXT_COURSE, $course->id));
+        $roles = get_roles_with_capability('moodle/course:markcomplete', CAP_ALLOW, context_course::instance($course->id, IGNORE_MISSING));
 
         if (!empty($roles)) {
             $mform->addElement('select', 'role_aggregation', get_string('aggregationmethod', 'completion'), $aggregation_methods);
@@ -179,10 +179,13 @@ class course_completion_form extends moodleform {
         $criteria->config_form_display($mform);
 
         // Completion on course grade
-        $mform->addElement('header', 'grade', get_string('grade'));
+        $mform->addElement('header', 'grade', get_string('coursegrade', 'completion'));
 
         // Grade enable and passing grade
         $course_grade = $DB->get_field('grade_items', 'gradepass', array('courseid' => $course->id, 'itemtype' => 'course'));
+        if (!$course_grade) {
+            $course_grade = '0.00000';
+        }
         $criteria = new completion_criteria_grade($params);
         $criteria->config_form_display($mform, $course_grade);
 

@@ -687,7 +687,7 @@ class core_calendar_renderer extends plugin_renderer_base {
             return '';
         }
 
-        if (has_capability('moodle/calendar:manageentries', get_context_instance(CONTEXT_SYSTEM)) && !empty($CFG->calendar_adminseesall)) {
+        if (has_capability('moodle/calendar:manageentries', context_system::instance()) && !empty($CFG->calendar_adminseesall)) {
             $courses = get_courses('all', 'c.shortname','c.id,c.shortname');
         } else {
             $courses = enrol_get_my_courses();
@@ -698,7 +698,7 @@ class core_calendar_renderer extends plugin_renderer_base {
         $courseoptions = array();
         $courseoptions[SITEID] = get_string('fulllistofcourses');
         foreach ($courses as $course) {
-            $coursecontext = get_context_instance(CONTEXT_COURSE, $course->id);
+            $coursecontext = context_course::instance($course->id);
             $courseoptions[$course->id] = format_string($course->shortname, true, array('context' => $coursecontext));
         }
 
@@ -710,7 +710,9 @@ class core_calendar_renderer extends plugin_renderer_base {
         $select = new single_select(new moodle_url(CALENDAR_URL.'set.php', array('return' => base64_encode($returnurl->out(false)), 'var' => 'setcourse', 'sesskey'=>sesskey())), 'id', $courseoptions, $selected, null);
         $select->class = 'cal_courses_flt';
         if ($label !== null) {
-            $select->label = $label;
+            $select->set_label($label);
+        } else {
+            $select->set_label(get_string('listofcourses'), array('class' => 'accesshide'));
         }
         return $this->output->render($select);
     }

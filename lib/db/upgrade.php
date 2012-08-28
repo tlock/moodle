@@ -85,7 +85,7 @@ defined('MOODLE_INTERNAL') || die();
  * @return bool always true
  */
 function xmldb_main_upgrade($oldversion) {
-    global $CFG, $USER, $DB, $OUTPUT;
+    global $CFG, $USER, $DB, $OUTPUT, $SITE;
 
     require_once($CFG->libdir.'/db/upgradelib.php'); // Core Upgrade-related functions
 
@@ -405,7 +405,7 @@ function xmldb_main_upgrade($oldversion) {
     }
 
     if ($oldversion < 2012042300.02) {
-        require_once($CFG->libdir . '/completion/completion_criteria.php');
+        require_once($CFG->dirroot.'/completion/criteria/completion_criteria.php');
         // Delete orphaned criteria which were left when modules were removed
         if ($DB->get_dbfamily() === 'mysql') {
             $sql = "DELETE cc FROM {course_completion_criteria} cc
@@ -869,6 +869,254 @@ function xmldb_main_upgrade($oldversion) {
         }
 
         upgrade_main_savepoint(true, 2012062000.01);
+    }
+
+
+    // Moodle v2.3.0 release upgrade line
+    // Put any upgrade step following this
+
+
+    if ($oldversion < 2012062500.02) {
+        // Drop some old backup tables, not used anymore
+
+        // Define table backup_files to be dropped
+        $table = new xmldb_table('backup_files');
+
+        // Conditionally launch drop table for backup_files
+        if ($dbman->table_exists($table)) {
+            $dbman->drop_table($table);
+        }
+
+        // Define table backup_ids to be dropped
+        $table = new xmldb_table('backup_ids');
+
+        // Conditionally launch drop table for backup_ids
+        if ($dbman->table_exists($table)) {
+            $dbman->drop_table($table);
+        }
+
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2012062500.02);
+    }
+
+    if ($oldversion < 2012070600.04) {
+        // Define table course_modules_avail_fields to be created
+        $table = new xmldb_table('course_modules_avail_fields');
+
+        // Adding fields to table course_modules_avail_fields
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('coursemoduleid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('userfield', XMLDB_TYPE_CHAR, '50', null, null, null, null);
+        $table->add_field('customfieldid', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('operator', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('value', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+
+        // Adding keys to table course_modules_avail_fields
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $table->add_key('coursemoduleid', XMLDB_KEY_FOREIGN, array('coursemoduleid'), 'course_modules', array('id'));
+
+        // Conditionally launch create table for course_modules_avail_fields
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2012070600.04);
+    }
+
+    if ($oldversion < 2012070600.05) {
+        // Define table course_sections_avail_fields to be created
+        $table = new xmldb_table('course_sections_avail_fields');
+
+        // Adding fields to table course_sections_avail_fields
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('coursesectionid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('userfield', XMLDB_TYPE_CHAR, '50', null, null, null, null);
+        $table->add_field('customfieldid', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('operator', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('value', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+
+        // Adding keys to table course_sections_avail_fields
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $table->add_key('coursesectionid', XMLDB_KEY_FOREIGN, array('coursesectionid'), 'course_sections', array('id'));
+
+        // Conditionally launch create table for course_sections_avail_fields
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2012070600.05);
+    }
+
+    if ($oldversion < 2012070600.06) {
+
+        // Drop "deleted" fields
+        $table = new xmldb_table('course_completions');
+        $field = new xmldb_field('timenotified');
+        $field = new xmldb_field('deleted');
+
+        // Conditionally launch drop field deleted from course_completions
+        if ($dbman->field_exists($table, $field)) {
+            $dbman->drop_field($table, $field);
+        }
+
+        $field = new xmldb_field('timenotified');
+        // Conditionally launch drop field timenotified from course_completions
+        if ($dbman->field_exists($table, $field)) {
+            $dbman->drop_field($table, $field);
+        }
+
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2012070600.06);
+    }
+
+    if ($oldversion < 2012070600.07) {
+        $table = new xmldb_table('course_completion_crit_compl');
+        $field = new xmldb_field('deleted');
+
+        // Conditionally launch drop field deleted from course_completion_crit_compl
+        if ($dbman->field_exists($table, $field)) {
+            $dbman->drop_field($table, $field);
+        }
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2012070600.07);
+    }
+
+    if ($oldversion < 2012070600.08) {
+
+        // Drop unused table "course_completion_notify"
+        $table = new xmldb_table('course_completion_notify');
+
+        // Conditionally launch drop table course_completion_notify
+        if ($dbman->table_exists($table)) {
+            $dbman->drop_table($table);
+        }
+
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2012070600.08);
+     }
+
+    if ($oldversion < 2012070600.09) {
+
+        // Define index path (not unique) to be added to context
+        $table = new xmldb_table('context');
+        $index = new xmldb_index('path', XMLDB_INDEX_NOTUNIQUE, array('path'), array('varchar_pattern_ops'));
+
+        // Recreate index with new pattern hint
+        if ($DB->get_dbfamily() === 'postgres') {
+            if ($dbman->index_exists($table, $index)) {
+                $dbman->drop_index($table, $index);
+            }
+            $dbman->add_index($table, $index);
+        }
+
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2012070600.09);
+    }
+
+    if ($oldversion < 2012070600.10) {
+
+        // Define index name (unique) to be dropped form role
+        $table = new xmldb_table('role');
+        $index = new xmldb_index('name', XMLDB_INDEX_UNIQUE, array('name'));
+
+        // Conditionally launch drop index name
+        if ($dbman->index_exists($table, $index)) {
+            $dbman->drop_index($table, $index);
+        }
+
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2012070600.10);
+    }
+
+    if ($oldversion < 2012070600.11) {
+
+        // Define index component-itemid-userid (not unique) to be added to role_assignments
+        $table = new xmldb_table('role_assignments');
+        $index = new xmldb_index('component-itemid-userid', XMLDB_INDEX_NOTUNIQUE, array('component', 'itemid', 'userid'));
+
+        // Conditionally launch add index component-itemid-userid
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2012070600.11);
+    }
+
+    if ($oldversion < 2012071900.01) {
+        // Cleanup after simpeltests tool
+        capabilities_cleanup('tool_unittest');
+        unset_all_config_for_plugin('tool_unittest');
+
+        upgrade_main_savepoint(true, 2012071900.01);
+    }
+
+    if ($oldversion < 2012072400.00) {
+        // Remove obsolete xhtml strict setting - use THEME->doctype in theme config if necessary,
+        // see theme_config->doctype in lib/outputlib.php for more details.
+        unset_config('xmlstrictheaders');
+        upgrade_main_savepoint(true, 2012072400.00);
+    }
+
+    if ($oldversion < 2012072401.00) {
+
+        // Saves orphaned questions from the Dark Side
+        upgrade_save_orphaned_questions();
+
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2012072401.00);
+    }
+
+    if ($oldversion < 2012072600.01) {
+        // Handle events with empty eventtype //MDL-32827
+
+        $DB->set_field('event', 'eventtype', 'site', array('eventtype' => '', 'courseid' => $SITE->id));
+        $DB->set_field_select('event', 'eventtype', 'due', "eventtype = '' AND courseid != 0 AND groupid = 0 AND (modulename = 'assignment' OR modulename = 'assign')");
+        $DB->set_field_select('event', 'eventtype', 'course', "eventtype = '' AND courseid != 0 AND groupid = 0");
+        $DB->set_field_select('event', 'eventtype', 'group', "eventtype = '' AND groupid != 0");
+        $DB->set_field_select('event', 'eventtype', 'user', "eventtype = '' AND userid != 0");
+
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2012072600.01);
+    }
+
+    if ($oldversion < 2012080200.02) {
+        // Drop obsolete question upgrade field that should have been added to the install.xml.
+        $table = new xmldb_table('question');
+        $field = new xmldb_field('oldquestiontextformat', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0');
+
+        if ($dbman->field_exists($table, $field)) {
+            $dbman->drop_field($table, $field);
+        }
+
+        upgrade_main_savepoint(true, 2012080200.02);
+    }
+
+    if ($oldversion < 2012081400.01) {
+        // Move the ability to disable blogs to its own setting MDL-25012.
+
+        if (isset($CFG->bloglevel)) {
+            // Only change settings if existing setting was set.
+            if (empty($CFG->bloglevel)) {
+                set_config('enableblogs', 0);
+                // Now set the bloglevel to a valid setting as the disabled setting has been removed.
+                // This prevents confusing results when users enable the blog system in future.
+                set_config('bloglevel', BLOG_USER_LEVEL);
+            } else {
+                set_config('enableblogs', 1);
+            }
+        }
+
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2012081400.01);
+    }
+
+    if ($oldversion < 2012081600.01) {
+        // Delete removed setting - Google Maps API V2 will not work in 2013.
+        unset_config('googlemapkey');
+        upgrade_main_savepoint(true, 2012081600.01);
     }
 
 

@@ -80,7 +80,12 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element {
             $this->_options['maxbytes'] = get_max_upload_file_size($CFG->maxbytes, $options['maxbytes']);
         }
         if (!$this->_options['context']) {
-            $this->_options['context'] = get_context_instance(CONTEXT_SYSTEM);
+            // trying to set context to the current page context to make legacy files show in filepicker (e.g. forum post)
+            if (!empty($PAGE->context->id)) {
+                $this->_options['context'] = $PAGE->context;
+            } else {
+                $this->_options['context'] = context_system::instance();
+            }
         }
         $this->_options['trusted'] = trusttext_trusted($this->_options['context']);
         parent::HTML_QuickForm_element($elementName, $elementLabel, $attributes);
@@ -208,10 +213,11 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element {
      * @param mixed $_helpbuttonargs arguments to create help button
      * @param string $function name of the callback function
      * @deprecated since Moodle 2.0. Please do not call this function any more.
-     * @todo MDL-31047 this api will be removed.
-     * @see MoodleQuickForm::setHelpButton()
+     * @todo MDL-34508 this api will be removed.
+     * @see MoodleQuickForm::addHelpButton()
      */
     function setHelpButton($_helpbuttonargs, $function='_helpbutton') {
+        debugging('setHelpButton() is deprecated, please use $mform->addHelpButton() instead');
         if (!is_array($_helpbuttonargs)) {
             $_helpbuttonargs = array($_helpbuttonargs);
         } else {
@@ -360,10 +366,11 @@ class MoodleQuickForm_editor extends HTML_QuickForm_element {
 
         $str .= '<div>';
         if (count($formats)>1) {
-            $str.= html_writer::select($formats, $elname.'[format]', $format, false);
+            $str .= html_writer::label(get_string('format'), 'menu'. $elname. 'format', false, array('class' => 'accesshide'));
+            $str .= html_writer::select($formats, $elname.'[format]', $format, false, array('id' => 'menu'. $elname. 'format'));
         } else {
             $keys = array_keys($formats);
-            $str.= html_writer::empty_tag('input',
+            $str .= html_writer::empty_tag('input',
                     array('name'=>$elname.'[format]', 'type'=> 'hidden', 'value' => array_pop($keys)));
         }
         $str .= '</div>';

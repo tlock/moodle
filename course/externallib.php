@@ -85,7 +85,7 @@ class core_course_external extends external_api {
         }
 
         // now security checks
-        $context = get_context_instance(CONTEXT_COURSE, $course->id);
+        $context = context_course::instance($course->id, IGNORE_MISSING);
         try {
             self::validate_context($context);
         } catch (Exception $e) {
@@ -144,7 +144,7 @@ class core_course_external extends external_api {
                     $module['modicon'] = $cm->get_icon_url()->out(false);
                     $module['indent'] = $cm->indent;
 
-                    $modcontext = get_context_instance(CONTEXT_MODULE, $cm->id);
+                    $modcontext = context_module::instance($cm->id);
 
                     if (!empty($cm->showdescription)) {
                         $module['description'] = $cm->get_content();
@@ -157,7 +157,7 @@ class core_course_external extends external_api {
                     }
 
                     $canviewhidden = has_capability('moodle/course:viewhiddenactivities',
-                                        get_context_instance(CONTEXT_MODULE, $cm->id));
+                                        context_module::instance($cm->id));
                     //user that can view hidden module should know about the visibility
                     $module['visible'] = $cm->visible;
 
@@ -297,7 +297,7 @@ class core_course_external extends external_api {
         foreach ($courses as $course) {
 
             // now security checks
-            $context = get_context_instance(CONTEXT_COURSE, $course->id);
+            $context = context_course::instance($course->id, IGNORE_MISSING);
             try {
                 self::validate_context($context);
             } catch (Exception $e) {
@@ -511,7 +511,7 @@ class core_course_external extends external_api {
         foreach ($params['courses'] as $course) {
 
             // Ensure the current user is allowed to run this function
-            $context = get_context_instance(CONTEXT_COURSECAT, $course['categoryid']);
+            $context = context_coursecat::instance($course['categoryid'], IGNORE_MISSING);
             try {
                 self::validate_context($context);
             } catch (Exception $e) {
@@ -668,13 +668,12 @@ class core_course_external extends external_api {
                 'options' => new external_multiple_structure(
                     new external_single_structure(
                         array(
-                                'name' => new external_value(PARAM_ALPHA, 'The backup option name:
+                                'name' => new external_value(PARAM_ALPHAEXT, 'The backup option name:
                                             "activities" (int) Include course activites (default to 1 that is equal to yes),
                                             "blocks" (int) Include course blocks (default to 1 that is equal to yes),
                                             "filters" (int) Include course filters  (default to 1 that is equal to yes),
                                             "users" (int) Include users (default to 0 that is equal to no),
                                             "role_assignments" (int) Include role assignments  (default to 0 that is equal to no),
-                                            "user_files" (int) Include user files  (default to 0 that is equal to no),
                                             "comments" (int) Include user comments  (default to 0 that is equal to no),
                                             "completion_information" (int) Include user course completion information  (default to 0 that is equal to no),
                                             "logs" (int) Include course logs  (default to 0 that is equal to no),
@@ -722,7 +721,7 @@ class core_course_external extends external_api {
         // Context validation.
 
         if (! ($course = $DB->get_record('course', array('id'=>$params['courseid'])))) {
-            throw new moodle_exception('invalidcourseid', 'error', '', $params['courseid']);
+            throw new moodle_exception('invalidcourseid', 'error');
         }
 
         // Category where duplicated course is going to be created.
@@ -739,7 +738,6 @@ class core_course_external extends external_api {
             'filters' => 1,
             'users' => 0,
             'role_assignments' => 0,
-            'user_files' => 0,
             'comments' => 0,
             'completion_information' => 0,
             'logs' => 0,
@@ -886,6 +884,189 @@ class core_course_external extends external_api {
     }
 
     /**
+     * Returns description of method parameters for import_course
+     *
+     * @return external_function_parameters
+     * @since Moodle 2.4
+     */
+    public static function import_course_parameters() {
+        return new external_function_parameters(
+            array(
+                'importfrom' => new external_value(PARAM_INT, 'the id of the course we are importing from'),
+                'importto' => new external_value(PARAM_INT, 'the id of the course we are importing to'),
+                'deletecontent' => new external_value(PARAM_INT, 'whether to delete the course content where we are importing to (default to 0 = No)', VALUE_DEFAULT, 0),
+                'options' => new external_multiple_structure(
+                    new external_single_structure(
+                        array(
+                                'name' => new external_value(PARAM_ALPHA, 'The backup option name:
+                                            "activities" (int) Include course activites (default to 1 that is equal to yes),
+                                            "blocks" (int) Include course blocks (default to 1 that is equal to yes),
+                                            "filters" (int) Include course filters  (default to 1 that is equal to yes)'
+                                            ),
+                                'value' => new external_value(PARAM_RAW, 'the value for the option 1 (yes) or 0 (no)'
+                            )
+                        )
+                    ), VALUE_DEFAULT, array()
+                ),
+            )
+        );
+    }
+
+    /**
+     * Imports a course
+     *
+     * @param int $importfrom The id of the course we are importing from
+     * @param int $importto The id of the course we are importing to
+     * @param bool $deletecontent Whether to delete the course we are importing to content
+     * @param array $options List of backup options
+     * @return null
+     * @since Moodle 2.4
+     */
+    public static function import_course($importfrom, $importto, $deletecontent = 0, $options = array()) {
+        global $CFG, $USER, $DB;
+        require_once($CFG->dirroot . '/backup/util/includes/backup_includes.php');
+        require_once($CFG->dirroot . '/backup/util/includes/restore_includes.php');
+
+        // Parameter validation.
+        $params = self::validate_parameters(
+            self::import_course_parameters(),
+            array(
+                'importfrom' => $importfrom,
+                'importto' => $importto,
+                'deletecontent' => $deletecontent,
+                'options' => $options
+            )
+        );
+
+        if ($params['deletecontent'] !== 0 and $params['deletecontent'] !== 1) {
+            throw new moodle_exception('invalidextparam', 'webservice', '', $option['deletecontent']);
+        }
+
+        // Context validation.
+
+        if (! ($importfrom = $DB->get_record('course', array('id'=>$params['importfrom'])))) {
+            throw new moodle_exception('invalidcourseid', 'error');
+        }
+
+        if (! ($importto = $DB->get_record('course', array('id'=>$params['importto'])))) {
+            throw new moodle_exception('invalidcourseid', 'error');
+        }
+
+        $importfromcontext = context_course::instance($importfrom->id);
+        self::validate_context($importfromcontext);
+
+        $importtocontext = context_course::instance($importto->id);
+        self::validate_context($importtocontext);
+
+        $backupdefaults = array(
+            'activities' => 1,
+            'blocks' => 1,
+            'filters' => 1
+        );
+
+        $backupsettings = array();
+
+        // Check for backup and restore options.
+        if (!empty($params['options'])) {
+            foreach ($params['options'] as $option) {
+
+                // Strict check for a correct value (allways 1 or 0, true or false).
+                $value = clean_param($option['value'], PARAM_INT);
+
+                if ($value !== 0 and $value !== 1) {
+                    throw new moodle_exception('invalidextparam', 'webservice', '', $option['name']);
+                }
+
+                if (!isset($backupdefaults[$option['name']])) {
+                    throw new moodle_exception('invalidextparam', 'webservice', '', $option['name']);
+                }
+
+                $backupsettings[$option['name']] = $value;
+            }
+        }
+
+        // Capability checking.
+
+        require_capability('moodle/backup:backuptargetimport', $importfromcontext);
+        require_capability('moodle/restore:restoretargetimport', $importtocontext);
+
+        $bc = new backup_controller(backup::TYPE_1COURSE, $importfrom->id, backup::FORMAT_MOODLE,
+                backup::INTERACTIVE_NO, backup::MODE_IMPORT, $USER->id);
+
+        foreach ($backupsettings as $name => $value) {
+            $bc->get_plan()->get_setting($name)->set_value($value);
+        }
+
+        $backupid       = $bc->get_backupid();
+        $backupbasepath = $bc->get_plan()->get_basepath();
+
+        $bc->execute_plan();
+        $bc->destroy();
+
+        // Restore the backup immediately.
+
+        // Check if we must delete the contents of the destination course.
+        if ($params['deletecontent']) {
+            $restoretarget = backup::TARGET_EXISTING_DELETING;
+        } else {
+            $restoretarget = backup::TARGET_EXISTING_ADDING;
+        }
+
+        $rc = new restore_controller($backupid, $importto->id,
+                backup::INTERACTIVE_NO, backup::MODE_IMPORT, $USER->id, $restoretarget);
+
+        foreach ($backupsettings as $name => $value) {
+            $rc->get_plan()->get_setting($name)->set_value($value);
+        }
+
+        if (!$rc->execute_precheck()) {
+            $precheckresults = $rc->get_precheck_results();
+            if (is_array($precheckresults) && !empty($precheckresults['errors'])) {
+                if (empty($CFG->keeptempdirectoriesonbackup)) {
+                    fulldelete($backupbasepath);
+                }
+
+                $errorinfo = '';
+
+                foreach ($precheckresults['errors'] as $error) {
+                    $errorinfo .= $error;
+                }
+
+                if (array_key_exists('warnings', $precheckresults)) {
+                    foreach ($precheckresults['warnings'] as $warning) {
+                        $errorinfo .= $warning;
+                    }
+                }
+
+                throw new moodle_exception('backupprecheckerrors', 'webservice', '', $errorinfo);
+            }
+        } else {
+            if ($restoretarget == backup::TARGET_EXISTING_DELETING) {
+                restore_dbops::delete_course_content($importto->id);
+            }
+        }
+
+        $rc->execute_plan();
+        $rc->destroy();
+
+        if (empty($CFG->keeptempdirectoriesonbackup)) {
+            fulldelete($backupbasepath);
+        }
+
+        return null;
+    }
+
+    /**
+     * Returns description of method result value
+     *
+     * @return external_description
+     * @since Moodle 2.4
+     */
+    public static function import_course_returns() {
+        return null;
+    }
+
+    /**
      * Returns description of method parameters
      *
      * @return external_function_parameters
@@ -904,9 +1085,10 @@ class core_course_external extends external_api {
                                          '"parent" (int) the parent category id,'.
                                          '"idnumber" (string) category idnumber'.
                                          ' - user must have \'moodle/category:manage\' to search on idnumber,'.
-                                         '"visible" (int) whether the category is visible or not'.
+                                         '"visible" (int) whether the returned categories must be visible or hidden. If the key is not passed,
+                                             then the function return all categories that the user can see.'.
                                          ' - user must have \'moodle/category:manage\' or \'moodle/category:viewhiddencategories\' to search on visible,'.
-                                         '"theme" (string) category theme'.
+                                         '"theme" (string) only return the categories having this theme'.
                                          ' - user must have \'moodle/category:manage\' to search on theme'),
                             'value' => new external_value(PARAM_RAW, 'the value to match')
                         )
@@ -1017,10 +1199,22 @@ class core_course_external extends external_api {
                 if ($categories and !empty($params['addsubcategories'])) {
                     $newcategories = array();
 
+                    // Check if we required visible/theme checks.
+                    $additionalselect = '';
+                    $additionalparams = array();
+                    if (isset($conditions['visible'])) {
+                        $additionalselect .= ' AND visible = :visible';
+                        $additionalparams['visible'] = $conditions['visible'];
+                    }
+                    if (isset($conditions['theme'])) {
+                        $additionalselect .= ' AND theme= :theme';
+                        $additionalparams['theme'] = $conditions['theme'];
+                    }
+
                     foreach ($categories as $category) {
-                        $sqllike = $DB->sql_like('path', ':path');
-                        $sqlparams = array('path' => $category->path.'/%'); // It will NOT include the specified category.
-                        $subcategories = $DB->get_records_select('course_categories', $sqllike, $sqlparams);
+                        $sqlselect = $DB->sql_like('path', ':path') . $additionalselect;
+                        $sqlparams = array('path' => $category->path.'/%') + $additionalparams; // It will NOT include the specified category.
+                        $subcategories = $DB->get_records_select('course_categories', $sqlselect, $sqlparams);
                         $newcategories = $newcategories + $subcategories;   // Both arrays have integer as keys.
                     }
                     $categories = $categories + $newcategories;

@@ -32,7 +32,7 @@
     <location>editor/tinymce/tiny_mce</location>
     <name>TinyMCE</name>
     <license>LGPL</license>
-    <version>3.5.1.1</version>
+    <version>3.6.0</version>
     <licenseversion>2.1+</licenseversion>
   </library>
   <library>
@@ -176,20 +176,6 @@
     <licenseversion></licenseversion>
   </library>
   <library>
-    <location>simpletestlib</location>
-    <name>Simpletest</name>
-    <license>LGPL</license>
-    <version>1.1.0</version>
-    <licenseversion>2.1</licenseversion>
-  </library>
-  <library>
-    <location>spikephpcoverage</location>
-    <name>Spike PHPCoverage</name>
-    <license>LGPL</license>
-    <version>0.8.2</version>
-    <licenseversion>2.1</licenseversion>
-  </library>
-  <library>
     <location>tcpdf</location>
     <name>TCPDF</name>
     <license>LGPL</license>
@@ -207,14 +193,7 @@
     <location>yui</location>
     <name>YUI</name>
     <license>BSD</license>
-    <version>3.5.1</version>
-    <licenseversion></licenseversion>
-  </library>
-  <library>
-    <location>yui</location>
-    <name>YUI PHPloader</name>
-    <license>BSD</license>
-    <version>1.0.0b2</version>
+    <version>3.6.0</version>
     <licenseversion></licenseversion>
   </library>
   <library>

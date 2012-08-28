@@ -2,6 +2,13 @@ This files describes API changes in /mod/* - activity modules,
 information provided here is intended especially for developers.
 
 
+=== 2.4 ===
+
+new features:
+
+* mod/xxx/adminlib.php may now include 'plugininfo_yoursubplugintype' class definition
+  used by plugin_manager; it is recommended to store extra admin settings classes in this file
+
 === 2.3 ===
 
 required changes in code:
@@ -15,6 +22,11 @@ required changes in code:
 * most resourcelib_embed_* functions are replaced with core_media_renderer;
   for an example, see mod/resource/locallib.php, resource_display_embed()
 
+optional - no changes needed:
+
+* add support for handling course drag and drop types - functions
+  xxx_dndupload_register() and xxx_dndupload_handle($uploadinfo) see:
+  http://docs.moodle.org/dev/Implementing_Course_drag_and_drop_upload_support_in_a_module
 
 === 2.2 ===
 

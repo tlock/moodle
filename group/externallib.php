@@ -53,7 +53,7 @@ class core_group_external extends external_api {
                             'name' => new external_value(PARAM_TEXT, 'multilang compatible name, course unique'),
                             'description' => new external_value(PARAM_RAW, 'group description text'),
                             'descriptionformat' => new external_format_value('description', VALUE_DEFAULT),
-                            'enrolmentkey' => new external_value(PARAM_RAW, 'group enrol secret phrase'),
+                            'enrolmentkey' => new external_value(PARAM_RAW, 'group enrol secret phrase', VALUE_OPTIONAL),
                         )
                     ), 'List of group object. A group has a courseid, a name, a description and an enrolment key.'
                 )
@@ -89,7 +89,7 @@ class core_group_external extends external_api {
             }
 
             // now security checks
-            $context = get_context_instance(CONTEXT_COURSE, $group->courseid);
+            $context = context_course::instance($group->courseid, IGNORE_MISSING);
             try {
                 self::validate_context($context);
             } catch (Exception $e) {
@@ -105,6 +105,9 @@ class core_group_external extends external_api {
 
             // finally create the group
             $group->id = groups_create_group($group, false);
+            if (!isset($group->enrolmentkey)) {
+                $group->enrolmentkey = '';
+            }
             $groups[] = (array)$group;
         }
 
@@ -165,7 +168,7 @@ class core_group_external extends external_api {
             $group = groups_get_group($groupid, 'id, courseid, name, description, descriptionformat, enrolmentkey', MUST_EXIST);
 
             // now security checks
-            $context = get_context_instance(CONTEXT_COURSE, $group->courseid);
+            $context = context_course::instance($group->courseid, IGNORE_MISSING);
             try {
                 self::validate_context($context);
             } catch (Exception $e) {
@@ -232,7 +235,7 @@ class core_group_external extends external_api {
         $params = self::validate_parameters(self::get_course_groups_parameters(), array('courseid'=>$courseid));
 
         // now security checks
-        $context = get_context_instance(CONTEXT_COURSE, $params['courseid']);
+        $context = context_course::instance($params['courseid'], IGNORE_MISSING);
         try {
             self::validate_context($context);
         } catch (Exception $e) {
@@ -308,14 +311,14 @@ class core_group_external extends external_api {
 
         foreach ($params['groupids'] as $groupid) {
             // validate params
-            $groupid = validate_param($groupid, PARAM_INTEGER);
+            $groupid = validate_param($groupid, PARAM_INT);
             if (!$group = groups_get_group($groupid, 'id, courseid', IGNORE_MISSING)) {
                 // silently ignore attempts to delete nonexisting groups
                 continue;
             }
 
             // now security checks
-            $context = get_context_instance(CONTEXT_COURSE, $group->courseid);
+            $context = context_course::instance($group->courseid, IGNORE_MISSING);
             try {
                 self::validate_context($context);
             } catch (Exception $e) {
@@ -373,7 +376,7 @@ class core_group_external extends external_api {
             // validate params
             $group = groups_get_group($groupid, 'id, courseid, name, enrolmentkey', MUST_EXIST);
             // now security checks
-            $context = get_context_instance(CONTEXT_COURSE, $group->courseid);
+            $context = context_course::instance($group->courseid, IGNORE_MISSING);
             try {
                 self::validate_context($context);
             } catch (Exception $e) {
@@ -453,7 +456,7 @@ class core_group_external extends external_api {
             $user = $DB->get_record('user', array('id'=>$userid, 'deleted'=>0, 'mnethostid'=>$CFG->mnet_localhost_id), '*', MUST_EXIST);
 
             // now security checks
-            $context = get_context_instance(CONTEXT_COURSE, $group->courseid);
+            $context = context_course::instance($group->courseid, IGNORE_MISSING);
             try {
                 self::validate_context($context);
             } catch (Exception $e) {
@@ -531,7 +534,7 @@ class core_group_external extends external_api {
             $user = $DB->get_record('user', array('id'=>$userid, 'deleted'=>0, 'mnethostid'=>$CFG->mnet_localhost_id), '*', MUST_EXIST);
 
             // now security checks
-            $context = get_context_instance(CONTEXT_COURSE, $group->courseid);
+            $context = context_course::instance($group->courseid, IGNORE_MISSING);
             try {
                 self::validate_context($context);
             } catch (Exception $e) {

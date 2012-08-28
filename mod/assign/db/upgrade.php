@@ -47,6 +47,39 @@ function xmldb_assign_upgrade($oldversion) {
         upgrade_mod_savepoint(true, 2012051700, 'assign');
     }
 
+    // Moodle v2.3.0 release upgrade line
+    // Put any upgrade step following this
+
+    if ($oldversion < 2012071800) {
+
+        // Define field requiresubmissionstatement to be added to assign
+        $table = new xmldb_table('assign');
+        $field = new xmldb_field('requiresubmissionstatement', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0', 'timemodified');
+
+        // Conditionally launch add field requiresubmissionstatement
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Assign savepoint reached.
+        upgrade_mod_savepoint(true, 2012071800, 'assign');
+    }
+
+    if ($oldversion < 2012081600) {
+
+        // Define field sendlatenotifications to be added to assign.
+        $table = new xmldb_table('assign');
+        $field = new xmldb_field('completionsubmit', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0', 'timemodified');
+
+        // Conditionally launch add field sendlatenotifications.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Assign savepoint reached.
+        upgrade_mod_savepoint(true, 2012081600, 'assign');
+    }
+
     return true;
 }
 

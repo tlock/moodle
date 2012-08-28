@@ -457,6 +457,12 @@ class block_manager {
         if (!$this->page->theme->enable_dock) {
             return false;
         }
+
+        // Do not dock the region when the user attemps to move a block.
+        if ($this->movingblock) {
+            return false;
+        }
+
         $this->check_is_loaded();
         $this->ensure_content_created($region, $output);
         foreach($this->visibleblockcontent[$region] as $instance) {
@@ -657,7 +663,7 @@ class block_manager {
         $blockinstance->id = $DB->insert_record('block_instances', $blockinstance);
 
         // Ensure the block context is created.
-        get_context_instance(CONTEXT_BLOCK, $blockinstance->id);
+        context_block::instance($blockinstance->id);
 
         // If the new instance was created, allow it to do additional setup
         if ($block = block_instance($blockname, $blockinstance)) {
@@ -1108,7 +1114,7 @@ class block_manager {
      * @return boolean true if anything was done. False if not.
      */
     public function process_url_delete() {
-        $blockid = optional_param('bui_deleteid', null, PARAM_INTEGER);
+        $blockid = optional_param('bui_deleteid', null, PARAM_INT);
         if (!$blockid) {
             return false;
         }
@@ -1134,9 +1140,9 @@ class block_manager {
      * @return boolean true if anything was done. False if not.
      */
     public function process_url_show_hide() {
-        if ($blockid = optional_param('bui_hideid', null, PARAM_INTEGER)) {
+        if ($blockid = optional_param('bui_hideid', null, PARAM_INT)) {
             $newvisibility = 0;
-        } else if ($blockid = optional_param('bui_showid', null, PARAM_INTEGER)) {
+        } else if ($blockid = optional_param('bui_showid', null, PARAM_INT)) {
             $newvisibility = 1;
         } else {
             return false;
@@ -1169,7 +1175,7 @@ class block_manager {
     public function process_url_edit() {
         global $CFG, $DB, $PAGE, $OUTPUT;
 
-        $blockid = optional_param('bui_editid', null, PARAM_INTEGER);
+        $blockid = optional_param('bui_editid', null, PARAM_INT);
         if (!$blockid) {
             return false;
         }
@@ -1230,8 +1236,8 @@ class block_manager {
                 $bi->subpagepattern = $data->bui_subpagepattern;
             }
 
-            $systemcontext = get_context_instance(CONTEXT_SYSTEM);
-            $frontpagecontext = get_context_instance(CONTEXT_COURSE, SITEID);
+            $systemcontext = context_system::instance();
+            $frontpagecontext = context_course::instance(SITEID);
             $parentcontext = get_context_instance_by_id($data->bui_parentcontextid);
 
             // Updating stickiness and contexts.  See MDL-21375 for details.
@@ -1367,7 +1373,7 @@ class block_manager {
     public function process_url_move() {
         global $CFG, $DB, $PAGE;
 
-        $blockid = optional_param('bui_moveid', null, PARAM_INTEGER);
+        $blockid = optional_param('bui_moveid', null, PARAM_INT);
         if (!$blockid) {
             return false;
         }
@@ -1961,35 +1967,6 @@ function blocks_delete_all_on_page($pagetype, $pageid) {
 }
 
 /**
- * Dispite what this function is called, it seems to be mostly used to populate
- * the default blocks when a new course (or whatever) is created.
- *
- * @deprecated since 2.0
- *
- * @param object $page the page to add default blocks to.
- * @return boolean success or failure.
- */
-function blocks_repopulate_page($page) {
-    global $CFG;
-
-    debugging('Call to deprecated function blocks_repopulate_page. ' .
-            'Use a more specific method like blocks_add_default_course_blocks, ' .
-            'or just call $PAGE->blocks->add_blocks()', DEBUG_DEVELOPER);
-
-    /// If the site override has been defined, it is the only valid one.
-    if (!empty($CFG->defaultblocks_override)) {
-        $blocknames = $CFG->defaultblocks_override;
-    } else {
-        $blocknames = $page->blocks_get_default();
-    }
-
-    $blocks = blocks_parse_default_blocks_list($blocknames);
-    $page->blocks->add_blocks($blocks);
-
-    return true;
-}
-
-/**
  * Get the block record for a particular blockid - that is, a particular type os block.
  *
  * @param $int blockid block type id. If null, an array of all block types is returned.
@@ -2131,7 +2108,7 @@ function blocks_add_default_system_blocks() {
     global $DB;
 
     $page = new moodle_page();
-    $page->set_context(get_context_instance(CONTEXT_SYSTEM));
+    $page->set_context(context_system::instance());
     $page->blocks->add_blocks(array(BLOCK_POS_LEFT => array('navigation', 'settings')), '*', null, true);
     $page->blocks->add_blocks(array(BLOCK_POS_LEFT => array('admin_bookmarks')), 'admin-*', null, null, 2);
 

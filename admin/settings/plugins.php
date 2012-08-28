@@ -264,13 +264,13 @@ if ($hassiteconfig) {
         'portfolio_moderate_db_threshold',
         new lang_string('moderatedbsizethreshold', 'portfolio'),
         new lang_string('moderatedbsizethresholddesc', 'portfolio'),
-        20, PARAM_INTEGER, 3));
+        20, PARAM_INT, 3));
 
     $temp->add(new admin_setting_configtext(
         'portfolio_high_db_threshold',
         new lang_string('highdbsizethreshold', 'portfolio'),
         new lang_string('highdbsizethresholddesc', 'portfolio'),
-        50, PARAM_INTEGER, 3));
+        50, PARAM_INT, 3));
 
     $ADMIN->add('portfoliosettings', $temp);
     $ADMIN->add('portfoliosettings', new admin_externalpage('portfolionew', new lang_string('addnewportfolio', 'portfolio'), $url, 'moodle/site:config', true), '', $url);
@@ -422,9 +422,9 @@ if ($hassiteconfig || has_capability('moodle/question:config', $systemcontext)) 
 // Plagiarism plugin settings
 if ($hassiteconfig && !empty($CFG->enableplagiarism)) {
     $ADMIN->add('modules', new admin_category('plagiarism', new lang_string('plagiarism', 'plagiarism')));
-    $temp = new admin_settingpage('plagiarismsettings', new lang_string('plagiarismsettings', 'plagiarism'));
-    $temp->add(new admin_setting_manageplagiarism());
-    $ADMIN->add('plagiarism', $temp);
+    $ADMIN->add('plagiarism', new admin_externalpage('manageplagiarismplugins', new lang_string('manageplagiarism', 'plagiarism'),
+        $CFG->wwwroot . '/' . $CFG->admin . '/plagiarism.php'));
+
     foreach (get_plugin_list('plagiarism') as $plugin => $plugindir) {
         if (file_exists($plugindir.'/settings.php')) {
             $ADMIN->add('plagiarism', new admin_externalpage('plagiarism'.$plugin, new lang_string($plugin, 'plagiarism_'.$plugin), "$CFG->wwwroot/plagiarism/$plugin/settings.php", 'moodle/site:config'));

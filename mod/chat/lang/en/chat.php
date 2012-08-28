@@ -23,6 +23,7 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+$string['activityoverview'] = 'You have upcoming chat';
 $string['ajax'] = 'Version using Ajax';
 $string['autoscroll'] = 'Auto scroll';
 $string['beep'] = 'beep';
@@ -58,6 +59,7 @@ $string['chat:readlog'] = 'Read chat logs';
 $string['chatreport'] = 'Chat sessions';
 $string['chat:talk'] = 'Talk in a chat';
 $string['chattime'] = 'Next chat time';
+$string['entermessage'] = "Enter your message";
 $string['idle'] = 'Idle';
 $string['inputarea'] = 'Input area';
 $string['invalidid'] = 'Could not find that chat room!';
@@ -98,7 +100,7 @@ $string['nomessages'] = 'No messages yet';
 $string['normalkeepalive'] = 'KeepAlive';
 $string['normalstream'] = 'Stream';
 $string['noscheduledsession'] = 'No scheduled session';
-$string['notallowenter'] = 'You are not allow to enter the chat room.';
+$string['notallowenter'] = 'You are not allowed to enter the chat room.';
 $string['notlogged'] = 'You are not logged in!';
 $string['nopermissiontoseethechatlog'] = 'You don\'t have permission to see the chat logs.';
 $string['oldping'] = 'Disconnect timeout';

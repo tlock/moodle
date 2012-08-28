@@ -34,11 +34,11 @@
     require_once(dirname(__FILE__) . '/../config.php');
     require_once($CFG->libdir . '/adminlib.php');
 
-    $action = optional_param('action', '', PARAM_ACTION);
+    $action = optional_param('action', '', PARAM_ALPHANUMEXT);
     $filterpath = optional_param('filterpath', '', PARAM_PATH);
 
     require_login();
-    $systemcontext = get_context_instance(CONTEXT_SYSTEM);
+    $systemcontext = context_system::instance();
     require_capability('moodle/site:config', $systemcontext);
 
     $returnurl = "$CFG->wwwroot/$CFG->admin/filters.php";
@@ -68,7 +68,7 @@
     switch ($action) {
 
     case 'setstate':
-        if ($newstate = optional_param('newstate', '', PARAM_INTEGER)) {
+        if ($newstate = optional_param('newstate', '', PARAM_INT)) {
             filter_set_global_state($filterpath, $newstate);
             if ($newstate == TEXTFILTER_DISABLED) {
                 filter_set_applies_to_strings($filterpath, false);
@@ -242,6 +242,7 @@ function get_table_row($filterinfo, $isfirstrow, $islastactive, $applytostrings)
 
     // Disable/off/on
     $select = new single_select(filters_action_url($filter, 'setstate'), 'newstate', $activechoices, $filterinfo->active, null, 'active' . basename($filter));
+    $select->set_label(get_string('isactive', 'filters'), array('class' => 'accesshide'));
     $row[] = $OUTPUT->render($select);
 
     // Re-order
@@ -263,6 +264,7 @@ function get_table_row($filterinfo, $isfirstrow, $islastactive, $applytostrings)
 
     // Apply to strings.
     $select = new single_select(filters_action_url($filter, 'setapplyto'), 'stringstoo', $applytochoices, $applytostrings, null, 'applyto' . basename($filter));
+    $select->set_label(get_string('applyto', 'filters'), array('class' => 'accesshide'));
     $select->disabled = $filterinfo->active == TEXTFILTER_DISABLED;
     $row[] = $OUTPUT->render($select);
 

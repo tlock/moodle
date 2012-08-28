@@ -38,7 +38,7 @@
 
     $PAGE->set_url('/mod/survey/view.php', array('id'=>$id));
     require_login($course, false, $cm);
-    $context = get_context_instance(CONTEXT_MODULE, $cm->id);
+    $context = context_module::instance($cm->id);
 
     require_capability('mod/survey:participate', $context);
 
@@ -109,7 +109,7 @@ $completion->set_module_viewed($cm);
         } else {
 
             echo $OUTPUT->box(format_module_intro('survey', $survey, $cm->id), 'generalbox', 'intro');
-            echo $OUTPUT->spacer(array('height'=>30, 'width'=>1, 'br'=>true)); // should be done with CSS instead
+            echo $OUTPUT->spacer(array('height'=>30, 'width'=>1), true);  // should be done with CSS instead
 
             $questions = $DB->get_records_list("survey_questions", "id", explode(',', $survey->questions));
             $questionorder = explode(",", $survey->questions);
@@ -122,7 +122,7 @@ $completion->set_module_viewed($cm);
                         $table->align = array ("left");
                         $table->data[] = array(s($answer->answer1));//no html here, just plain text
                         echo html_writer::table($table);
-                        echo $OUTPUT->spacer(clone($spacer)) . '<br />';
+                        echo $OUTPUT->spacer(array('height'=>30, 'width'=>1), true);
                     }
                 }
             }
@@ -198,10 +198,14 @@ $completion->set_module_viewed($cm);
            $checkarray['questions'][] = Array('question'=>$question, 'default'=>$default);
        }
     }
-    $PAGE->requires->js('/mod/survey/survey.js');
     $PAGE->requires->data_for_js('surveycheck', $checkarray);
+    $module = array(
+        'name'      => 'mod_survey',
+        'fullpath'  => '/mod/survey/survey.js',
+        'requires'  => array('yui2-event'),
+    );
     $PAGE->requires->string_for_js('questionsnotanswered', 'survey');
-    $PAGE->requires->js_function_call('survey_attach_onsubmit');
+    $PAGE->requires->js_init_call('M.mod_survey.init', $checkarray, true, $module);
 
     echo '<br />';
     echo '<input type="submit" value="'.get_string("clicktocontinue", "survey").'" />';

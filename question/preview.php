@@ -50,11 +50,11 @@ $question = question_bank::load_question($id);
 if ($cmid = optional_param('cmid', 0, PARAM_INT)) {
     $cm = get_coursemodule_from_id(false, $cmid);
     require_login($cm->course, false, $cm);
-    $context = get_context_instance(CONTEXT_MODULE, $cmid);
+    $context = context_module::instance($cmid);
 
 } else if ($courseid = optional_param('courseid', 0, PARAM_INT)) {
     require_login($courseid);
-    $context = get_context_instance(CONTEXT_COURSE, $courseid);
+    $context = context_course::instance($courseid);
 
 } else {
     require_login();
@@ -75,14 +75,10 @@ $options->set_from_request();
 $PAGE->set_url(question_preview_url($id, $options->behaviour, $options->maxmark,
         $options, $options->variant, $context));
 
-// Get and validate exitsing preview, or start a new one.
+// Get and validate existing preview, or start a new one.
 $previewid = optional_param('previewid', 0, PARAM_INT);
 
 if ($previewid) {
-    if (!isset($SESSION->question_previews[$previewid])) {
-        print_error('notyourpreview', 'question');
-    }
-
     try {
         $quba = question_engine::load_questions_usage_by_activity($previewid);
 
@@ -92,6 +88,10 @@ if ($previewid) {
         print_error('submissionoutofsequencefriendlymessage', 'question',
                 question_preview_url($question->id, $options->behaviour,
                 $options->maxmark, $options, $options->variant, $context), null, $e);
+    }
+
+    if ($quba->get_owning_context()->instanceid != $USER->id) {
+        print_error('notyourpreview', 'question');
     }
 
     $slot = $quba->get_first_question_number();
@@ -104,7 +104,7 @@ if ($previewid) {
 
 } else {
     $quba = question_engine::make_questions_usage_by_activity(
-            'core_question_preview', $context);
+            'core_question_preview', context_user::instance($USER->id));
     $quba->set_preferred_behaviour($options->behaviour);
     $slot = $quba->add_question($question, $options->maxmark);
 
@@ -119,8 +119,6 @@ if ($previewid) {
     $transaction = $DB->start_delegated_transaction();
     question_engine::save_questions_usage_by_activity($quba);
     $transaction->allow_commit();
-
-    $SESSION->question_previews[$quba->get_id()] = true;
 }
 $options->behaviour = $quba->get_preferred_behaviour();
 $options->maxmark = $quba->get_question_max_mark($slot);

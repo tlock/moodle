@@ -168,11 +168,8 @@ class mod_assign_renderer extends plugin_renderer_base {
 
             $o .= $this->output->continue_button($cancelurl);
         } else {
-            // All submission plugins ready - confirm the student really does want to submit for marking
-            $continueurl = new moodle_url('/mod/assign/view.php', array('id' => $page->coursemoduleid,
-                                                                        'action' => 'confirmsubmit',
-                                                                        'sesskey' => sesskey()));
-            $o .= $this->output->confirm(get_string('confirmsubmission', 'mod_assign'), $continueurl, $cancelurl);
+            // All submission plugins ready - show the confirmation form (may contain submission statement)
+            $o .= $this->moodleform($page->confirmform);
         }
         $o .= $this->output->container_end();
 
@@ -248,6 +245,8 @@ class mod_assign_renderer extends plugin_renderer_base {
         if ($summary->submissionsenabled) {
             $this->add_table_row_tuple($t, get_string('numberofsubmittedassignments', 'assign'),
                                        $summary->submissionssubmittedcount);
+            $this->add_table_row_tuple($t, get_string('numberofsubmissionsneedgrading', 'assign'),
+                                       $summary->submissionsneedgradingcount);
         }
 
         $time = time();
@@ -322,7 +321,7 @@ class mod_assign_renderer extends plugin_renderer_base {
         }
 
         foreach ($status->feedbackplugins as $plugin) {
-            if ($plugin->is_enabled() && $plugin->is_visible() && !$plugin->is_empty($status->grade)) {
+            if ($plugin->is_enabled() && $plugin->is_visible() && !empty($status->grade) && !$plugin->is_empty($status->grade)) {
                 $row = new html_table_row();
                 $cell1 = new html_table_cell($plugin->get_name());
                 $pluginfeedback = new assign_feedback_plugin_feedback($plugin, $status->grade, assign_feedback_plugin_feedback::SUMMARY, $status->coursemoduleid, $status->returnaction, $status->returnparams);
@@ -418,7 +417,7 @@ class mod_assign_renderer extends plugin_renderer_base {
             $row = new html_table_row();
             $cell1 = new html_table_cell(get_string('timeremaining', 'assign'));
             if ($duedate - $time <= 0) {
-                if (!$status->submission || $status->submission != ASSIGN_SUBMISSION_STATUS_SUBMITTED) {
+                if (!$status->submission || $status->submission->status != ASSIGN_SUBMISSION_STATUS_SUBMITTED) {
                     if ($status->submissionsenabled) {
                         $cell2 = new html_table_cell(get_string('overdue', 'assign', format_time($time - $duedate)));
                         $cell2->attributes = array('class'=>'overdue');

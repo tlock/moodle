@@ -713,7 +713,7 @@ class moodle_url {
     public static function make_draftfile_url($draftid, $pathname, $filename, $forcedownload = false) {
         global $CFG, $USER;
         $urlbase = "$CFG->httpswwwroot/draftfile.php";
-        $context = get_context_instance(CONTEXT_USER, $USER->id);
+        $context = context_user::instance($USER->id);
 
         return self::make_file_url($urlbase, "/$context->id/user/draft/$draftid".$pathname.$filename, $forcedownload);
     }
@@ -1076,7 +1076,7 @@ function format_text($text, $format = FORMAT_MOODLE, $options = NULL, $courseid_
         }
     } else if ($courseid_do_not_use) {
         // legacy courseid
-        $context = get_context_instance(CONTEXT_COURSE, $courseid_do_not_use);
+        $context = context_course::instance($courseid_do_not_use);
     } else {
         // fallback to $PAGE->context this may be problematic in CLI and other non-standard pages :-(
         $context = $PAGE->context;
@@ -1272,7 +1272,7 @@ function format_string($string, $striplinks = true, $options = NULL) {
 
     if (is_numeric($options)) {
         // legacy courseid usage
-        $options  = array('context'=>get_context_instance(CONTEXT_COURSE, $options));
+        $options  = array('context'=>context_course::instance($options));
     } else {
         $options = (array)$options; // detach object, we can not modify it
     }
@@ -1412,7 +1412,7 @@ function format_text_email($text, $format) {
 function format_module_intro($module, $activity, $cmid, $filter=true) {
     global $CFG;
     require_once("$CFG->libdir/filelib.php");
-    $context = get_context_instance(CONTEXT_MODULE, $cmid);
+    $context = context_module::instance($cmid);
     $options = array('noclean'=>true, 'para'=>false, 'filter'=>$filter, 'context'=>$context, 'overflowdiv'=>true);
     $intro = file_rewrite_pluginfile_urls($activity->intro, 'pluginfile.php', $context->id, 'mod_'.$module, 'intro', null);
     return trim(format_text($intro, $activity->introformat, $options, null));
@@ -2076,7 +2076,7 @@ function print_group_picture($group, $courseid, $large=false, $return=false, $li
         }
     }
 
-    $context = get_context_instance(CONTEXT_COURSE, $courseid);
+    $context = context_course::instance($courseid);
 
     // If there is no picture, do nothing
     if (!$group->picture) {
@@ -2132,7 +2132,7 @@ function print_recent_activity_note($time, $user, $text, $link, $return=false, $
     $output = '';
 
     if (is_null($viewfullnames)) {
-        $context = get_context_instance(CONTEXT_SYSTEM);
+        $context = context_system::instance();
         $viewfullnames = has_capability('moodle/site:viewfullnames', $context);
     }
 
@@ -2185,7 +2185,7 @@ function navmenulist($course, $sections, $modinfo, $strsection, $strjumpto, $wid
     $menu = array();
     $doneheading = false;
 
-    $coursecontext = get_context_instance(CONTEXT_COURSE, $course->id);
+    $coursecontext = context_course::instance($course->id);
 
     $menu[] = '<ul class="navmenulist"><li class="jumpto section"><span>'.$strjumpto.'</span><ul>';
     foreach ($modinfo->cms as $mod) {
@@ -2551,23 +2551,38 @@ function obfuscate_text($plaintext) {
  * @param string $email The email address to display
  * @param string $label The text to displayed as hyperlink to $email
  * @param boolean $dimmed If true then use css class 'dimmed' for hyperlink
+ * @param string $subject The subject of the email in the mailto link
+ * @param string $body The content of the email in the mailto link
  * @return string The obfuscated mailto link
  */
-function obfuscate_mailto($email, $label='', $dimmed=false) {
+function obfuscate_mailto($email, $label='', $dimmed=false, $subject = '', $body = '') {
 
     if (empty($label)) {
         $label = $email;
     }
-    if ($dimmed) {
-        $title = get_string('emaildisable');
-        $dimmed = ' class="dimmed"';
-    } else {
-        $title = '';
-        $dimmed = '';
+
+    $label = obfuscate_text($label);
+    $email = obfuscate_email($email);
+    $mailto = obfuscate_text('mailto');
+    $url = new moodle_url("mailto:$email");
+    $attrs = array();
+
+    if (!empty($subject)) {
+        $url->param('subject', format_string($subject));
     }
-    return sprintf("<a href=\"%s:%s\" $dimmed title=\"$title\">%s</a>",
-                    obfuscate_text('mailto'), obfuscate_email($email),
-                    obfuscate_text($label));
+    if (!empty($body)) {
+        $url->param('body', format_string($body));
+    }
+
+    // Use the obfuscated mailto
+    $url = preg_replace('/^mailto/', $mailto, $url->out());
+
+    if ($dimmed) {
+        $attrs['title'] = get_string('emaildisable');
+        $attrs['class'] = 'dimmed';
+    }
+
+    return html_writer::link($url, $label, $attrs);
 }
 
 /**
@@ -2814,7 +2829,7 @@ function convert_tabrows_to_tree($tabrows, $selected, $inactive, $activated) {
  * @return bool
  */
 function debugging($message = '', $level = DEBUG_NORMAL, $backtrace = null) {
-    global $CFG, $USER, $UNITTEST;
+    global $CFG, $USER;
 
     $forcedebug = false;
     if (!empty($CFG->debugusers) && $USER) {
@@ -2837,14 +2852,6 @@ function debugging($message = '', $level = DEBUG_NORMAL, $backtrace = null) {
         $from = format_backtrace($backtrace, CLI_SCRIPT);
         if (PHPUNIT_TEST) {
             echo 'Debugging: ' . $message . "\n" . $from;
-
-        } else if (!empty($UNITTEST->running)) {
-            // When the unit tests are running, any call to trigger_error
-            // is intercepted by the test framework and reported as an exception.
-            // Therefore, we cannot use trigger_error during unit tests.
-            // At the same time I do not think we should just discard those messages,
-            // so displaying them on-screen seems like the only option. (MDL-20398)
-            echo '<div class="notifytiny">' . $message . $from . '</div>';
 
         } else if (NO_DEBUG_DISPLAY) {
             // script does not want any errors or debugging in output,

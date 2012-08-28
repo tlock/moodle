@@ -758,6 +758,14 @@ ORDER BY
      * @param qubaid_condition $qubaids identifies which question useages to delete.
      */
     protected function delete_usage_records_for_mysql(qubaid_condition $qubaids) {
+        $qubaidtest = $qubaids->usage_id_in();
+        if (strpos($qubaidtest, 'question_usages') !== false &&
+                strpos($qubaidtest, 'IN (SELECT') === 0) {
+            // This horrible hack is required by MDL-29847. It comes from
+            // http://www.xaprb.com/blog/2006/06/23/how-to-select-from-an-update-target-in-mysql/
+            $qubaidtest = 'IN (SELECT * FROM ' . substr($qubaidtest, 3) . ' AS hack_subquery_alias)';
+        }
+
         // TODO once MDL-29589 is fixed, eliminate this method, and instead use the new $DB API.
         $this->db->execute('
                 DELETE qu, qa, qas, qasd
@@ -765,7 +773,7 @@ ORDER BY
                   JOIN {question_attempts}          qa   ON qa.questionusageid = qu.id
              LEFT JOIN {question_attempt_steps}     qas  ON qas.questionattemptid = qa.id
              LEFT JOIN {question_attempt_step_data} qasd ON qasd.attemptstepid = qas.id
-                 WHERE qu.id ' . $qubaids->usage_id_in(),
+                 WHERE qu.id ' . $qubaidtest,
                 $qubaids->usage_id_in_params());
     }
 
@@ -1240,7 +1248,7 @@ class question_file_saver {
         global $USER;
 
         $fs = get_file_storage();
-        $usercontext = get_context_instance(CONTEXT_USER, $USER->id);
+        $usercontext = context_user::instance($USER->id);
 
         $files = $fs->get_area_files($usercontext->id, 'user', 'draft',
                 $draftitemid, 'sortorder, filepath, filename', false);

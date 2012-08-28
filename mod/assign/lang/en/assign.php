@@ -22,6 +22,7 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+$string['activityoverview'] = 'You have assignments that need attention';
 $string['addsubmission'] = 'Add submission';
 $string['allowsubmissions'] = 'Allow the user to continue making submissions to this assignment.';
 $string['allowsubmissionsshort'] = 'Allow submission changes';
@@ -64,7 +65,9 @@ $string['batchoperationconfirmreverttodraft'] = 'Revert selected submissions to 
 $string['batchoperationlock'] = 'lock submissions';
 $string['batchoperationunlock'] = 'unlock submissions';
 $string['batchoperationreverttodraft'] = 'revert submissions to draft';
+$string['changegradewarning'] = 'This assignment has graded submissions and changing the grade will not automatically re-calculate existing submission grades. You must re-grade all existing submissions, if you wish to change the grade.';
 $string['comment'] = 'Comment';
+$string['completionsubmit'] = 'Student must submit to this activity to complete it';
 $string['conversionexception'] = 'Could not convert assignment. Exception was: {$a}.';
 $string['configshowrecentsubmissions'] = 'Everyone can see notifications of submissions in recent activity reports.';
 $string['confirmsubmission'] = 'Are you sure you want to submit your work for grading? You will not be able to make any more changes';
@@ -74,6 +77,7 @@ $string['couldnotconvertsubmission'] = 'Could not convert assignment submission 
 $string['couldnotcreatecoursemodule'] = 'Could not create course module.';
 $string['couldnotcreatenewassignmentinstance'] = 'Could not create new assignment instance.';
 $string['couldnotfindassignmenttoupgrade'] = 'Could not find old assignment instance to upgrade.';
+$string['currentgrade'] = 'Current grade in gradebook';
 $string['defaultplugins'] = 'Default assignment settings';
 $string['defaultplugins_help'] = 'These settings define the defaults for all new assignments.';
 $string['deletepluginareyousure'] = 'Delete assignment plugin {$a}: are you sure?';
@@ -172,6 +176,7 @@ $string['nousersselected'] = 'No users selected';
 $string['numberofdraftsubmissions'] = 'Drafts';
 $string['numberofparticipants'] = 'Participants';
 $string['numberofsubmittedassignments'] = 'Submitted';
+$string['numberofsubmissionsneedgrading'] = 'Needs grading';
 $string['offline'] = 'No online submissions required';
 $string['overdue'] = '<font color="red">Assignment is overdue by: {$a}</font>';
 $string['outlinegrade'] = 'Grade: {$a}';
@@ -188,6 +193,8 @@ $string['quickgrading'] = 'Quick grading';
 $string['quickgradingresult'] = 'Quick grading';
 $string['quickgradingchangessaved'] = 'The grade changes were saved';
 $string['quickgrading_help'] = 'Quick grading allows you to assign grades (and outcomes) directly in the submissions table. Quick grading is not compatible with advanced grading and is not recommended when there are multiple markers.';
+$string['requiresubmissionstatement'] = 'Require that students accept the submission statement';
+$string['requiresubmissionstatement_help'] = 'Require that students accept the submission statement for all assignment submissions for this entire Moodle installation. If this setting is not enabled, then submission statements can be enabled or disabled in the settings for each assignment.';
 $string['reverttodraftforstudent'] = 'Revert submission to draft for student: (id={$a->id}, fullname={$a->fullname}).';
 $string['reverttodraft'] = 'Revert the submission to draft status.';
 $string['reverttodraftshort'] = 'Revert the submission to draft';
@@ -205,7 +212,7 @@ $string['sendsubmissionreceipts_help'] = 'This switch will enable submission rec
 $string['settings'] = 'Assignment settings';
 $string['showrecentsubmissions'] = 'Show recent submissions';
 $string['submissiondrafts'] = 'Require students click submit button';
-$string['submissiondrafts_help'] = 'If enabled, students will have to click a Submit button to declare their submission as final. This allows students to keep a draft version of the submission on the system.';
+$string['submissiondrafts_help'] = 'If enabled, students will have to click a Submit button to declare their submission as final. This allows students to keep a draft version of the submission on the system. If this setting is changed from "No" to "Yes" after students have already submitted those submissions will be regarded as final.';
 $string['submissionnotready'] = 'This assignment is not ready to submit:';
 $string['submissionplugins'] = 'Submission plugins';
 $string['submissionreceipts'] = 'Send submission receipts';
@@ -225,6 +232,9 @@ $string['submissions'] = 'Submissions';
 $string['submissionsnotgraded'] = 'Submissions not graded: {$a}';
 $string['submissionsclosed'] = 'Submissions closed';
 $string['submissionsettings'] = 'Submission settings';
+$string['submissionstatement'] = 'Submission statement';
+$string['submissionstatement_help'] = 'Assignment submission confirmation statement';
+$string['submissionstatementacceptedlog'] = 'Submission statement accepted by user {$a}';
 $string['submissionstatus_draft'] = 'Draft (not submitted)';
 $string['submissionstatusheading'] = 'Submission status';
 $string['submissionstatus_marked'] = 'Graded';

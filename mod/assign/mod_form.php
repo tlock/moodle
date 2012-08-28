@@ -45,7 +45,7 @@ class mod_assign_mod_form extends moodleform_mod {
      * @return void
      */
     function definition() {
-        global $CFG, $DB;
+        global $CFG, $DB, $PAGE;
         $mform = $this->_form;
 
         $mform->addElement('header', 'general', get_string('general', 'form'));
@@ -73,6 +73,8 @@ class mod_assign_mod_form extends moodleform_mod {
             $assignment->set_course($DB->get_record('course', array('id'=>$this->current->course), '*', MUST_EXIST));
         }
 
+        $config = get_config('assign');
+
         $mform->addElement('header', 'general', get_string('settings', 'assign'));
         $mform->addElement('date_time_selector', 'allowsubmissionsfromdate', get_string('allowsubmissionsfromdate', 'assign'), array('optional'=>true));
         $mform->addHelpButton('allowsubmissionsfromdate', 'allowsubmissionsfromdate', 'assign');
@@ -89,6 +91,15 @@ class mod_assign_mod_form extends moodleform_mod {
         $mform->addElement('selectyesno', 'submissiondrafts', get_string('submissiondrafts', 'assign'));
         $mform->addHelpButton('submissiondrafts', 'submissiondrafts', 'assign');
         $mform->setDefault('submissiondrafts', 0);
+        // submission statement
+        if (empty($config->requiresubmissionstatement)) {
+            $mform->addElement('selectyesno', 'requiresubmissionstatement', get_string('requiresubmissionstatement', 'assign'));
+            $mform->setDefault('requiresubmissionstatement', 0);
+            $mform->addHelpButton('requiresubmissionstatement', 'requiresubmissionstatement', 'assign');
+        } else {
+            $mform->addElement('hidden', 'requiresubmissionstatement', 1);
+        }
+
         $mform->addElement('selectyesno', 'sendnotifications', get_string('sendnotifications', 'assign'));
         $mform->addHelpButton('sendnotifications', 'sendnotifications', 'assign');
         $mform->setDefault('sendnotifications', 1);
@@ -101,7 +112,7 @@ class mod_assign_mod_form extends moodleform_mod {
         if (!empty($CFG->enableplagiarism)) {
             /** Include plagiarismlib.php */
             require_once($CFG->libdir . '/plagiarismlib.php');
-            plagiarism_get_form_elements_module($mform, $ctx->get_course_context());
+            plagiarism_get_form_elements_module($mform, $ctx->get_course_context(), 'mod_assign');
         }
 
         $assignment->add_all_plugin_settings($mform);
@@ -109,6 +120,21 @@ class mod_assign_mod_form extends moodleform_mod {
         $this->standard_coursemodule_elements();
 
         $this->add_action_buttons();
+
+        // Add warning popup/noscript tag, if grades are changed by user.
+        if ($mform->elementExists('grade') && !empty($this->_instance) && $DB->record_exists_select('assign_grades', 'assignment = ? AND grade <> -1', array($this->_instance))) {
+            $module = array(
+                'name' => 'mod_assign',
+                'fullpath' => '/mod/assign/module.js',
+                'requires' => array('node', 'event'),
+                'strings' => array(array('changegradewarning', 'mod_assign'))
+                );
+            $PAGE->requires->js_init_call('M.mod_assign.init_grade_change', null, false, $module);
+
+            // Add noscript tag in case
+            $noscriptwarning = $mform->createElement('static', 'warning', null,  html_writer::tag('noscript', get_string('changegradewarning', 'mod_assign')));
+            $mform->insertElementBefore($noscriptwarning, 'grade');
+        }
     }
 
     /**
@@ -150,5 +176,15 @@ class mod_assign_mod_form extends moodleform_mod {
         $assignment->plugin_data_preprocessing($defaultvalues);
     }
 
+    function add_completion_rules() {
+        $mform =& $this->_form;
+
+        $mform->addElement('checkbox', 'completionsubmit', '', get_string('completionsubmit', 'assign'));
+        return array('completionsubmit');
+    }
+
+    function completion_rule_enabled($data) {
+        return !empty($data['completionsubmit']);
+    }
 
 }

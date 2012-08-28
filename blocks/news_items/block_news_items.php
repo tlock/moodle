@@ -41,7 +41,7 @@ class block_news_items extends block_base {
                 return '';
             }
 
-            $context = get_context_instance(CONTEXT_MODULE, $cm->id);
+            $context = context_module::instance($cm->id);
 
         /// User must have perms to view discussions in that forum
             if (!has_capability('mod/forum:viewdiscussion', $context)) {
@@ -84,9 +84,7 @@ class block_news_items extends block_base {
                          '<div class="head clearfix">'.
                          '<div class="date">'.userdate($discussion->modified, $strftimerecent).'</div>'.
                          '<div class="name">'.fullname($discussion).'</div></div>'.
-                         '<div class="info">'.$discussion->subject.' '.
-                         '<a href="'.$CFG->wwwroot.'/mod/forum/discuss.php?d='.$discussion->discussion.'">'.
-                         $strmore.'...</a></div>'.
+                         '<div class="info"><a href="'.$CFG->wwwroot.'/mod/forum/discuss.php?d='.$discussion->discussion.'">'.$discussion->subject.'</a></div>'.
                          "</li>\n";
             }
             $text .= "</ul>\n";
@@ -106,7 +104,7 @@ class block_news_items extends block_base {
                     $tooltiptext = get_string('rsssubscriberssposts','forum');
                 }
                 if (!isloggedin()) {
-                    $userid = 0;
+                    $userid = $CFG->siteguest;
                 } else {
                     $userid = $USER->id;
                 }

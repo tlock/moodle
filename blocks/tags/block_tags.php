@@ -40,6 +40,7 @@ class block_tags extends block_base {
         global $CFG, $COURSE, $SITE, $USER, $SCRIPT, $OUTPUT;
 
         if (empty($CFG->usetags)) {
+            $this->content = new stdClass();
             $this->content->text = '';
             if ($this->page->user_is_editing()) {
                 $this->content->text = get_string('disabledtags', 'block_tags');
@@ -81,13 +82,12 @@ class block_tags extends block_base {
             require_once($CFG->dirroot.'/tag/coursetagslib.php');
 
             // Permissions and page awareness
-            $systemcontext = get_context_instance(CONTEXT_SYSTEM);
+            $systemcontext = context_system::instance();
             $loggedin = isloggedin() && !isguestuser();
             $coursepage = $canedit = false;
             $coursepage = (isset($this->page->course->id) && $this->page->course->id != SITEID);
             $mymoodlepage = ($SCRIPT == '/my/index.php') ? true : false;
             $sitepage = (isset($this->page->course->id) && $this->page->course->id == SITEID && !$mymoodlepage);
-            $coursecontext = get_context_instance(CONTEXT_COURSE, $this->page->course->id);
             if ($coursepage) {
                 $canedit =  has_capability('moodle/tag:create', $systemcontext);
             }
@@ -225,7 +225,6 @@ class block_tags extends block_base {
             if ($officialtags) { $this->content->text .= $officialtagscontent; }
             if ($coursetags) { $this->content->text .= $coursetagscontent; }
             if ($commtags) { $this->content->text .= $commtagscontent; }
-
             // add the input form section (allowing a user to tag the current course) and navigation, or loggin message
             if ($loggedin) {
                 // only show the input form on course pages for those allowed (or not barred)
@@ -250,7 +249,8 @@ class block_tags extends block_base {
                             <div class="coursetag_form_wrapper">
                             <div class="coursetag_form_positioner">
                                 <div class="coursetag_form_input1">
-                                    <input type="text" name="coursetag_sug_keyword" class="coursetag_form_input1a" disabled="disabled" />
+                                    <label class="accesshide" for="coursetag_sug_keyword">$tagthisunit</label>
+                                    <input type="text" name="coursetag_sug_keyword" id="coursetag_sug_keyword" class="coursetag_form_input1a" disabled="disabled" />
                                 </div>
                                 <div class="coursetag_form_input2">
                                     <input type="text" name="coursetag_new_tag" id="coursetag_new_tag" class="coursetag_form_input2a"

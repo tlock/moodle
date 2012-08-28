@@ -57,27 +57,36 @@ class mod_quiz_overdue_attempt_updater {
         $count = 0;
         $quizcount = 0;
         foreach ($attemptstoprocess as $attempt) {
-            // If we have moved on to a different quiz, fetch the new data.
-            if (!$quiz || $attempt->quiz != $quiz->id) {
-                $quiz = $DB->get_record('quiz', array('id' => $attempt->quiz), '*', MUST_EXIST);
-                $cm = get_coursemodule_from_instance('quiz', $attempt->quiz);
-                $quizcount += 1;
+            try {
+
+                // If we have moved on to a different quiz, fetch the new data.
+                if (!$quiz || $attempt->quiz != $quiz->id) {
+                    $quiz = $DB->get_record('quiz', array('id' => $attempt->quiz), '*', MUST_EXIST);
+                    $cm = get_coursemodule_from_instance('quiz', $attempt->quiz);
+                    $quizcount += 1;
+                }
+
+                // If we have moved on to a different course, fetch the new data.
+                if (!$course || $course->id != $quiz->course) {
+                    $course = $DB->get_record('course', array('id' => $quiz->course), '*', MUST_EXIST);
+                }
+
+                // Make a specialised version of the quiz settings, with the relevant overrides.
+                $quizforuser = clone($quiz);
+                $quizforuser->timeclose = $attempt->usertimeclose;
+                $quizforuser->timelimit = $attempt->usertimelimit;
+
+                // Trigger any transitions that are required.
+                $attemptobj = new quiz_attempt($attempt, $quizforuser, $cm, $course);
+                $attemptobj->handle_if_time_expired($timenow, false);
+                $count += 1;
+
+            } catch (moodle_exception $e) {
+                // If an error occurs while processing one attempt, don't let that kill cron.
+                mtrace("Error while processing attempt {$attempt->id} at {$attempt->quiz} quiz:");
+                mtrace($e->getMessage());
+                mtrace($e->getTraceAsString());
             }
-
-            // If we have moved on to a different course, fetch the new data.
-            if (!$course || $course->id != $quiz->course) {
-                $course = $DB->get_record('course', array('id' => $quiz->course), '*', MUST_EXIST);
-            }
-
-            // Make a specialised version of the quiz settings, with the relevant overrides.
-            $quizforuser = clone($quiz);
-            $quizforuser->timeclose = $attempt->usertimeclose;
-            $quizforuser->timelimit = $attempt->usertimelimit;
-
-            // Trigger any transitions that are required.
-            $attemptobj = new quiz_attempt($attempt, $quizforuser, $cm, $course);
-            $attemptobj->handle_if_time_expired($timenow, false);
-            $count += 1;
         }
 
         $attemptstoprocess->close();
@@ -125,10 +134,19 @@ class mod_quiz_overdue_attempt_updater {
         ) group_by_results
            JOIN {quiz_attempts} quiza ON quiza.id = group_by_results.attemptid
 
-          WHERE (state = 'inprogress' AND (:timenow1 > usertimeclose OR
-                                           :timenow2 > quiza.timestart + usertimelimit))
-             OR (state = 'overdue'    AND (:timenow3 > graceperiod + usertimeclose OR
-                                           :timenow4 > graceperiod + quiza.timestart + usertimelimit))
+          WHERE (
+                state = 'inprogress' AND (
+                    (usertimeclose > 0 AND :timenow1 > usertimeclose) OR
+                    (usertimelimit > 0 AND :timenow2 > quiza.timestart + usertimelimit)
+                )
+            )
+          OR
+            (
+                state = 'overdue' AND (
+                    (usertimeclose > 0 AND :timenow3 > graceperiod + usertimeclose) OR
+                    (usertimelimit > 0 AND :timenow4 > graceperiod + quiza.timestart + usertimelimit)
+                )
+            )
 
        ORDER BY course, quiz",
 

@@ -97,7 +97,7 @@ class repository_upload extends repository {
         $record->license  = $license;
         $record->author   = $author;
 
-        $context = get_context_instance(CONTEXT_USER, $USER->id);
+        $context = context_user::instance($USER->id);
         $elname = 'repo_upload_file';
 
         $fs = get_file_storage();
@@ -155,17 +155,22 @@ class repository_upload extends repository {
             $ext = '';
             $match = array();
             $filename = clean_param($_FILES[$elname]['name'], PARAM_FILE);
-            if (preg_match('/\.([a-z0-9]+)$/i', $filename, $match)) {
-                if (isset($match[1])) {
-                    $ext = $match[1];
-                }
-            }
-            $ext = !empty($ext) ? $ext : '';
-            if (preg_match('#\.(' . $ext . ')$#i', $saveas_filename)) {
-                // saveas filename contains file extension already
+            if (strpos($filename, '.') === false) {
+                // File has no extension at all - do not add a dot.
                 $record->filename = $saveas_filename;
             } else {
-                $record->filename = $saveas_filename . '.' . $ext;
+                if (preg_match('/\.([a-z0-9]+)$/i', $filename, $match)) {
+                    if (isset($match[1])) {
+                        $ext = $match[1];
+                    }
+                }
+                $ext = !empty($ext) ? $ext : '';
+                if (preg_match('#\.(' . $ext . ')$#i', $saveas_filename)) {
+                    // saveas filename contains file extension already
+                    $record->filename = $saveas_filename;
+                } else {
+                    $record->filename = $saveas_filename . '.' . $ext;
+                }
             }
         }
 

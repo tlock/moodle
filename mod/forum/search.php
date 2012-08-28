@@ -241,7 +241,7 @@ foreach ($posts as $post) {
     //add the ratings information to the post
     //Unfortunately seem to have do this individually as posts may be from different forums
     if ($forum->assessed != RATING_AGGREGATE_NONE) {
-        $modcontext = get_context_instance(CONTEXT_MODULE, $cm->id);
+        $modcontext = context_module::instance($cm->id);
         $ratingoptions->context = $modcontext;
         $ratingoptions->items = array($post);
         $ratingoptions->aggregate = $forum->assessed;//the aggregation method
@@ -369,11 +369,11 @@ function forum_print_big_search_form($course) {
     }
 
     echo '<input name="timetorestrict" type="checkbox" value="1" alt="'.get_string('searchdateto', 'forum').'" onclick="return lockoptions(\'searchform\', \'timetorestrict\', timetoitems)" ' .$datetochecked. ' /> ';
-    $selectors = html_writer::select_time('days', 'fromday', $dateto)
-               . html_writer::select_time('months', 'frommonth', $dateto)
-               . html_writer::select_time('years', 'fromyear', $dateto)
-               . html_writer::select_time('hours', 'fromhour', $dateto)
-               . html_writer::select_time('minutes', 'fromminute', $dateto);
+    $selectors = html_writer::select_time('days', 'today', $dateto)
+               . html_writer::select_time('months', 'tomonth', $dateto)
+               . html_writer::select_time('years', 'toyear', $dateto)
+               . html_writer::select_time('hours', 'tohour', $dateto)
+               . html_writer::select_time('minutes', 'tominute', $dateto);
     echo $selectors;
 
     echo '<input type="hidden" name="htoday" value="0" />';
@@ -454,7 +454,7 @@ function forum_menu_list($course)  {
         if (!$cm->uservisible) {
             continue;
         }
-        $context = get_context_instance(CONTEXT_MODULE, $cm->id);
+        $context = context_module::instance($cm->id);
         if (!has_capability('mod/forum:viewdiscussion', $context)) {
             continue;
         }

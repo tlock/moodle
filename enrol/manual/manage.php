@@ -33,7 +33,7 @@ $extendbase   = optional_param('extendbase', 3, PARAM_INT);
 
 $instance = $DB->get_record('enrol', array('id'=>$enrolid, 'enrol'=>'manual'), '*', MUST_EXIST);
 $course = $DB->get_record('course', array('id'=>$instance->courseid), '*', MUST_EXIST);
-$context = get_context_instance(CONTEXT_COURSE, $course->id, MUST_EXIST);
+$context = context_course::instance($course->id, MUST_EXIST);
 
 require_login($course);
 require_capability('enrol/manual:enrol', $context);
@@ -162,13 +162,13 @@ echo $OUTPUT->heading($instancename);
 
               <div class="enroloptions">
 
-              <p><label for="roleid"><?php print_string('assignrole', 'enrol_manual') ?></label><br />
+              <p><label for="menuroleid"><?php print_string('assignrole', 'enrol_manual') ?></label><br />
               <?php echo html_writer::select($roles, 'roleid', $roleid, false); ?></p>
 
-              <p><label for="extendperiod"><?php print_string('enrolperiod', 'enrol') ?></label><br />
+              <p><label for="menuextendperiod"><?php print_string('enrolperiod', 'enrol') ?></label><br />
               <?php echo html_writer::select($periodmenu, 'extendperiod', $defaultperiod, $unlimitedperiod); ?></p>
 
-              <p><label for="extendbase"><?php print_string('startingfrom') ?></label><br />
+              <p><label for="menuextendbase"><?php print_string('startingfrom') ?></label><br />
               <?php echo html_writer::select($basemenu, 'extendbase', $extendbase, false); ?></p>
 
               </div>

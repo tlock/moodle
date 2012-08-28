@@ -37,7 +37,7 @@ M.mod_chat_ajax.init = function(Y, cfg) {
         init : function(cfg) {
             this.cfg = cfg;
             this.cfg.req_count = this.cfg.req_count || 0;
-            this.layout = new YAHOO.widget.Layout({
+            this.layout = new Y.YUI2.widget.Layout({
                 units : [
                      {position: 'right', width: 180, resize: true, gutter: '5px', scroll: true, body: 'chat-userlist', animate: false},
                      {position: 'bottom', height: 42, resize: false, body: 'chat-input-area', gutter: '5px', collapse: false, resize: false},
@@ -123,7 +123,7 @@ M.mod_chat_ajax.init = function(Y, cfg) {
 
             return;
             */
-            this.thememenu = new YAHOO.widget.Menu('basicmenu', {xy:[0,0]});
+            this.thememenu = new Y.YUI2.widget.Menu('basicmenu', {xy:[0,0]});
             this.thememenu.addItems([
                 {text: "Bubble", url: this.cfg.chaturl+'&theme=bubble'},
                 {text: "Compact", url: this.cfg.chaturl+'&theme=compact'}
@@ -247,11 +247,11 @@ M.mod_chat_ajax.init = function(Y, cfg) {
                     li.all('td').item(1).append(Y.Node.create('<strong><a target="_blank" href="'+users[i].url+'">'+ users[i].name+'</a></strong>'));
                 } else {
                     li.all('td').item(1).append(Y.Node.create('<div><a target="_blank" href="'+users[i].url+'">'+users[i].name+'</a></div>'));
-                    var talk = Y.Node.create('<a href="###">'+M.str.chat.talk+'</a>&nbsp;');
+                    var talk = Y.Node.create('<a href="###">'+M.str.chat.talk+'</a>');
                     talk.on('click', this.talkto, this, users[i].name);
                     var beep = Y.Node.create('<a href="###">'+M.str.chat.beep+'</a>');
                     beep.on('click', this.send, this, users[i].id);
-                    li.all('td').item(1).append(Y.Node.create('<div></div>').append(talk).append(beep));
+                    li.all('td').item(1).append(Y.Node.create('<div></div>').append(talk).append('&nbsp;').append(beep));
                 }
                 list.append(li);
             }

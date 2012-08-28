@@ -42,11 +42,11 @@ class restore_create_and_clean_temp_stuff extends restore_execution_step {
         }
         // Create the old-course-ctxid to new-course-ctxid mapping, we need that available since the beginning
         $itemid = $this->task->get_old_contextid();
-        $newitemid = get_context_instance(CONTEXT_COURSE, $this->get_courseid())->id;
+        $newitemid = context_course::instance($this->get_courseid())->id;
         restore_dbops::set_backup_ids_record($this->get_restoreid(), 'context', $itemid, $newitemid);
         // Create the old-system-ctxid to new-system-ctxid mapping, we need that available since the beginning
         $itemid = $this->task->get_old_system_contextid();
-        $newitemid = get_context_instance(CONTEXT_SYSTEM)->id;
+        $newitemid = context_system::instance()->id;
         restore_dbops::set_backup_ids_record($this->get_restoreid(), 'context', $itemid, $newitemid);
         // Create the old-course-id to new-course-id mapping, we need that available since the beginning
         $itemid = $this->task->get_old_courseid();
@@ -268,7 +268,7 @@ class restore_gradebook_structure_step extends restore_structure_step {
         $data = (object)$data;
         $oldid = $data->id;
 
-        $data->contextid = get_context_instance(CONTEXT_COURSE, $this->get_courseid())->id;
+        $data->contextid = context_course::instance($this->get_courseid())->id;
 
         $newitemid = $DB->insert_record('grade_letters', $data);
         $this->set_mapping('grade_letter', $oldid, $newitemid);
@@ -888,7 +888,7 @@ class restore_scales_structure_step extends restore_structure_step {
             $data->courseid = $data->courseid ? $this->get_courseid() : 0;
             // If global scale (course=0), check the user has perms to create it
             // falling to course scale if not
-            $systemctx = get_context_instance(CONTEXT_SYSTEM);
+            $systemctx = context_system::instance();
             if ($data->courseid == 0 && !has_capability('moodle/course:managescales', $systemctx , $this->task->get_userid())) {
                 $data->courseid = $this->get_courseid();
             }
@@ -950,7 +950,7 @@ class restore_outcomes_structure_step extends restore_structure_step {
             $data->courseid = $data->courseid ? $this->get_courseid() : null;
             // If global outcome (course=null), check the user has perms to create it
             // falling to course outcome if not
-            $systemctx = get_context_instance(CONTEXT_SYSTEM);
+            $systemctx = context_system::instance();
             if (is_null($data->courseid) && !has_capability('moodle/grade:manageoutcomes', $systemctx , $this->task->get_userid())) {
                 $data->courseid = $this->get_courseid();
             }
@@ -1030,6 +1030,7 @@ class restore_section_structure_step extends restore_structure_step {
         $paths[] = $section;
         if ($CFG->enableavailability) {
             $paths[] = new restore_path_element('availability', '/section/availability');
+            $paths[] = new restore_path_element('availability_field', '/section/availability_field');
         }
 
         // Apply for 'format' plugins optional paths at section level
@@ -1131,6 +1132,37 @@ class restore_section_structure_step extends restore_structure_step {
         // need updating. The mapping is stored with $newid => $newid for
         // convenience.
         $this->set_mapping('course_sections_availability', $newid, $newid);
+    }
+
+    public function process_availability_field($data) {
+        global $DB;
+        $data = (object)$data;
+        // Mark it is as passed by default
+        $passed = true;
+        $customfieldid = null;
+
+        // If a customfield has been used in order to pass we must be able to match an existing
+        // customfield by name (data->customfield) and type (data->customfieldtype)
+        if (is_null($data->customfield) xor is_null($data->customfieldtype)) {
+            // xor is sort of uncommon. If either customfield is null or customfieldtype is null BUT not both.
+            // If one is null but the other isn't something clearly went wrong and we'll skip this condition.
+            $passed = false;
+        } else if (!is_null($data->customfield)) {
+            $params = array('shortname' => $data->customfield, 'datatype' => $data->customfieldtype);
+            $customfieldid = $DB->get_field('user_info_field', 'id', $params);
+            $passed = ($customfieldid !== false);
+        }
+
+        if ($passed) {
+            // Create the object to insert into the database
+            $availfield = new stdClass();
+            $availfield->coursesectionid = $this->task->get_sectionid();
+            $availfield->userfield = $data->userfield;
+            $availfield->customfieldid = $customfieldid;
+            $availfield->operator = $data->operator;
+            $availfield->value = $data->value;
+            $DB->insert_record('course_sections_avail_fields', $availfield);
+        }
     }
 
     protected function after_execute() {
@@ -1243,7 +1275,7 @@ class restore_course_structure_step extends restore_structure_step {
         $data->fullname = $fullname;
         $data->shortname= $shortname;
 
-        $context = get_context_instance_by_id($this->task->get_contextid());
+        $context = context::instance_by_id($this->task->get_contextid());
         if (has_capability('moodle/course:changeidnumber', $context, $this->task->get_userid())) {
             $data->idnumber = '';
         } else {
@@ -1737,6 +1769,23 @@ class restore_calendarevents_structure_step extends restore_structure_step {
                 return;
             }
         }
+        // Handle events with empty eventtype //MDL-32827
+        if(empty($data->eventtype)) {
+            if ($data->courseid == $SITE->id) {                                // Site event
+                $data->eventtype = "site";
+            } else if ($data->courseid != 0 && $data->groupid == 0 && ($data->modulename == 'assignment' || $data->modulename == 'assign')) {
+                // Course assingment event
+                $data->eventtype = "due";
+            } else if ($data->courseid != 0 && $data->groupid == 0) {      // Course event
+                $data->eventtype = "course";
+            } else if ($data->groupid) {                                      // Group event
+                $data->eventtype = "group";
+            } else if ($data->userid) {                                       // User event
+                $data->eventtype = "user";
+            } else {
+                return;
+            }
+        }
 
         $params = array(
                 'name'           => $data->name,
@@ -1835,7 +1884,6 @@ class restore_course_completion_structure_step extends restore_structure_step {
 
         $paths = array();
         $paths[] = new restore_path_element('course_completion_criteria', '/course_completion/course_completion_criteria');
-        $paths[] = new restore_path_element('course_completion_notify', '/course_completion/course_completion_notify');
         $paths[] = new restore_path_element('course_completion_aggr_methd', '/course_completion/course_completion_aggr_methd');
 
         if ($userinfo) {
@@ -1939,9 +1987,6 @@ class restore_course_completion_structure_step extends restore_structure_step {
             if (isset($data->unenroled)) {
                 $params['unenroled'] = $data->unenroled;
             }
-            if (isset($data->deleted)) {
-                $params['deleted'] = $data->deleted;
-            }
             $DB->insert_record('course_completion_crit_compl', $params);
         }
     }
@@ -1964,8 +2009,6 @@ class restore_course_completion_structure_step extends restore_structure_step {
             $params = array(
                 'userid' => $data->userid,
                 'course' => $data->course,
-                'deleted' => $data->deleted,
-                'timenotified' => $this->apply_date_offset($data->timenotified),
                 'timeenrolled' => $this->apply_date_offset($data->timeenrolled),
                 'timestarted' => $this->apply_date_offset($data->timestarted),
                 'timecompleted' => $this->apply_date_offset($data->timecompleted),
@@ -1973,34 +2016,6 @@ class restore_course_completion_structure_step extends restore_structure_step {
             );
             $DB->insert_record('course_completions', $params);
         }
-    }
-
-    /**
-     * Process course completion notification records.
-     *
-     * Note: As of Moodle 2.0 this table is not being used however it has been
-     * left in in the hopes that one day the functionality there will be completed
-     *
-     * @global moodle_database $DB
-     * @param stdClass $data
-     */
-    public function process_course_completion_notify($data) {
-        global $DB;
-
-        $data = (object)$data;
-
-        $data->course = $this->get_courseid();
-        if (!empty($data->role)) {
-            $data->role = $this->get_mappingid('role', $data->role);
-        }
-
-        $params = array(
-            'course' => $data->course,
-            'role' => $data->role,
-            'message' => $data->message,
-            'timesent' => $this->apply_date_offset($data->timesent),
-        );
-        $DB->insert_record('course_completion_notify', $params);
     }
 
     /**
@@ -2486,7 +2501,7 @@ class restore_block_instance_structure_step extends restore_structure_step {
         // Save the mapping (with restorefiles support)
         $this->set_mapping('block_instance', $oldid, $newitemid, true);
         // Create the block context
-        $newcontextid = get_context_instance(CONTEXT_BLOCK, $newitemid)->id;
+        $newcontextid = context_block::instance($newitemid)->id;
         // Save the block contexts mapping and sent it to task
         $this->set_mapping('context', $oldcontextid, $newcontextid);
         $this->task->set_contextid($newcontextid);
@@ -2539,6 +2554,7 @@ class restore_module_structure_step extends restore_structure_step {
         $paths[] = $module;
         if ($CFG->enableavailability) {
             $paths[] = new restore_path_element('availability', '/module/availability_info/availability');
+            $paths[] = new restore_path_element('availability_field', '/module/availability_info/availability_field');
         }
 
         // Apply for 'format' plugins optional paths at module level
@@ -2620,7 +2636,7 @@ class restore_module_structure_step extends restore_structure_step {
         // set the new course_module id in the task
         $this->task->set_moduleid($newitemid);
         // we can now create the context safely
-        $ctxid = get_context_instance(CONTEXT_MODULE, $newitemid)->id;
+        $ctxid = context_module::instance($newitemid)->id;
         // set the new context id in the task
         $this->task->set_contextid($ctxid);
         // update sequence field in course_section
@@ -2632,14 +2648,45 @@ class restore_module_structure_step extends restore_structure_step {
         $DB->set_field('course_sections', 'sequence', $sequence, array('id' => $data->section));
     }
 
-
     protected function process_availability($data) {
         $data = (object)$data;
         // Simply going to store the whole availability record now, we'll process
-        // all them later in the final task (once all actvivities have been restored)
+        // all them later in the final task (once all activities have been restored)
         // Let's call the low level one to be able to store the whole object
         $data->coursemoduleid = $this->task->get_moduleid(); // Let add the availability cmid
         restore_dbops::set_backup_ids_record($this->get_restoreid(), 'module_availability', $data->id, 0, null, $data);
+    }
+
+    protected function process_availability_field($data) {
+        global $DB;
+        $data = (object)$data;
+        // Mark it is as passed by default
+        $passed = true;
+        $customfieldid = null;
+
+        // If a customfield has been used in order to pass we must be able to match an existing
+        // customfield by name (data->customfield) and type (data->customfieldtype)
+        if (!empty($data->customfield) xor !empty($data->customfieldtype)) {
+            // xor is sort of uncommon. If either customfield is null or customfieldtype is null BUT not both.
+            // If one is null but the other isn't something clearly went wrong and we'll skip this condition.
+            $passed = false;
+        } else if (!empty($data->customfield)) {
+            $params = array('shortname' => $data->customfield, 'datatype' => $data->customfieldtype);
+            $customfieldid = $DB->get_field('user_info_field', 'id', $params);
+            $passed = ($customfieldid !== false);
+        }
+
+        if ($passed) {
+            // Create the object to insert into the database
+            $availfield = new stdClass();
+            $availfield->coursemoduleid = $this->task->get_moduleid(); // Lets add the availability cmid
+            $availfield->userfield = $data->userfield;
+            $availfield->customfieldid = $customfieldid;
+            $availfield->operator = $data->operator;
+            $availfield->value = $data->value;
+            // Insert into the database
+            $DB->insert_record('course_modules_avail_fields', $availfield);
+        }
     }
 }
 
@@ -3431,31 +3478,74 @@ abstract class restore_questions_activity_structure_step extends restore_activit
     /**
      * Attach below $element (usually attempts) the needed restore_path_elements
      * to restore question_usages and all they contain.
+     *
+     * If you use the $nameprefix parameter, then you will need to implement some
+     * extra methods in your class, like
+     *
+     * protected function process_{nameprefix}question_attempt($data) {
+     *     $this->restore_question_usage_worker($data, '{nameprefix}');
+     * }
+     * protected function process_{nameprefix}question_attempt($data) {
+     *     $this->restore_question_attempt_worker($data, '{nameprefix}');
+     * }
+     * protected function process_{nameprefix}question_attempt_step($data) {
+     *     $this->restore_question_attempt_step_worker($data, '{nameprefix}');
+     * }
+     *
+     * @param restore_path_element $element the parent element that the usages are stored inside.
+     * @param array $paths the paths array that is being built.
+     * @param string $nameprefix should match the prefix passed to the corresponding
+     *      backup_questions_activity_structure_step::add_question_usages call.
      */
-    protected function add_question_usages($element, &$paths) {
+    protected function add_question_usages($element, &$paths, $nameprefix = '') {
         // Check $element is restore_path_element
         if (! $element instanceof restore_path_element) {
             throw new restore_step_exception('element_must_be_restore_path_element', $element);
         }
+
         // Check $paths is one array
         if (!is_array($paths)) {
             throw new restore_step_exception('paths_must_be_array', $paths);
         }
-        $paths[] = new restore_path_element('question_usage',
-                $element->get_path() . '/question_usage');
-        $paths[] = new restore_path_element('question_attempt',
-                $element->get_path() . '/question_usage/question_attempts/question_attempt');
-        $paths[] = new restore_path_element('question_attempt_step',
-                $element->get_path() . '/question_usage/question_attempts/question_attempt/steps/step',
+        $paths[] = new restore_path_element($nameprefix . 'question_usage',
+                $element->get_path() . "/{$nameprefix}question_usage");
+        $paths[] = new restore_path_element($nameprefix . 'question_attempt',
+                $element->get_path() . "/{$nameprefix}question_usage/{$nameprefix}question_attempts/{$nameprefix}question_attempt");
+        $paths[] = new restore_path_element($nameprefix . 'question_attempt_step',
+                $element->get_path() . "/{$nameprefix}question_usage/{$nameprefix}question_attempts/{$nameprefix}question_attempt/{$nameprefix}steps/{$nameprefix}step",
                 true);
-        $paths[] = new restore_path_element('question_attempt_step_data',
-                $element->get_path() . '/question_usage/question_attempts/question_attempt/steps/step/response/variable');
+        $paths[] = new restore_path_element($nameprefix . 'question_attempt_step_data',
+                $element->get_path() . "/{$nameprefix}question_usage/{$nameprefix}question_attempts/{$nameprefix}question_attempt/{$nameprefix}steps/{$nameprefix}step/{$nameprefix}response/{$nameprefix}variable");
     }
 
     /**
      * Process question_usages
      */
     protected function process_question_usage($data) {
+        $this->restore_question_usage_worker($data, '');
+    }
+
+    /**
+     * Process question_attempts
+     */
+    protected function process_question_attempt($data) {
+        $this->restore_question_attempt_worker($data, '');
+    }
+
+    /**
+     * Process question_attempt_steps
+     */
+    protected function process_question_attempt_step($data) {
+        $this->restore_question_attempt_step_worker($data, '');
+    }
+
+    /**
+     * This method does the acutal work for process_question_usage or
+     * process_{nameprefix}_question_usage.
+     * @param array $data the data from the XML file.
+     * @param string $nameprefix the element name prefix.
+     */
+    protected function restore_question_usage_worker($data, $nameprefix) {
         global $DB;
 
         // Clear our caches.
@@ -3473,7 +3563,7 @@ abstract class restore_questions_activity_structure_step extends restore_activit
 
         $this->inform_new_usage_id($newitemid);
 
-        $this->set_mapping('question_usage', $oldid, $newitemid, false);
+        $this->set_mapping($nameprefix . 'question_usage', $oldid, $newitemid, false);
     }
 
     /**
@@ -3485,30 +3575,36 @@ abstract class restore_questions_activity_structure_step extends restore_activit
     abstract protected function inform_new_usage_id($newusageid);
 
     /**
-     * Process question_attempts
+     * This method does the acutal work for process_question_attempt or
+     * process_{nameprefix}_question_attempt.
+     * @param array $data the data from the XML file.
+     * @param string $nameprefix the element name prefix.
      */
-    protected function process_question_attempt($data) {
+    protected function restore_question_attempt_worker($data, $nameprefix) {
         global $DB;
 
         $data = (object)$data;
         $oldid = $data->id;
         $question = $this->get_mapping('question', $data->questionid);
 
-        $data->questionusageid = $this->get_new_parentid('question_usage');
+        $data->questionusageid = $this->get_new_parentid($nameprefix . 'question_usage');
         $data->questionid      = $question->newitemid;
         $data->timemodified    = $this->apply_date_offset($data->timemodified);
 
         $newitemid = $DB->insert_record('question_attempts', $data);
 
-        $this->set_mapping('question_attempt', $oldid, $newitemid);
+        $this->set_mapping($nameprefix . 'question_attempt', $oldid, $newitemid);
         $this->qtypes[$newitemid] = $question->info->qtype;
         $this->newquestionids[$newitemid] = $data->questionid;
     }
 
     /**
-     * Process question_attempt_steps
+     * This method does the acutal work for process_question_attempt_step or
+     * process_{nameprefix}_question_attempt_step.
+     * @param array $data the data from the XML file.
+     * @param string $nameprefix the element name prefix.
      */
-    protected function process_question_attempt_step($data) {
+    protected function restore_question_attempt_step_worker($data, $nameprefix) {
         global $DB;
 
         $data = (object)$data;
@@ -3516,14 +3612,14 @@ abstract class restore_questions_activity_structure_step extends restore_activit
 
         // Pull out the response data.
         $response = array();
-        if (!empty($data->response['variable'])) {
-            foreach ($data->response['variable'] as $variable) {
+        if (!empty($data->{$nameprefix . 'response'}[$nameprefix . 'variable'])) {
+            foreach ($data->{$nameprefix . 'response'}[$nameprefix . 'variable'] as $variable) {
                 $response[$variable['name']] = $variable['value'];
             }
         }
         unset($data->response);
 
-        $data->questionattemptid = $this->get_new_parentid('question_attempt');
+        $data->questionattemptid = $this->get_new_parentid($nameprefix . 'question_attempt');
         $data->timecreated = $this->apply_date_offset($data->timecreated);
         $data->userid      = $this->get_mappingid('user', $data->userid);
 
@@ -3536,6 +3632,7 @@ abstract class restore_questions_activity_structure_step extends restore_activit
                 $this->qtypes[$data->questionattemptid],
                 $this->newquestionids[$data->questionattemptid],
                 $data->sequencenumber, $response);
+
         foreach ($response as $name => $value) {
             $row = new stdClass();
             $row->attemptstepid = $newitemid;

@@ -60,7 +60,7 @@ function message_send($eventdata) {
     //TODO: we need to solve problems with database transactions here somehow, for now we just prevent transactions - sorry
     $DB->transactions_forbidden();
 
-    if (is_int($eventdata->userto)) {
+    if (is_number($eventdata->userto)) {
         $eventdata->userto = $DB->get_record('user', array('id' => $eventdata->userto));
     }
     if (is_int($eventdata->userfrom)) {
@@ -370,11 +370,12 @@ function message_set_default_message_preference($component, $messagename, $filep
  *
  * @see message_get_providers_for_user()
  * @deprecated since 2.1
- * @todo Remove in 2.2 (MDL-31031)
+ * @todo Remove in 2.5 (MDL-34454)
  * @return array An array of message providers
  */
 function message_get_my_providers() {
     global $USER;
+    debugging('message_get_my_providers is deprecated please update your code', DEBUG_DEVELOPER);
     return message_get_providers_for_user($USER->id);
 }
 
@@ -387,7 +388,7 @@ function message_get_my_providers() {
 function message_get_providers_for_user($userid) {
     global $DB, $CFG;
 
-    $systemcontext = get_context_instance(CONTEXT_SYSTEM);
+    $systemcontext = context_system::instance();
 
     $providers = get_message_providers();
 

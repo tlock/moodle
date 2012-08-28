@@ -521,9 +521,10 @@ abstract class repository {
      *
      * @param int $repositoryid repository ID
      * @param stdClass|int $context context instance or context ID
+     * @param array $options additional repository options
      * @return repository
      */
-    public static function get_repository_by_id($repositoryid, $context) {
+    public static function get_repository_by_id($repositoryid, $context, $options = array()) {
         global $CFG, $DB;
 
         $sql = 'SELECT i.name, i.typeid, r.type FROM {repository} r, {repository_instances} i WHERE i.id=? AND i.typeid=r.id';
@@ -539,10 +540,15 @@ abstract class repository {
                 if (is_object($context)) {
                     $contextid = $context->id;
                 }
-                $repository = new $classname($repositoryid, $contextid, array('type'=>$type));
+                $options['type'] = $type;
+                $options['typeid'] = $record->typeid;
+                if (empty($options['name'])) {
+                    $options['name'] = $record->name;
+                }
+                $repository = new $classname($repositoryid, $contextid, $options);
                 return $repository;
             } else {
-                throw new moodle_exception('error');
+                throw new repository_exception('invalidplugin', 'repository');
             }
         }
     }
@@ -609,16 +615,16 @@ abstract class repository {
     }
 
     /**
-     * To check if the context id is valid
+     * Checks if user has a capability to view the current repository in current context
      *
-     * @static
-     * @param int $contextid
-     * @param stdClass $instance
      * @return bool
      */
-    public static function check_capability($contextid, $instance) {
-        $context = get_context_instance_by_id($contextid);
-        $capability = has_capability('repository/'.$instance->type.':view', $context);
+    public final function check_capability() {
+        $capability = false;
+        if (preg_match("/^repository_(.*)$/", get_class($this), $matches)) {
+            $type = $matches[1];
+            $capability = has_capability('repository/'.$type.':view', $this->context);
+        }
         if (!$capability) {
             throw new repository_exception('nopermissiontoaccess', 'repository');
         }
@@ -636,7 +642,7 @@ abstract class repository {
     public static function draftfile_exists($itemid, $filepath, $filename) {
         global $USER;
         $fs = get_file_storage();
-        $usercontext = get_context_instance(CONTEXT_USER, $USER->id);
+        $usercontext = context_user::instance($USER->id);
         if ($fs->get_file($usercontext->id, 'user', 'draft', $itemid, $filepath, $filename)) {
             return true;
         } else {
@@ -651,45 +657,60 @@ abstract class repository {
      * @return stored_file|null
      */
     public static function get_moodle_file($source) {
-        $params = unserialize(base64_decode($source));
-        if (empty($params) || !is_array($params)) {
-            return null;
-        }
-        foreach (array('contextid', 'itemid', 'filename', 'filepath', 'component') as $key) {
-            if (!array_key_exists($key, $params)) {
-                return null;
-            }
-        }
-        $contextid  = clean_param($params['contextid'], PARAM_INT);
-        $component  = clean_param($params['component'], PARAM_COMPONENT);
-        $filearea   = clean_param($params['filearea'],  PARAM_AREA);
-        $itemid     = clean_param($params['itemid'],    PARAM_INT);
-        $filepath   = clean_param($params['filepath'],  PARAM_PATH);
-        $filename   = clean_param($params['filename'],  PARAM_FILE);
+        $params = file_storage::unpack_reference($source, true);
         $fs = get_file_storage();
-        return $fs->get_file($contextid, $component, $filearea, $itemid, $filepath, $filename);
+        return $fs->get_file($params['contextid'], $params['component'], $params['filearea'],
+                    $params['itemid'], $params['filepath'], $params['filename']);
     }
 
     /**
-     * This function is used to copy a moodle file to draft area
+     * Repository method to make sure that user can access particular file.
      *
-     * @param string $encoded The metainfo of file, it is base64 encoded php serialized data
+     * This is checked when user tries to pick the file from repository to deal with
+     * potential parameter substitutions is request
+     *
+     * @param string $source
+     * @return bool whether the file is accessible by current user
+     */
+    public function file_is_accessible($source) {
+        if ($this->has_moodle_files()) {
+            try {
+                $params = file_storage::unpack_reference($source, true);
+            } catch (file_reference_exception $e) {
+                return false;
+            }
+            $browser = get_file_browser();
+            $context = context::instance_by_id($params['contextid']);
+            $file_info = $browser->get_file_info($context, $params['component'], $params['filearea'],
+                    $params['itemid'], $params['filepath'], $params['filename']);
+            return !empty($file_info);
+        }
+        return true;
+    }
+
+    /**
+     * This function is used to copy a moodle file to draft area.
+     *
+     * It DOES NOT check if the user is allowed to access this file because the actual file
+     * can be located in the area where user does not have access to but there is an alias
+     * to this file in the area where user CAN access it.
+     * {@link file_is_accessible} should be called for alias location before calling this function.
+     *
+     * @param string $source The metainfo of file, it is base64 encoded php serialized data
      * @param stdClass|array $filerecord contains itemid, filepath, filename and optionally other
      *      attributes of the new file
      * @param int $maxbytes maximum allowed size of file, -1 if unlimited. If size of file exceeds
      *      the limit, the file_exception is thrown.
-     * @return array The information of file
+     * @return array The information about the created file
      */
-    public function copy_to_area($encoded, $filerecord, $maxbytes = -1) {
+    public function copy_to_area($source, $filerecord, $maxbytes = -1) {
         global $USER;
         $fs = get_file_storage();
-        $browser = get_file_browser();
 
         if ($this->has_moodle_files() == false) {
             throw new coding_exception('Only repository used to browse moodle files can use repository::copy_to_area()');
         }
 
-        $params = unserialize(base64_decode($encoded));
         $user_context = context_user::instance($USER->id);
 
         $filerecord = (array)$filerecord;
@@ -701,17 +722,9 @@ abstract class repository {
         $new_filepath = $filerecord['filepath'];
         $new_filename = $filerecord['filename'];
 
-        $contextid  = clean_param($params['contextid'], PARAM_INT);
-        $fileitemid = clean_param($params['itemid'],    PARAM_INT);
-        $filename   = clean_param($params['filename'],  PARAM_FILE);
-        $filepath   = clean_param($params['filepath'],  PARAM_PATH);;
-        $filearea   = clean_param($params['filearea'],  PARAM_AREA);
-        $component  = clean_param($params['component'], PARAM_COMPONENT);
-
-        $context    = get_context_instance_by_id($contextid);
         // the file needs to copied to draft area
-        $file_info  = $browser->get_file_info($context, $component, $filearea, $fileitemid, $filepath, $filename);
-        if ($maxbytes !== -1 && $file_info->get_filesize() > $maxbytes) {
+        $stored_file = self::get_moodle_file($source);
+        if ($maxbytes != -1 && $stored_file->get_filesize() > $maxbytes) {
             throw new file_exception('maxbytes');
         }
 
@@ -719,7 +732,7 @@ abstract class repository {
             // create new file
             $unused_filename = repository::get_unused_filename($draftitemid, $new_filepath, $new_filename);
             $filerecord['filename'] = $unused_filename;
-            $file_info->copy_to_storage($filerecord);
+            $fs->create_file_from_storedfile($filerecord, $stored_file);
             $event = array();
             $event['event'] = 'fileexists';
             $event['newfile'] = new stdClass;
@@ -729,17 +742,17 @@ abstract class repository {
             $event['existingfile'] = new stdClass;
             $event['existingfile']->filepath = $new_filepath;
             $event['existingfile']->filename = $new_filename;
-            $event['existingfile']->url      = moodle_url::make_draftfile_url($draftitemid, $new_filepath, $new_filename)->out();;
+            $event['existingfile']->url = moodle_url::make_draftfile_url($draftitemid, $new_filepath, $new_filename)->out();
             return $event;
         } else {
-            $file_info->copy_to_storage($filerecord);
+            $fs->create_file_from_storedfile($filerecord, $stored_file);
             $info = array();
             $info['itemid'] = $draftitemid;
-            $info['file']  = $new_filename;
-            $info['title']  = $new_filename;
+            $info['file'] = $new_filename;
+            $info['title'] = $new_filename;
             $info['contextid'] = $user_context->id;
-            $info['url'] = moodle_url::make_draftfile_url($draftitemid, $new_filepath, $new_filename)->out();;
-            $info['filesize'] = $file_info->get_filesize();
+            $info['url'] = moodle_url::make_draftfile_url($draftitemid, $new_filepath, $new_filename)->out();
+            $info['filesize'] = $stored_file->get_filesize();
             return $info;
         }
     }
@@ -886,6 +899,9 @@ abstract class repository {
         $repositories = array();
         if (isset($args['accepted_types'])) {
             $accepted_types = $args['accepted_types'];
+            if (is_array($accepted_types) && in_array('*', $accepted_types)) {
+                $accepted_types = '*';
+            }
         } else {
             $accepted_types = '*';
         }
@@ -2187,7 +2203,7 @@ abstract class repository {
     public static function overwrite_existing_draftfile($itemid, $filepath, $filename, $newfilepath, $newfilename) {
         global $USER;
         $fs = get_file_storage();
-        $user_context = get_context_instance(CONTEXT_USER, $USER->id);
+        $user_context = context_user::instance($USER->id);
         if ($file = $fs->get_file($user_context->id, 'user', 'draft', $itemid, $filepath, $filename)) {
             if ($tempfile = $fs->get_file($user_context->id, 'user', 'draft', $itemid, $newfilepath, $newfilename)) {
                 // delete existing file to release filename
@@ -2213,7 +2229,7 @@ abstract class repository {
     public static function delete_tempfile_from_draft($draftitemid, $filepath, $filename) {
         global $USER;
         $fs = get_file_storage();
-        $user_context = get_context_instance(CONTEXT_USER, $USER->id);
+        $user_context = context_user::instance($USER->id);
         if ($file = $fs->get_file($user_context->id, 'user', 'draft', $draftitemid, $filepath, $filename)) {
             $file->delete();
             return true;
@@ -2382,7 +2398,7 @@ final class repository_instance_form extends moodleform {
         $mform->addElement('hidden', 'edit',  ($this->instance) ? $this->instance->id : 0);
         $mform->setType('edit', PARAM_INT);
         $mform->addElement('hidden', 'new',   $this->plugin);
-        $mform->setType('new', PARAM_FORMAT);
+        $mform->setType('new', PARAM_ALPHANUMEXT);
         $mform->addElement('hidden', 'plugin', $this->plugin);
         $mform->setType('plugin', PARAM_PLUGIN);
         $mform->addElement('hidden', 'typeid', $this->typeid);
@@ -2598,7 +2614,7 @@ final class repository_type_form extends moodleform {
  */
 function initialise_filepicker($args) {
     global $CFG, $USER, $PAGE, $OUTPUT;
-    static $templatesinitialized;
+    static $templatesinitialized = array();
     require_once($CFG->libdir . '/licenselib.php');
 
     $return = new stdClass();
@@ -2630,13 +2646,13 @@ function initialise_filepicker($args) {
         $disable_types = $args->disable_types;
     }
 
-    $user_context = get_context_instance(CONTEXT_USER, $USER->id);
+    $user_context = context_user::instance($USER->id);
 
     list($context, $course, $cm) = get_context_info_array($context->id);
     $contexts = array($user_context, get_system_context());
     if (!empty($course)) {
         // adding course context
-        $contexts[] = get_context_instance(CONTEXT_COURSE, $course->id);
+        $contexts[] = context_course::instance($course->id);
     }
     $externallink = (int)get_config(null, 'repositoryallowexternallinks');
     $repositories = repository::get_instances(array(
@@ -2668,18 +2684,26 @@ function initialise_filepicker($args) {
     // provided by form element
     $return->accepted_types = file_get_typegroup('extension', $args->accepted_types);
     $return->return_types = $args->return_types;
+    $templates = array();
     foreach ($repositories as $repository) {
         $meta = $repository->get_meta();
         // Please note that the array keys for repositories are used within
         // JavaScript a lot, the key NEEDS to be the repository id.
         $return->repositories[$repository->id] = $meta;
+        // Register custom repository template if it has one
+        if(method_exists($repository, 'get_upload_template') && !array_key_exists('uploadform_' . $meta->type, $templatesinitialized)) {
+            $templates['uploadform_' . $meta->type] = $repository->get_upload_template();
+            $templatesinitialized['uploadform_' . $meta->type] = true;
+        }
     }
-    if (!$templatesinitialized) {
-        // we need to send filepicker templates to the browser just once
+    if (!array_key_exists('core', $templatesinitialized)) {
+        // we need to send each filepicker template to the browser just once
         $fprenderer = $PAGE->get_renderer('core', 'files');
-        $templates = $fprenderer->filepicker_js_templates();
+        $templates = array_merge($templates, $fprenderer->filepicker_js_templates());
+        $templatesinitialized['core'] = true;
+    }
+    if (sizeof($templates)) {
         $PAGE->requires->js_init_call('M.core_filepicker.set_templates', array($templates), true);
-        $templatesinitialized = true;
     }
     return $return;
 }

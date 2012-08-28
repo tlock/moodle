@@ -35,15 +35,18 @@ class assign_submit_for_grading_page implements renderable {
     var $notifications = array();
     /** @var int $coursemoduleid */
     var $coursemoduleid = 0;
+    /** @var moodleform $confirmform */
+    var $confirmform = null;
 
     /**
      * Constructor
      * @param string $notifications - Any mesages to display
      * @param int $coursemoduleid
      */
-    public function __construct($notifications, $coursemoduleid) {
+    public function __construct($notifications, $coursemoduleid, $confirmform) {
         $this->notifications = $notifications;
         $this->coursemoduleid = $coursemoduleid;
+        $this->confirmform = $confirmform;
     }
 
 }
@@ -405,6 +408,8 @@ class assign_grading_summary implements renderable {
     var $submissionsenabled = false;
     /** @var int submissionssubmittedcount - The number of submissions in submitted status */
     var $submissionssubmittedcount = 0;
+    /** @var int submissionsneedgradingcount - The number of submissions that need grading */
+    var $submissionsneedgradingcount = 0;
     /** @var int duedate - The assignment due date (if one is set) */
     var $duedate = 0;
     /** @var int coursemoduleid - The assignment course module id */
@@ -421,7 +426,9 @@ class assign_grading_summary implements renderable {
      * @param int $duedate
      * @param int $coursemoduleid
      */
-    public function __construct($participantcount, $submissiondraftsenabled, $submissiondraftscount, $submissionsenabled, $submissionssubmittedcount, $duedate, $coursemoduleid) {
+    public function __construct($participantcount, $submissiondraftsenabled, $submissiondraftscount,
+                                $submissionsenabled, $submissionssubmittedcount,
+                                $duedate, $coursemoduleid, $submissionsneedgradingcount) {
         $this->participantcount = $participantcount;
         $this->submissiondraftsenabled = $submissiondraftsenabled;
         $this->submissiondraftscount = $submissiondraftscount;
@@ -429,6 +436,7 @@ class assign_grading_summary implements renderable {
         $this->submissionssubmittedcount = $submissionssubmittedcount;
         $this->duedate = $duedate;
         $this->coursemoduleid = $coursemoduleid;
+        $this->submissionsneedgradingcount = $submissionsneedgradingcount;
     }
 
 

@@ -98,7 +98,7 @@ abstract class user_selector_base {
         if (isset($options['accesscontext'])) {
             $this->accesscontext = $options['accesscontext'];
         } else {
-            $this->accesscontext = get_context_instance(CONTEXT_SYSTEM);
+            $this->accesscontext = context_system::instance();
         }
 
         if (isset($options['extrafields'])) {
@@ -149,7 +149,7 @@ abstract class user_selector_base {
 
     /**
      * @return array of user objects. The users that were selected. This is a more sophisticated version
-     * of optional_param($this->name, array(), PARAM_INTEGER) that validates the
+     * of optional_param($this->name, array(), PARAM_INT) that validates the
      * returned list of ids against the rules for this user selector.
      */
     public function get_selected_users() {
@@ -368,8 +368,8 @@ abstract class user_selector_base {
     protected function load_selected_users() {
         // See if we got anything.
         if ($this->multiselect) {
-            $userids = optional_param_array($this->name, array(), PARAM_INTEGER);
-        } else if ($userid = optional_param($this->name, 0, PARAM_INTEGER)) {
+            $userids = optional_param_array($this->name, array(), PARAM_INT);
+        } else if ($userid = optional_param($this->name, 0, PARAM_INT)) {
             $userids = array($userid);
         }
         // If there are no users there is nobody to load
@@ -676,7 +676,7 @@ abstract class groups_user_selector_base extends user_selector_base {
      */
     public function __construct($name, $options) {
         global $CFG;
-        $options['accesscontext'] = get_context_instance(CONTEXT_COURSE, $options['courseid']);
+        $options['accesscontext'] = context_course::instance($options['courseid']);
         parent::__construct($name, $options);
         $this->groupid = $options['groupid'];
         $this->courseid = $options['courseid'];
@@ -809,7 +809,7 @@ class group_non_members_selector extends groups_user_selector_base {
         global $DB;
 
         // Get list of allowed roles.
-        $context = get_context_instance(CONTEXT_COURSE, $this->courseid);
+        $context = context_course::instance($this->courseid);
         if ($validroleids = groups_get_possible_roles($context)) {
             list($roleids, $roleparams) = $DB->get_in_or_equal($validroleids, SQL_PARAMS_NAMED, 'r');
         } else {
@@ -822,7 +822,7 @@ class group_non_members_selector extends groups_user_selector_base {
 
         // Build the SQL
         list($enrolsql, $enrolparams) = get_enrolled_sql($context);
-        $fields = "SELECT r.id AS roleid, r.shortname AS roleshortname, r.name AS rolename, u.id AS userid,
+        $fields = "SELECT r.id AS roleid, u.id AS userid,
                           " . $this->required_fields_sql('u') . ",
                           (SELECT count(igm.groupid)
                              FROM {groups_members} igm
@@ -832,10 +832,9 @@ class group_non_members_selector extends groups_user_selector_base {
                    JOIN ($enrolsql) e ON e.id = u.id
               LEFT JOIN {role_assignments} ra ON (ra.userid = u.id AND ra.contextid " . get_related_contexts_string($context) . " AND ra.roleid $roleids)
               LEFT JOIN {role} r ON r.id = ra.roleid
+              LEFT JOIN {groups_members} gm ON (gm.userid = u.id AND gm.groupid = :groupid)
                   WHERE u.deleted = 0
-                        AND u.id NOT IN (SELECT userid
-                                          FROM {groups_members}
-                                         WHERE groupid = :groupid)
+                        AND gm.id IS NULL
                         AND $searchcondition";
         $orderby = "ORDER BY u.lastname, u.firstname";
 

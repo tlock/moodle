@@ -313,7 +313,10 @@ class assign {
             $this->process_unlock();
             $action = 'grading';
          } else if ($action == 'confirmsubmit') {
-            $this->process_submit_for_grading();
+            $action = 'submit';
+            if ($this->process_submit_for_grading($mform)) {
+                $action = 'view';
+            }
             // save and show next button
          } else if ($action == 'batchgradingoperation') {
             $this->process_batch_grading_operation();
@@ -374,7 +377,7 @@ class assign {
         } else if ($action == 'downloadall') {
             $o .= $this->download_submissions();
         } else if ($action == 'submit') {
-            $o .= $this->check_submit_for_grading();
+            $o .= $this->check_submit_for_grading($mform);
         } else {
             $o .= $this->view_submission_page();
         }
@@ -408,11 +411,13 @@ class assign {
         $update->alwaysshowdescription = $formdata->alwaysshowdescription;
         $update->preventlatesubmissions = $formdata->preventlatesubmissions;
         $update->submissiondrafts = $formdata->submissiondrafts;
+        $update->requiresubmissionstatement = $formdata->requiresubmissionstatement;
         $update->sendnotifications = $formdata->sendnotifications;
         $update->sendlatenotifications = $formdata->sendlatenotifications;
         $update->duedate = $formdata->duedate;
         $update->allowsubmissionsfromdate = $formdata->allowsubmissionsfromdate;
         $update->grade = $formdata->grade;
+        $update->completionsubmit = $formdata->completionsubmit;
         $returnid = $DB->insert_record('assign', $update);
         $this->instance = $DB->get_record('assign', array('id'=>$returnid), '*', MUST_EXIST);
         // cache the course record
@@ -626,11 +631,13 @@ class assign {
         $update->alwaysshowdescription = $formdata->alwaysshowdescription;
         $update->preventlatesubmissions = $formdata->preventlatesubmissions;
         $update->submissiondrafts = $formdata->submissiondrafts;
+        $update->requiresubmissionstatement = $formdata->requiresubmissionstatement;
         $update->sendnotifications = $formdata->sendnotifications;
         $update->sendlatenotifications = $formdata->sendlatenotifications;
         $update->duedate = $formdata->duedate;
         $update->allowsubmissionsfromdate = $formdata->allowsubmissionsfromdate;
         $update->grade = $formdata->grade;
+        $update->completionsubmit = $formdata->completionsubmit;
 
         $result = $DB->update_record('assign', $update);
         $this->instance = $DB->get_record('assign', array('id'=>$update->id), '*', MUST_EXIST);
@@ -965,6 +972,27 @@ class assign {
      */
     public function count_participants($currentgroup) {
         return count_enrolled_users($this->context, "mod/assign:submit", $currentgroup);
+    }
+
+    /**
+     * Load a count of users submissions in the current module that require grading
+     * This means the submission modification time is more recent than the
+     * grading modification time.
+     *
+     * @return int number of matching submissions
+     */
+    public function count_submissions_need_grading() {
+        global $DB;
+
+        $params = array($this->get_course_module()->instance);
+
+        return $DB->count_records_sql("SELECT COUNT('x')
+                                       FROM {assign_submission} s
+                                       LEFT JOIN {assign_grades} g ON s.assignment = g.assignment AND s.userid = g.userid
+                                       WHERE s.assignment = ?
+                                           AND s.timemodified IS NOT NULL
+                                           AND (s.timemodified > g.timemodified OR g.timemodified IS NULL)",
+                                       $params);
     }
 
     /**
@@ -1724,6 +1752,7 @@ class assign {
                                                                   array('cm'=>$this->get_course_module()->id,
                                                                         'contextid'=>$this->context->id,
                                                                         'userid'=>$USER->id,
+                                                                        'submissionsenabled'=>$this->is_any_submission_plugin_enabled(),
                                                                         'showquickgrading'=>$showquickgrading,
                                                                         'quickgrading'=>$quickgrading),
                                                                   'post', '',
@@ -1744,7 +1773,7 @@ class assign {
         if (!empty($CFG->enableplagiarism)) {
             /** Include plagiarismlib.php */
             require_once($CFG->libdir . '/plagiarismlib.php');
-            plagiarism_update_status($this->get_course(), $this->get_course_module());
+            $o .= plagiarism_update_status($this->get_course(), $this->get_course_module());
         }
 
         $actionformtext = $this->output->render($gradingactions);
@@ -1808,11 +1837,8 @@ class assign {
         if (!empty($CFG->enableplagiarism)) {
             /** Include plagiarismlib.php */
             require_once($CFG->libdir . '/plagiarismlib.php');
-            ob_start();
 
-            plagiarism_print_disclosure($this->get_course_module()->id);
-            $o = ob_get_contents();
-            ob_end_clean();
+            $o .= plagiarism_print_disclosure($this->get_course_module()->id);
         }
 
         return $o;
@@ -1954,10 +1980,14 @@ class assign {
 
     /**
      * Ask the user to confirm they want to submit their work for grading
+     * @param $mform moodleform - null unless form validation has failed
      * @return string
      */
-    private function check_submit_for_grading() {
-        global $USER;
+    private function check_submit_for_grading($mform) {
+        global $USER, $CFG;
+
+        require_once($CFG->dirroot . '/mod/assign/submissionconfirmform.php');
+
         // Check that all of the submission plugins are ready for this submission
         $notifications = array();
         $submission = $this->get_user_submission($USER->id, false);
@@ -1971,10 +2001,29 @@ class assign {
             }
         }
 
+        $data = new stdClass();
+        $adminconfig = $this->get_admin_config();
+        $requiresubmissionstatement = !empty($adminconfig->requiresubmissionstatement) ||
+                                          $this->get_instance()->requiresubmissionstatement;
+
+        $submissionstatement = '';
+        if (!empty($adminconfig->submissionstatement)) {
+            $submissionstatement = $adminconfig->submissionstatement;
+        }
+
+        if ($mform == null) {
+            $mform = new mod_assign_confirm_submission_form(null, array($requiresubmissionstatement,
+                                                                        $submissionstatement,
+                                                                        $this->get_course_module()->id,
+                                                                        $data));
+        }
         $o = '';
         $o .= $this->output->header();
-        $o .= $this->output->render(new assign_submit_for_grading_page($notifications, $this->get_course_module()->id));
+        $o .= $this->output->render(new assign_submit_for_grading_page($notifications, $this->get_course_module()->id, $mform));
         $o .= $this->view_footer();
+
+        $this->add_to_log('view confirm submit assignment form', get_string('viewownsubmissionform', 'assign'));
+
         return $o;
     }
 
@@ -2094,7 +2143,8 @@ class assign {
                                                             $this->is_any_submission_plugin_enabled(),
                                                             $this->count_submissions_with_status(ASSIGN_SUBMISSION_STATUS_SUBMITTED),
                                                             $this->get_instance()->duedate,
-                                                            $this->get_course_module()->id
+                                                            $this->get_course_module()->id,
+                                                            $this->count_submissions_need_grading()
                                                             ));
         }
         $grade = $this->get_user_grade($USER->id, false);
@@ -2435,7 +2485,7 @@ class assign {
         global $DB;
 
         $adminconfig = $this->get_admin_config();
-        if (!$adminconfig->submissionreceipts) {
+        if (empty($adminconfig->submissionreceipts)) {
             // No need to do anything
             return;
         }
@@ -2470,29 +2520,63 @@ class assign {
     /**
      * assignment submission is processed before grading
      *
-     * @return void
+     * @param $mform If validation failed when submitting this form - this is the moodleform - it can be null
+     * @return bool Return false if the validation fails. This affects which page is displayed next.
      */
-    private function process_submit_for_grading() {
-        global $USER;
+    private function process_submit_for_grading($mform) {
+        global $USER, $CFG;
 
         // Need submit permission to submit an assignment
         require_capability('mod/assign:submit', $this->context);
+        require_once($CFG->dirroot . '/mod/assign/submissionconfirmform.php');
         require_sesskey();
 
-        $submission = $this->get_user_submission($USER->id,true);
-        if ($submission->status != ASSIGN_SUBMISSION_STATUS_SUBMITTED) {
-            // Give each submission plugin a chance to process the submission
-            $plugins = $this->get_submission_plugins();
-            foreach ($plugins as $plugin) {
-                $plugin->submit_for_grading();
-            }
+        $data = new stdClass();
+        $adminconfig = $this->get_admin_config();
+        $requiresubmissionstatement = !empty($adminconfig->requiresubmissionstatement) ||
+                                          $this->get_instance()->requiresubmissionstatement;
 
-            $submission->status = ASSIGN_SUBMISSION_STATUS_SUBMITTED;
-            $this->update_submission($submission);
-            $this->add_to_log('submit for grading', $this->format_submission_for_log($submission));
-            $this->notify_graders($submission);
-            $this->notify_student_submission_receipt($submission);
+        $submissionstatement = '';
+        if (!empty($adminconfig->submissionstatement)) {
+            $submissionstatement = $adminconfig->submissionstatement;
         }
+
+        if ($mform == null) {
+            $mform = new mod_assign_confirm_submission_form(null, array($requiresubmissionstatement,
+                                                                    $submissionstatement,
+                                                                    $this->get_course_module()->id,
+                                                                    $data));
+        }
+
+        $data = $mform->get_data();
+        if (!$mform->is_cancelled()) {
+            if ($mform->get_data() == false) {
+                return false;
+            }
+            $submission = $this->get_user_submission($USER->id,true);
+            if ($submission->status != ASSIGN_SUBMISSION_STATUS_SUBMITTED) {
+                // Give each submission plugin a chance to process the submission
+                $plugins = $this->get_submission_plugins();
+                foreach ($plugins as $plugin) {
+                    $plugin->submit_for_grading();
+                }
+
+                $submission->status = ASSIGN_SUBMISSION_STATUS_SUBMITTED;
+                $this->update_submission($submission);
+                $completion = new completion_info($this->get_course());
+                if ($completion->is_enabled($this->get_course_module()) && $this->get_instance()->completionsubmit) {
+                    $completion->update_state($this->get_course_module(), COMPLETION_COMPLETE, $USER->id);
+                }
+
+                if (isset($data->submissionstatement)) {
+                    $this->add_to_log('submission statement accepted', get_string('submissionstatementacceptedlog', 'mod_assign', fullname($USER)));
+                }
+                $this->add_to_log('submit for grading', $this->format_submission_for_log($submission));
+                $this->notify_graders($submission);
+                $this->notify_student_submission_receipt($submission);
+            }
+        }
+        return true;
     }
 
     /**
@@ -2654,7 +2738,11 @@ class assign {
         // Need submit permission to submit an assignment
         require_capability('mod/assign:grade', $this->context);
 
-        $mform = new mod_assign_grading_options_form(null, array('cm'=>$this->get_course_module()->id, 'contextid'=>$this->context->id, 'userid'=>$USER->id, 'showquickgrading'=>false));
+        $mform = new mod_assign_grading_options_form(null, array('cm'=>$this->get_course_module()->id,
+                                                                 'contextid'=>$this->context->id,
+                                                                 'userid'=>$USER->id,
+                                                                 'submissionsenabled'=>$this->is_any_submission_plugin_enabled(),
+                                                                 'showquickgrading'=>false));
         if ($formdata = $mform->get_data()) {
             set_user_preference('assign_perpage', $formdata->perpage);
             set_user_preference('assign_filter', $formdata->filter);
@@ -2752,7 +2840,19 @@ class assign {
             $this->update_submission($submission);
 
             // Logging
+            if (isset($data->submissionstatement)) {
+                $this->add_to_log('submission statement accepted', get_string('submissionstatementacceptedlog', 'mod_assign', fullname($USER)));
+            }
             $this->add_to_log('submit', $this->format_submission_for_log($submission));
+
+            $complete = COMPLETION_INCOMPLETE;
+            if ($submission->status == ASSIGN_SUBMISSION_STATUS_SUBMITTED) {
+                $complete = COMPLETION_COMPLETE;
+            }
+            $completion = new completion_info($this->get_course());
+            if ($completion->is_enabled($this->get_course_module()) && $this->get_instance()->completionsubmit) {
+                $completion->update_state($this->get_course_module(), $complete, $USER->id);
+            }
 
             if (!$this->get_instance()->submissiondrafts) {
                 $this->notify_student_submission_receipt($submission);
@@ -2898,6 +2998,16 @@ class assign {
             }
         }
 
+        if (has_all_capabilities(array('gradereport/grader:view', 'moodle/grade:viewall'), $this->get_course_context())) {
+            $gradestring = $this->output->action_link(new moodle_url('/grade/report/grader/index.php',
+                                                              array('id'=>$this->get_course()->id)),
+                                                $gradinginfo->items[0]->grades[$userid]->str_grade);
+        } else {
+            $gradestring = $gradinginfo->items[0]->grades[$userid]->str_grade;
+        }
+        $mform->addElement('static', 'finalgrade', get_string('currentgrade', 'assign').':', $gradestring);
+
+
         $mform->addElement('static', 'progress', '', get_string('gradingstudentprogress', 'assign', array('index'=>$rownum+1, 'count'=>count($useridlist))));
 
         // plugins
@@ -3006,9 +3116,25 @@ class assign {
     public function add_submission_form_elements(MoodleQuickForm $mform, stdClass $data) {
         global $USER;
 
-        // online text submissions
-
         $submission = $this->get_user_submission($USER->id, false);
+
+        // submission statement
+        $adminconfig = $this->get_admin_config();
+
+        $requiresubmissionstatement = !empty($adminconfig->requiresubmissionstatement) ||
+                                            $this->get_instance()->requiresubmissionstatement;
+
+        $draftsenabled = $this->get_instance()->submissiondrafts;
+
+        if ($requiresubmissionstatement && !$draftsenabled) {
+
+            $submissionstatement = '';
+            if (!empty($adminconfig->submissionstatement)) {
+                $submissionstatement = $adminconfig->submissionstatement;
+            }
+            $mform->addElement('checkbox', 'submissionstatement', '', '&nbsp;' . $submissionstatement);
+            $mform->addRule('submissionstatement', get_string('required'), 'required', null, 'client');
+        }
 
         $this->add_plugin_submission_elements($submission, $mform, $data);
 
@@ -3030,7 +3156,7 @@ class assign {
      * @return void
      */
     private function process_revert_to_draft($userid = 0) {
-        global $USER, $DB;
+        global $DB;
 
         // Need grade permission
         require_capability('mod/assign:grade', $this->context);
@@ -3053,6 +3179,10 @@ class assign {
 
         $user = $DB->get_record('user', array('id' => $userid), '*', MUST_EXIST);
 
+        $completion = new completion_info($this->get_course());
+        if ($completion->is_enabled($this->get_course_module()) && $this->get_instance()->completionsubmit) {
+            $completion->update_state($this->get_course_module(), COMPLETION_INCOMPLETE, $userid);
+        }
         $this->add_to_log('revert submission to draft', get_string('reverttodraftforstudent', 'assign', array('id'=>$user->id, 'fullname'=>fullname($user))));
 
     }

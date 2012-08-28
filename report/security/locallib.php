@@ -781,7 +781,7 @@ function report_security_check_riskbackup($detailed=false) {
     $result->status  = null;
     $result->link    = null;
 
-    $syscontext = get_context_instance(CONTEXT_SYSTEM);
+    $syscontext = context_system::instance();
 
     $params = array('capability'=>'moodle/backup:userinfo', 'permission'=>CAP_ALLOW, 'contextid'=>$syscontext->id);
     $sql = "SELECT DISTINCT r.id, r.name, r.shortname, r.sortorder, r.archetype
@@ -836,6 +836,7 @@ function report_security_check_riskbackup($detailed=false) {
         if ($systemroles) {
             $links = array();
             foreach ($systemroles as $role) {
+                $role->name = role_get_name($role);
                 $role->url = "$CFG->wwwroot/$CFG->admin/roles/manage.php?action=edit&amp;roleid=$role->id";
                 $links[] = '<li>'.get_string('check_riskbackup_editrole', 'report_security', $role).'</li>';
             }
@@ -848,10 +849,9 @@ function report_security_check_riskbackup($detailed=false) {
         if ($overriddenroles) {
             $links = array();
             foreach ($overriddenroles as $role) {
+                $role->name = $role->localname;
                 $context = get_context_instance_by_id($role->contextid);
-                if ($context->contextlevel == CONTEXT_COURSE) {
-                    $role->name = role_get_name($role, $context);
-                }
+                $role->name = role_get_name($role, $context, ROLENAME_BOTH);
                 $role->contextname = print_context_name($context);
                 $role->url = "$CFG->wwwroot/$CFG->admin/roles/override.php?contextid=$role->contextid&amp;roleid=$role->id";
                 $links[] = '<li>'.get_string('check_riskbackup_editoverride', 'report_security', $role).'</li>';

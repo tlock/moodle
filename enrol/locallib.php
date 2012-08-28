@@ -112,7 +112,7 @@ class course_enrolment_manager {
      */
     public function __construct(moodle_page $moodlepage, $course, $instancefilter = null) {
         $this->moodlepage = $moodlepage;
-        $this->context = get_context_instance(CONTEXT_COURSE, $course->id);
+        $this->context = context_course::instance($course->id);
         $this->course = $course;
         $this->instancefilter = $instancefilter;
     }
@@ -278,7 +278,7 @@ class course_enrolment_manager {
         global $DB, $CFG;
 
         // Add some additional sensible conditions
-        $tests = array("id <> :guestid", 'u.deleted = 0', 'u.confirmed = 1');
+        $tests = array("u.id <> :guestid", 'u.deleted = 0', 'u.confirmed = 1');
         $params = array('guestid' => $CFG->siteguest);
         if (!empty($search)) {
             $conditions = get_extra_user_fields($this->get_context());
@@ -306,10 +306,9 @@ class course_enrolment_manager {
         $fields      = 'SELECT '.$ufields;
         $countfields = 'SELECT COUNT(1)';
         $sql = " FROM {user} u
+            LEFT JOIN {user_enrolments} ue ON (ue.userid = u.id AND ue.enrolid = :enrolid)
                 WHERE $wherecondition
-                      AND u.id NOT IN (SELECT ue.userid
-                                         FROM {user_enrolments} ue
-                                         JOIN {enrol} e ON (e.id = ue.enrolid AND e.id = :enrolid))";
+                      AND ue.id IS NULL";
         $order = ' ORDER BY u.lastname ASC, u.firstname ASC';
         $params['enrolid'] = $enrolid;
         $totalusers = $DB->count_records_sql($countfields . $sql, $params);
@@ -353,12 +352,9 @@ class course_enrolment_manager {
         $fields      = 'SELECT '.user_picture::fields('u', array('username','lastaccess'));
         $countfields = 'SELECT COUNT(u.id)';
         $sql   = " FROM {user} u
+              LEFT JOIN {role_assignments} ra ON (ra.userid = u.id AND ra.contextid = :contextid)
                   WHERE $wherecondition
-                    AND u.id NOT IN (
-                           SELECT u.id
-                             FROM {role_assignments} r, {user} u
-                            WHERE r.contextid = :contextid AND
-                                  u.id = r.userid)";
+                    AND ra.id IS NULL";
         $order = ' ORDER BY lastname ASC, firstname ASC';
 
         $params['contextid'] = $this->context->id;
@@ -450,7 +446,7 @@ class course_enrolment_manager {
      */
     public function get_all_roles() {
         if ($this->_roles === null) {
-            $this->_roles = role_fix_names(get_all_roles(), $this->context);
+            $this->_roles = role_fix_names(get_all_roles($this->context), $this->context);
         }
         return $this->_roles;
     }
@@ -863,7 +859,8 @@ class course_enrolment_manager {
                     $period = get_string('periodend', 'enrol', userdate($ue->timeend));
                     $periodoutside = ($ue->timeend && $now > $ue->timeend);
                 } else {
-                    $period = '';
+                    // If there is no start or end show when user was enrolled.
+                    $period = get_string('periodnone', 'enrol', userdate($ue->timecreated));
                     $periodoutside = false;
                 }
                 $details['enrolments'][$ue->id] = array(

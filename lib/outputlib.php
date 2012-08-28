@@ -275,6 +275,14 @@ class theme_config {
      */
     public $enablecourseajax = true;
 
+    /**
+     * @var string Determines served document types
+     *  - 'html5' the only officially supported doctype in Moodle
+     *  - 'xhtml5' may be used in development for validation (not intended for production servers!)
+     *  - 'xhtml' XHTML 1.0 Strict for legacy themes only
+     */
+    public $doctype = 'html5';
+
     //==Following properties are not configurable from theme config.php==
 
     /**
@@ -390,7 +398,7 @@ class theme_config {
 
         $configurable = array('parents', 'sheets', 'parents_exclude_sheets', 'plugins_exclude_sheets', 'javascripts', 'javascripts_footer',
                               'parents_exclude_javascripts', 'layouts', 'enable_dock', 'enablecourseajax', 'supportscssoptimisation',
-                              'rendererfactory', 'csspostprocess', 'editor_sheets', 'rarrow', 'larrow', 'hidefromselector');
+                              'rendererfactory', 'csspostprocess', 'editor_sheets', 'rarrow', 'larrow', 'hidefromselector', 'doctype');
 
         foreach ($config as $key=>$value) {
             if (in_array($key, $configurable)) {
@@ -626,30 +634,38 @@ class theme_config {
             if (!defined('THEME_DESIGNER_CACHE_LIFETIME')) {
                 define('THEME_DESIGNER_CACHE_LIFETIME', 4); // this can be also set in config.php
             }
-            // Prepare the CSS optimiser if it is to be used
-            $optimiser = null;
-            $candidatesheet = "$CFG->cachedir/theme/$this->name/designer.ser";
-            if (!empty($CFG->enablecssoptimiser) && $this->supportscssoptimisation) {
-                require_once($CFG->dirroot.'/lib/csslib.php');
-                $optimiser = new css_optimiser;
-            }
-            if (!file_exists($candidatesheet)) {
-                $css = $this->css_content($optimiser);
-                check_dir_exists(dirname($candidatesheet));
-                file_put_contents($candidatesheet, serialize($css));
-
-            } else if (filemtime($candidatesheet) > time() - THEME_DESIGNER_CACHE_LIFETIME) {
+            $candidatedir = "$CFG->cachedir/theme/$this->name";
+            $candidatesheet = "$candidatedir/designer.ser";
+            $rebuild = true;
+            if (file_exists($candidatesheet) and filemtime($candidatesheet) > time() - THEME_DESIGNER_CACHE_LIFETIME) {
                 if ($css = file_get_contents($candidatesheet)) {
                     $css = unserialize($css);
-                } else {
-                    unlink($candidatesheet);
-                    $css = $this->css_content($optimiser);
+                    if (is_array($css)) {
+                        $rebuild = false;
+                    }
                 }
-
-            } else {
-                unlink($candidatesheet);
+            }
+            if ($rebuild) {
+                // Prepare the CSS optimiser if it is to be used,
+                // please note that it may be very slow and is therefore strongly discouraged in theme designer mode.
+                $optimiser = null;
+                if (!empty($CFG->enablecssoptimiser) && $this->supportscssoptimisation) {
+                    require_once($CFG->dirroot.'/lib/csslib.php');
+                    $optimiser = new css_optimiser;
+                }
                 $css = $this->css_content($optimiser);
-                file_put_contents($candidatesheet, serialize($css));
+
+                // We do not want any errors here because this may fail easily because of the concurrent access.
+                $prevabort = ignore_user_abort(true);
+                check_dir_exists($candidatedir);
+                $tempfile = tempnam($candidatedir, 'tmpdesigner');
+                file_put_contents($tempfile, serialize($css));
+                $reporting = error_reporting(0);
+                chmod($tempfile, $CFG->filepermissions);
+                unlink($candidatesheet); // Do not rely on rename() deleting original, they may decide to change it at any time as usually.
+                rename($tempfile, $candidatesheet);
+                error_reporting($reporting);
+                ignore_user_abort($prevabort);
             }
 
             $baseurl = $CFG->httpswwwroot.'/theme/styles_debug.php';

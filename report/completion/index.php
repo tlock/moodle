@@ -170,16 +170,8 @@ if ($csv) {
 
     echo $OUTPUT->header();
 
-    $PAGE->requires->yui2_lib(
-        array(
-            'yahoo',
-            'dom',
-            'element',
-            'event',
-        )
-    );
-
     $PAGE->requires->js('/report/completion/textrotate.js');
+    $PAGE->requires->js_function_call('textrotate_init', null, true);
 
     // Handle groups (if enabled)
     groups_print_course_menu($course, $CFG->wwwroot.'/report/completion/?course='.$course->id);
@@ -507,8 +499,8 @@ if (!$csv) {
 
                 // Display icon
                 $iconlink = $CFG->wwwroot.'/course/view.php?id='.$criterion->courseinstance;
-                $icontitle = format_string($crs->fullname, true, array('context' => get_context_instance(CONTEXT_COURSE, $crs->id, MUST_EXIST)));
-                $iconalt = format_string($crs->shortname, true, array('context' => get_context_instance(CONTEXT_COURSE, $crs->id)));
+                $icontitle = format_string($crs->fullname, true, array('context' => context_course::instance($crs->id, MUST_EXIST)));
+                $iconalt = format_string($crs->shortname, true, array('context' => context_course::instance($crs->id)));
                 break;
 
             case COMPLETION_CRITERIA_TYPE_ROLE:

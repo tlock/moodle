@@ -51,7 +51,7 @@ class block_completionstatus extends block_base {
         $this->content = new stdClass;
 
         // Can edit settings?
-        $can_edit = has_capability('moodle/course:update', get_context_instance(CONTEXT_COURSE, $this->page->course->id));
+        $can_edit = has_capability('moodle/course:update', context_course::instance($this->page->course->id));
 
         // Get course completion data
         $info = new completion_info($this->page->course);
@@ -84,7 +84,7 @@ class block_completionstatus extends block_base {
         // Check this user is enroled
         if (!$info->is_tracked_user($USER->id)) {
             // If not enrolled, but are can view the report:
-            if (has_capability('report/completion:view', get_context_instance(CONTEXT_COURSE, $COURSE->id))) {
+            if (has_capability('report/completion:view', context_course::instance($COURSE->id))) {
                 $this->content->text = '<a href="'.$CFG->wwwroot.'/report/completion/index.php?course='.$COURSE->id.
                                        '">'.get_string('viewcoursereport', 'completion').'</a>';
                 return $this->content;
@@ -166,12 +166,12 @@ class block_completionstatus extends block_base {
         if (!empty($prerequisites)) {
 
             $phtml  = '<tr><td>';
-            $phtml .= get_string('prerequisitescompleted', 'completion');
+            $phtml .= get_string('dependenciescompleted', 'completion');
             $phtml .= '</td><td style="text-align: right">';
             $a = new stdClass();
             $a->first = $prerequisites_complete;
             $a->second = count($prerequisites);
-            $shtml .= get_string('firstofsecond', 'block_completionstatus', $a);
+            $phtml .= get_string('firstofsecond', 'block_completionstatus', $a);
             $phtml .= '</td></tr>';
 
             $shtml = $phtml . $shtml;

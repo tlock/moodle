@@ -65,7 +65,7 @@ class enrol_manual_plugin extends enrol_plugin {
             return NULL;
         }
 
-        $context = get_context_instance(CONTEXT_COURSE, $instance->courseid, MUST_EXIST);
+        $context = context_course::instance($instance->courseid, MUST_EXIST);
 
         if (!has_capability('enrol/manual:manage', $context) or !has_capability('enrol/manual:enrol', $context) or !has_capability('enrol/manual:unenrol', $context)) {
             return NULL;
@@ -88,7 +88,7 @@ class enrol_manual_plugin extends enrol_plugin {
              throw new coding_exception('Invalid enrol instance type!');
         }
 
-        $context = get_context_instance(CONTEXT_COURSE, $instance->courseid);
+        $context = context_course::instance($instance->courseid);
         if (has_capability('enrol/manual:config', $context)) {
             $managelink = new moodle_url('/enrol/manual/edit.php', array('courseid'=>$instance->courseid));
             $instancesnode->add($this->get_instance_name($instance), $managelink, navigation_node::TYPE_SETTING);
@@ -106,7 +106,7 @@ class enrol_manual_plugin extends enrol_plugin {
         if ($instance->enrol !== 'manual') {
             throw new coding_exception('invalid enrol instance!');
         }
-        $context = get_context_instance(CONTEXT_COURSE, $instance->courseid);
+        $context = context_course::instance($instance->courseid);
 
         $icons = array();
 
@@ -130,7 +130,7 @@ class enrol_manual_plugin extends enrol_plugin {
     public function get_newinstance_link($courseid) {
         global $DB;
 
-        $context = get_context_instance(CONTEXT_COURSE, $courseid, MUST_EXIST);
+        $context = context_course::instance($courseid, MUST_EXIST);
 
         if (!has_capability('moodle/course:enrolconfig', $context) or !has_capability('enrol/manual:config', $context)) {
             return NULL;
@@ -215,6 +215,7 @@ class enrol_manual_plugin extends enrol_plugin {
         $today = time();
         $today = make_timestamp(date('Y', $today), date('m', $today), date('d', $today), 0, 0, 0);
         $startdateoptions[3] = get_string('today') . ' (' . userdate($today, $timeformat) . ')' ;
+        $defaultduration = $instance->enrolperiod > 0 ? $instance->enrolperiod / 86400 : '';
 
         $modules = array('moodle-enrol_manual-quickenrolment', 'moodle-enrol_manual-quickenrolment-skin');
         $arguments = array(
@@ -224,6 +225,7 @@ class enrol_manual_plugin extends enrol_plugin {
             'url'                 => $manager->get_moodlepage()->url->out(false),
             'optionsStartDate'    => $startdateoptions,
             'defaultRole'         => $instance->roleid,
+            'defaultDuration'     => $defaultduration,
             'disableGradeHistory' => $CFG->disablegradehistory,
             'recoverGradesDefault'=> ''
         );
