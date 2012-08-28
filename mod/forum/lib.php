@@ -925,7 +925,8 @@ function forum_cron() {
 
                 $attachment = $attachname='';
                 $usetrueaddress = true;
-                //directly email forum digests rather than sending them via messaging
+                // Directly email forum digests rather than sending them via messaging, use the
+                // site shortname as 'from name', the noreply address will be used by email_to_user.
                 $mailresult = email_to_user($userto, $site->shortname, $postsubject, $posttext, $posthtml, $attachment, $attachname, $usetrueaddress, $CFG->forum_replytouser);
 
                 if (!$mailresult) {
@@ -1221,23 +1222,33 @@ function forum_print_overview($courses,&$htmlarray) {
         return;
     }
 
-
-    // get all forum logs in ONE query (much better!)
+    // Courses to search for new posts
+    $coursessqls = array();
     $params = array();
-    $sql = "SELECT instance,cmid,l.course,COUNT(l.id) as count FROM {log} l "
-        ." JOIN {course_modules} cm ON cm.id = cmid "
-        ." WHERE (";
     foreach ($courses as $course) {
-        $sql .= '(l.course = ? AND l.time > ?) OR ';
-        $params[] = $course->id;
-        $params[] = $course->lastaccess;
+
+        // If the user has never entered into the course all posts are pending
+        if ($course->lastaccess == 0) {
+            $coursessqls[] = '(f.course = ?)';
+            $params[] = $course->id;
+
+        // Only posts created after the course last access
+        } else {
+            $coursessqls[] = '(f.course = ? AND p.created > ?)';
+            $params[] = $course->id;
+            $params[] = $course->lastaccess;
+        }
     }
-    $sql = substr($sql,0,-3); // take off the last OR
-
-    $sql .= ") AND l.module = 'forum' AND action = 'add post' "
-        ." AND userid != ? GROUP BY cmid,l.course,instance";
-
     $params[] = $USER->id;
+    $coursessql = implode(' OR ', $coursessqls);
+
+    $sql = "SELECT f.id, COUNT(*) as count "
+                .'FROM {forum} f '
+                .'JOIN {forum_discussions} d ON d.forum  = f.id '
+                .'JOIN {forum_posts} p ON p.discussion = d.id '
+                ."WHERE ($coursessql) "
+                .'AND p.userid != ? '
+                .'GROUP BY f.id';
 
     if (!$new = $DB->get_records_sql($sql, $params)) {
         $new = array(); // avoid warnings
@@ -2048,8 +2059,7 @@ function forum_search_posts($searchterms, $courseid=0, $limitfrom=0, $limitnum=5
                          u.lastname,
                          u.email,
                          u.picture,
-                         u.imagealt,
-                         u.email
+                         u.imagealt
                     FROM $fromsql
                    WHERE $selectsql
                 ORDER BY p.modified DESC";
@@ -3792,9 +3802,11 @@ function forum_print_mode_form($id, $mode, $forumtype='') {
     global $OUTPUT;
     if ($forumtype == 'single') {
         $select = new single_select(new moodle_url("/mod/forum/view.php", array('f'=>$id)), 'mode', forum_get_layout_modes(), $mode, null, "mode");
+        $select->set_label(get_string('displaymode', 'forum'), array('class' => 'accesshide'));
         $select->class = "forummode";
     } else {
         $select = new single_select(new moodle_url("/mod/forum/discuss.php", array('d'=>$id)), 'mode', forum_get_layout_modes(), $mode, null, "mode");
+        $select->set_label(get_string('displaymode', 'forum'), array('class' => 'accesshide'));
     }
     echo $OUTPUT->render($select);
 }
@@ -4553,6 +4565,63 @@ function forum_get_subscribed_forums($course) {
     } else {
         return array();
     }
+}
+
+/**
+ * Returns an array of forums that the current user is subscribed to and is allowed to unsubscribe from
+ *
+ * @return array An array of unsubscribable forums
+ */
+function forum_get_optional_subscribed_forums() {
+    global $USER, $DB;
+
+    // Get courses that $USER is enrolled in and can see
+    $courses = enrol_get_my_courses();
+    if (empty($courses)) {
+        return array();
+    }
+
+    $courseids = array();
+    foreach($courses as $course) {
+        $courseids[] = $course->id;
+    }
+    list($coursesql, $courseparams) = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'c');
+
+    // get all forums from the user's courses that they are subscribed to and which are not set to forced
+    $sql = "SELECT f.id, cm.id as cm, cm.visible
+              FROM {forum} f
+                   JOIN {course_modules} cm ON cm.instance = f.id
+                   JOIN {modules} m ON m.name = :modulename AND m.id = cm.module
+                   LEFT JOIN {forum_subscriptions} fs ON (fs.forum = f.id AND fs.userid = :userid)
+             WHERE f.forcesubscribe <> :forcesubscribe AND fs.id IS NOT NULL
+                   AND cm.course $coursesql";
+    $params = array_merge($courseparams, array('modulename'=>'forum', 'userid'=>$USER->id, 'forcesubscribe'=>FORUM_FORCESUBSCRIBE));
+    if (!$forums = $DB->get_records_sql($sql, $params)) {
+        return array();
+    }
+
+    $unsubscribableforums = array(); // Array to return
+
+    foreach($forums as $forum) {
+
+        if (empty($forum->visible)) {
+            // the forum is hidden
+            $context = context_module::instance($forum->cm);
+            if (!has_capability('moodle/course:viewhiddenactivities', $context)) {
+                // the user can't see the hidden forum
+                continue;
+            }
+        }
+
+        // subscribe.php only requires 'mod/forum:managesubscriptions' when
+        // unsubscribing a user other than yourself so we don't require it here either
+
+        // A check for whether the forum has subscription set to forced is built into the SQL above
+
+        $unsubscribableforums[] = $forum;
+    }
+
+    return $unsubscribableforums;
 }
 
 /**
@@ -6284,7 +6353,7 @@ function forum_tp_count_discussion_unread_posts($userid, $discussionid) {
            'WHERE p.discussion = ? '.
                 'AND p.modified >= ? AND r.id is NULL';
 
-    return $DB->count_records_sql($sql, array($userid, $cutoffdate, $discussionid));
+    return $DB->count_records_sql($sql, array($userid, $discussionid, $cutoffdate));
 }
 
 /**

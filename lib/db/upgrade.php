@@ -53,7 +53,7 @@ defined('MOODLE_INTERNAL') || die();
  * @return bool always true
  */
 function xmldb_main_upgrade($oldversion) {
-    global $CFG, $USER, $DB, $OUTPUT;
+    global $CFG, $USER, $DB, $OUTPUT, $SITE;
 
     require_once($CFG->libdir.'/db/upgradelib.php'); // Core Upgrade-related functions
 
@@ -162,6 +162,20 @@ function xmldb_main_upgrade($oldversion) {
     /// Define index contextid-lowerboundary-letter (unique) to be added to grade_letters
         $table = new xmldb_table('grade_letters');
         $index = new xmldb_index('contextid-lowerboundary-letter', XMLDB_INDEX_UNIQUE, array('contextid', 'lowerboundary', 'letter'));
+
+        // MDL-30515 Removing duplicate entries before adding the unique index
+        $sql = "SELECT MAX(id) as newestid, contextid, lowerboundary, letter, COUNT('x') AS dcount
+                  FROM {grade_letters}
+              GROUP BY contextid, lowerboundary, letter
+                HAVING COUNT('x') > 1";
+        $duplicateletters = $DB->get_recordset_sql($sql);
+        foreach ($duplicateletters as $duplicateletter) {
+            // Removing duplicate/s and keeping the latest one
+            $where = 'contextid = ? AND lowerboundary = ? AND letter = ? AND id != ?';
+            $params = array($duplicateletter->contextid, $duplicateletter->lowerboundary, $duplicateletter->letter, $duplicateletter->newestid);
+            $DB->delete_records_select('grade_letters', $where, $params);
+        }
+        $duplicateletters->close();
 
     /// Launch add index contextid-lowerboundary-letter
         $dbman->add_index($table, $index);
@@ -4992,7 +5006,8 @@ WHERE gradeitemid IS NOT NULL AND grademax IS NOT NULL");
                         break;
                     case CONTEXT_COURSECAT :
                     case CONTEXT_SYSTEM :
-                        $context = get_system_context();
+                        // Stored in the front-page course.
+                        $context = get_context_instance(CONTEXT_COURSE, get_site()->id);
                         break;
                     default :
                         continue;
@@ -7086,6 +7101,52 @@ FROM
 
         // Main savepoint reached
         upgrade_main_savepoint(true, 2011120503.03);
+    }
+
+    if ($oldversion < 2011120503.09) {
+        // Drop some old backup tables, not used anymore
+
+        // Define table backup_files to be dropped
+        $table = new xmldb_table('backup_files');
+
+        // Conditionally launch drop table for backup_files
+        if ($dbman->table_exists($table)) {
+            $dbman->drop_table($table);
+        }
+
+        // Define table backup_ids to be dropped
+        $table = new xmldb_table('backup_ids');
+
+        // Conditionally launch drop table for backup_ids
+        if ($dbman->table_exists($table)) {
+            $dbman->drop_table($table);
+        }
+
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2011120503.09);
+    }
+
+    if ($oldversion < 2011120504.03) {
+
+        // Saves orphaned questions from the Dark Side
+        upgrade_save_orphaned_questions();
+
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2011120504.03);
+    }
+
+    if ($oldversion < 2011120504.05) {
+
+        // Handle events with empty eventtype //MDL-32827
+
+        $DB->set_field('event', 'eventtype', 'site', array('eventtype' => '', 'courseid' => $SITE->id));
+        $DB->set_field_select('event', 'eventtype', 'due', "eventtype = '' AND courseid != 0 AND groupid = 0 AND (modulename = 'assignment' OR modulename = 'assign')");
+        $DB->set_field_select('event', 'eventtype', 'course', "eventtype = '' AND courseid != 0 AND groupid = 0");
+        $DB->set_field_select('event', 'eventtype', 'group', "eventtype = '' AND groupid != 0");
+        $DB->set_field_select('event', 'eventtype', 'user', "eventtype = '' AND userid != 0");
+
+        // Main savepoint reached
+        upgrade_main_savepoint(true, 2011120504.05);
     }
 
     return true;

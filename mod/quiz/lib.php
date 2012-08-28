@@ -418,7 +418,7 @@ function quiz_user_complete($course, $user, $mod, $quiz) {
     if ($attempts = $DB->get_records('quiz_attempts',
             array('userid' => $user->id, 'quiz' => $quiz->id), 'attempt')) {
         foreach ($attempts as $attempt) {
-            echo get_string('attempt', 'quiz').' '.$attempt->attempt.': ';
+            echo get_string('attempt', 'quiz', $attempt->attempt) . ': ';
             if ($attempt->timefinish == 0) {
                 print_string('unfinished');
             } else {
@@ -1535,15 +1535,16 @@ function quiz_attempt_summary_link_to_reports($quiz, $cm, $context, $returnzero 
  */
 function quiz_supports($feature) {
     switch($feature) {
-        case FEATURE_GROUPS:                  return true;
-        case FEATURE_GROUPINGS:               return true;
-        case FEATURE_GROUPMEMBERSONLY:        return true;
-        case FEATURE_MOD_INTRO:               return true;
-        case FEATURE_COMPLETION_TRACKS_VIEWS: return true;
-        case FEATURE_GRADE_HAS_GRADE:         return true;
-        case FEATURE_GRADE_OUTCOMES:          return false;
-        case FEATURE_BACKUP_MOODLE2:          return true;
-        case FEATURE_SHOW_DESCRIPTION:        return true;
+        case FEATURE_GROUPS:                    return true;
+        case FEATURE_GROUPINGS:                 return true;
+        case FEATURE_GROUPMEMBERSONLY:          return true;
+        case FEATURE_MOD_INTRO:                 return true;
+        case FEATURE_COMPLETION_TRACKS_VIEWS:   return true;
+        case FEATURE_GRADE_HAS_GRADE:           return true;
+        case FEATURE_GRADE_OUTCOMES:            return true;
+        case FEATURE_BACKUP_MOODLE2:            return true;
+        case FEATURE_SHOW_DESCRIPTION:          return true;
+        case FEATURE_CONTROLS_GRADE_VISIBILITY: return true;
 
         default: return null;
     }

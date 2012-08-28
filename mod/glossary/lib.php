@@ -971,9 +971,8 @@ function glossary_print_entry_default ($entry, $glossary, $cm) {
  */
 function  glossary_print_entry_concept($entry, $return=false) {
     global $OUTPUT;
-    $options = new stdClass();
-    $options->para = false;
-    $text = format_text($OUTPUT->heading('<span class="nolink">' . $entry->concept . '</span>', 3, 'nolink'), FORMAT_MOODLE, $options);
+
+    $text = html_writer::tag('h3', format_string($entry->concept));
     if (!empty($entry->highlight)) {
         $text = highlight($entry->highlight, $text);
     }
@@ -1015,6 +1014,7 @@ function glossary_print_entry_definition($entry, $glossary, $cm) {
     $options->trusted = $entry->definitiontrust;
     $options->context = $context;
     $options->overflowdiv = true;
+
     $text = format_text($definition, $entry->definitionformat, $options);
 
     // Stop excluding concepts from autolinking
@@ -1049,7 +1049,7 @@ function  glossary_print_entry_aliases($course, $cm, $glossary, $entry,$mode='',
         foreach ($aliases as $alias) {
             if (trim($alias->alias)) {
                 if ($return == '') {
-                    $return = '<select style="font-size:8pt">';
+                    $return = '<select id="keyword" style="font-size:8pt">';
                 }
                 $return .= "<option>$alias->alias</option>";
             }
@@ -1205,7 +1205,8 @@ function  glossary_print_entry_lower_section($course, $cm, $glossary, $entry, $m
         echo '<table>';
         if ( $aliases ) {
             echo '<tr valign="top"><td class="aliases">' .
-                  get_string('aliases','glossary').': '.$aliases . '</td></tr>';
+                 '<label for="keyword">' . get_string('aliases','glossary').': </label>' .
+                 $aliases . '</td></tr>';
         }
         if ($icons) {
             echo '<tr valign="top"><td class="icons">'.$icons.'</td></tr>';
@@ -1763,6 +1764,7 @@ function glossary_print_categories_menu($cm, $glossary, $hook, $category) {
      echo '<td align="center" style="width:20%">';
 
      $select = new single_select(new moodle_url("/mod/glossary/view.php", array('id'=>$cm->id, 'mode'=>'cat')), 'hook', $menu, $selected, null, "catmenu");
+     $select->set_label(get_string('categories', 'glossary'), array('class' => 'accesshide'));
      echo $OUTPUT->render($select);
 
      echo '</td>';

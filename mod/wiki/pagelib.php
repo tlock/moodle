@@ -946,9 +946,12 @@ class page_wiki_create extends page_wiki {
         } else {
             $groupid = '0';
         }
-        if (!$this->subwiki = wiki_get_subwiki_by_group($this->wid, $groupid)) {
-            $swid = wiki_add_subwiki($PAGE->activityrecord->id, $groupid, $this->uid);
-            $this->subwiki = wiki_get_subwiki($swid);
+        if (empty($this->subwiki)) {
+            // If subwiki is not set then try find one and set else create one.
+            if (!$this->subwiki = wiki_get_subwiki_by_group($this->wid, $groupid)) {
+                $swid = wiki_add_subwiki($PAGE->activityrecord->id, $groupid, $this->uid);
+                $this->subwiki = wiki_get_subwiki($swid);
+            }
         }
         if ($data) {
             $this->set_title($data->pagetitle);
@@ -2480,7 +2483,7 @@ class page_wiki_admin extends page_wiki {
     protected function print_delete_content($showorphan = true) {
         $contents = array();
         $table = new html_table();
-        $table->head = array('','Page name');
+        $table->head = array('', get_string('pagename','wiki'));
         $table->attributes['class'] = 'generaltable mdl-align';
         $swid = $this->subwiki->id;
         if ($showorphan) {

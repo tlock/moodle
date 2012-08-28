@@ -133,6 +133,14 @@ define('PARAM_FILE',   'file');
 
 /**
  * PARAM_FLOAT - a real/floating point number.
+ *
+ * Note that you should not use PARAM_FLOAT for numbers typed in by the user.
+ * It does not work for languages that use , as a decimal separator.
+ * Instead, do something like
+ *     $rawvalue = required_param('name', PARAM_RAW);
+ *     // ... other code including require_login, which sets current lang ...
+ *     $realvalue = unformat_float($rawvalue);
+ *     // ... then use $realvalue
  */
 define('PARAM_FLOAT',  'float');
 
@@ -378,6 +386,8 @@ define('FEATURE_GRADE_HAS_GRADE', 'grade_has_grade');
 define('FEATURE_GRADE_OUTCOMES', 'outcomes');
 /** True if module supports advanced grading methods */
 define('FEATURE_ADVANCED_GRADING', 'grade_advanced_grading');
+/** True if module controls the grade visibility over the gradebook */
+define('FEATURE_CONTROLS_GRADE_VISIBILITY', 'controlsgradevisbility');
 
 /** True if module has code to track whether somebody viewed it */
 define('FEATURE_COMPLETION_TRACKS_VIEWS', 'completion_tracks_views');
@@ -645,7 +655,8 @@ function optional_param_array($parname, $default, $type) {
  * @param string $type PARAM_ constant
  * @param bool $allownull are nulls valid value?
  * @param string $debuginfo optional debug information
- * @return mixed the $param value converted to PHP type or invalid_parameter_exception
+ * @return mixed the $param value converted to PHP type
+ * @throws invalid_parameter_exception if $param is not of given type
  */
 function validate_param($param, $type, $allownull=NULL_NOT_ALLOWED, $debuginfo='') {
     if (is_null($param)) {
@@ -660,7 +671,15 @@ function validate_param($param, $type, $allownull=NULL_NOT_ALLOWED, $debuginfo='
     }
 
     $cleaned = clean_param($param, $type);
-    if ((string)$param !== (string)$cleaned) {
+
+    if ($type == PARAM_FLOAT) {
+        // Do not detect precision loss here.
+        if (is_float($param) or is_int($param)) {
+            // These always fit.
+        } else if (!is_numeric($param) or !preg_match('/^[\+-]?[0-9]*\.?[0-9]*(e[-+]?[0-9]+)?$/i', (string)$param)) {
+            throw new invalid_parameter_exception($debuginfo);
+        }
+    } else if ((string)$param !== (string)$cleaned) {
         // conversion to string is usually lossless
         throw new invalid_parameter_exception($debuginfo);
     }
@@ -1127,7 +1146,44 @@ function fix_utf8($value) {
             // shortcut
             return $value;
         }
-        return iconv('UTF-8', 'UTF-8//IGNORE', $value);
+
+        // Note: This is a partial backport of MDL-32586 and MDL-33007 to stable branches.
+        // Lower error reporting because glibc throws bogus notices.
+        $olderror = error_reporting();
+        if ($olderror & E_NOTICE) {
+            error_reporting($olderror ^ E_NOTICE);
+        }
+
+        // Detect buggy iconv implementations borking results.
+        static $buggyiconv = null;
+        if ($buggyiconv === null) {
+            $buggyiconv = (!function_exists('iconv') or iconv('UTF-8', 'UTF-8//IGNORE', '100'.chr(130).'€') !== '100€');
+        }
+
+        if ($buggyiconv) {
+            if (function_exists('mb_convert_encoding')) {
+                // Fallback to mbstring if available.
+                $subst = mb_substitute_character();
+                mb_substitute_character('');
+                $result = mb_convert_encoding($value, 'utf-8', 'utf-8');
+                mb_substitute_character($subst);
+
+            } else {
+                // Return unmodified text, mbstring not available.
+                $result = $value;
+            }
+
+        } else {
+            // Working iconv, use it normally (with PHP notices disabled)
+            $result = iconv('UTF-8', 'UTF-8//IGNORE', $value);
+        }
+
+        // Back to original reporting level
+        if ($olderror & E_NOTICE) {
+            error_reporting($olderror);
+        }
+
+        return $result;
 
     } else if (is_array($value)) {
         foreach ($value as $k=>$v) {
@@ -2195,10 +2251,10 @@ function get_user_timezone($tz = 99) {
 
     $tz = 99;
 
-    while(($tz == '' || $tz == 99 || $tz == NULL) && $next = each($timezones)) {
+    // Loop while $tz is, empty but not zero, or 99, and there is another timezone is the array
+    while(((empty($tz) && !is_numeric($tz)) || $tz == 99) && $next = each($timezones)) {
         $tz = $next['value'];
     }
-
     return is_numeric($tz) ? (float) $tz : $tz;
 }
 
@@ -3145,11 +3201,24 @@ function get_user_key($script, $userid, $instance=null, $iprestriction=null, $va
 function update_user_login_times() {
     global $USER, $DB;
 
-    $user = new stdClass();
-    $USER->lastlogin = $user->lastlogin = $USER->currentlogin;
-    $USER->currentlogin = $user->lastaccess = $user->currentlogin = time();
+    $now = time();
 
+    $user = new stdClass();
     $user->id = $USER->id;
+
+    // Make sure all users that logged in have some firstaccess.
+    if ($USER->firstaccess == 0) {
+        $USER->firstaccess = $user->firstaccess = $now;
+    }
+
+    // Store the previous current as lastlogin.
+    $USER->lastlogin = $user->lastlogin = $USER->currentlogin;
+
+    $USER->currentlogin = $user->currentlogin = $now;
+
+    // Function user_accesstime_log() may not update immediately, better do it here.
+    $USER->lastaccess = $user->lastaccess = $now;
+    $USER->lastip = $user->lastip = getremoteaddr();
 
     $DB->update_record('user', $user);
     return true;
@@ -3936,10 +4005,6 @@ function authenticate_user_login($username, $password) {
                 $DB->set_field('user', 'auth', $auth, array('username'=>$username));
                 $user->auth = $auth;
             }
-            if (empty($user->firstaccess)) { //prevent firstaccess from remaining 0 for manual account that never required confirmation
-                $DB->set_field('user','firstaccess', $user->timemodified, array('id' => $user->id));
-                $user->firstaccess = $user->timemodified;
-            }
 
             update_internal_user_password($user, $password); // just in case salt or encoding were changed (magic quotes too one day)
 
@@ -4690,12 +4755,13 @@ function reset_course_userdata($data) {
         $status[] = array('component'=>$componentstr, 'item'=>get_string('deleteblogassociations', 'blog'), 'error'=>false);
     }
 
-    if (!empty($data->reset_course_completion)) {
-        // Delete course completion information
+    if (!empty($data->reset_completion)) {
+        // Delete course and activity completion information.
         $course = $DB->get_record('course', array('id'=>$data->courseid));
         $cc = new completion_info($course);
-        $cc->delete_course_completion_data();
-        $status[] = array('component'=>$componentstr, 'item'=>get_string('deletecoursecompletiondata', 'completion'), 'error'=>false);
+        $cc->delete_all_completion_data();
+        $status[] = array('component' => $componentstr,
+                'item' => get_string('deletecompletiondata', 'completion'), 'error' => false);
     }
 
     $componentstr = get_string('roles');
@@ -5683,15 +5749,15 @@ function get_max_upload_file_size($sitebytes=0, $coursebytes=0, $modulebytes=0) 
         }
     }
 
-    if ($sitebytes and $sitebytes < $minimumsize) {
+    if (($sitebytes > 0) and ($sitebytes < $minimumsize)) {
         $minimumsize = $sitebytes;
     }
 
-    if ($coursebytes and $coursebytes < $minimumsize) {
+    if (($coursebytes > 0) and ($coursebytes < $minimumsize)) {
         $minimumsize = $coursebytes;
     }
 
-    if ($modulebytes and $modulebytes < $minimumsize) {
+    if (($modulebytes > 0) and ($modulebytes < $minimumsize)) {
         $minimumsize = $modulebytes;
     }
 
@@ -10548,4 +10614,20 @@ function get_home_page() {
         }
     }
     return HOMEPAGE_SITE;
+}
+
+/**
+ * Gets the name of a course to be displayed when showing a list of courses.
+ * By default this is just $course->fullname but user can configure it. The
+ * result of this function should be passed through print_string.
+ * @param object $course Moodle course object
+ * @return string Display name of course (either fullname or short + fullname)
+ */
+function get_course_display_name_for_list($course) {
+    global $CFG;
+    if (!empty($CFG->courselistshortnames)) {
+        return get_string('courseextendednamedisplay', '', $course);
+    } else {
+        return $course->fullname;
+    }
 }

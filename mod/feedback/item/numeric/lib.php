@@ -220,7 +220,7 @@ class feedback_item_numeric extends feedback_item_base {
         return $row_offset;
     }
 
-    /**     
+    /**
      * print the item at the edit-page of feedback
      *
      * @global object
@@ -296,7 +296,7 @@ class feedback_item_numeric extends feedback_item_base {
         echo '</div>';
     }
 
-    /**     
+    /**
      * print the item at the complete-page of feedback
      *
      * @global object
@@ -364,13 +364,13 @@ class feedback_item_numeric extends feedback_item_base {
                      'name="'.$item->typ.'_'.$item->id.'" '.
                      'size="10" '.
                      'maxlength="10" '.
-                     'value="'.($value ? $value : '').'" />';
+                     'value="'.$value.'" />';
 
         echo '</span>';
         echo '</div>';
     }
 
-    /**     
+    /**
      * print the item at the complete-page of feedback
      *
      * @global object
@@ -533,5 +533,21 @@ class feedback_item_numeric extends feedback_item_base {
 
     public function can_switch_require() {
         return true;
+    }
+
+    public function value_type() {
+        return PARAM_FLOAT;
+    }
+
+    public function clean_input_value($value) {
+        $value = str_replace($this->sep_dec, FEEDBACK_DECIMAL, $value);
+        if (!is_numeric($value)) {
+            if ($value == '') {
+                return null; //an empty string should be null
+            } else {
+                return clean_param($value, PARAM_TEXT); //we have to know the value if it is wrong
+            }
+        }
+        return clean_param($value, $this->value_type());
     }
 }

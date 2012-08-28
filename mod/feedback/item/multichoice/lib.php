@@ -561,6 +561,9 @@ class feedback_item_multichoice extends feedback_item_base {
 
     public function create_value($data) {
         $vallist = $data;
+        if (is_array($vallist)) {
+            $vallist = array_unique($vallist);
+        }
         return trim($this->item_array_to_string($vallist));
     }
 
@@ -760,7 +763,8 @@ class feedback_item_multichoice extends feedback_item_base {
 
         ?>
         <li class="feedback_item_select_<?php echo $hv.'_'.$align;?>">
-            <select name="<?php echo $item->typ .'_' . $item->id;?>[]" size="1">
+            <label class="accesshide" for="<?php echo $item->typ .'_' . $item->id;?>"><?php echo $item->name; ?></label>
+            <select  id="<?php echo $item->typ .'_' . $item->id;?>" name="<?php echo $item->typ .'_' . $item->id;?>[]" size="1">
                 <option value="0">&nbsp;</option>
                 <?php
                 $index = 1;
@@ -825,5 +829,9 @@ class feedback_item_multichoice extends feedback_item_base {
 
     public function value_is_array() {
         return true;
+    }
+
+    public function clean_input_value($value) {
+        return clean_param_array($value, $this->value_type());
     }
 }

@@ -362,6 +362,12 @@ class page_requirements_manager {
         if ($url instanceof moodle_url) {
             return $url;
         } else if (strpos($url, '/') === 0) {
+            // Fix the admin links if needed.
+            if ($CFG->admin !== 'admin') {
+                if (strpos($url, "/admin/") === 0) {
+                    $url = preg_replace("|^/admin/|", "/$CFG->admin/", $url);
+                }
+            }
             if (debugging()) {
                 // check file existence only when in debug mode
                 if (!file_exists($CFG->dirroot . strtok($url, '?'))) {
@@ -708,7 +714,7 @@ class page_requirements_manager {
         if (!is_array($modules)) {
             $modules = array($modules);
         }
-        if (empty($CFG->useexternalyui) || true) {
+        if (empty($CFG->useexternalyui)) {
             // We need to set the M.yui.galleryversion to the correct version
             $jscode = 'M.yui.galleryversion='.json_encode($galleryversion).';';
         } else {

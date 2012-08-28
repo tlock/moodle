@@ -2065,6 +2065,17 @@ function feedback_get_page_to_continue($feedbackid, $courseid = false, $guestid 
 ////////////////////////////////////////////////
 
 /**
+ * cleans the userinput while submitting the form.
+ *
+ * @param mixed $value
+ * @return mixed
+ */
+function feedback_clean_input_value($item, $value) {
+    $itemobj = feedback_get_item_class($item->typ);
+    return $itemobj->clean_input_value($value);
+}
+
+/**
  * this saves the values of an completed.
  * if the param $tmp is set true so the values are saved temporary in table feedback_valuetmp.
  * if there is already a completed and the userid is set so the values are updated.
@@ -2198,10 +2209,13 @@ function feedback_check_values($firstitem, $lastitem) {
         $formvalname = $item->typ . '_' . $item->id;
 
         if ($itemobj->value_is_array()) {
-            $value = optional_param_array($formvalname, null, $itemobj->value_type());
+            //get the raw value here. It is cleaned after that by the object itself
+            $value = optional_param_array($formvalname, null, PARAM_RAW);
         } else {
-            $value = optional_param($formvalname, null, $itemobj->value_type());
+            //get the raw value here. It is cleaned after that by the object itself
+            $value = optional_param($formvalname, null, PARAM_RAW);
         }
+        $value = $itemobj->clean_input_value($value);
 
         //check if the value is set
         if (is_null($value) AND $item->required == 1) {

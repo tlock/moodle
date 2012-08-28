@@ -359,6 +359,9 @@ class grade_report_grader extends grade_report {
                 case 'firstname':
                     $sort = "u.firstname $this->sortorder, u.lastname $this->sortorder";
                     break;
+                case 'email':
+                    $sort = "u.email $this->sortorder";
+                    break;
                 case 'idnumber':
                 default:
                     $sort = "u.idnumber $this->sortorder";
@@ -948,7 +951,8 @@ class grade_report_grader extends grade_report {
                             }
                             $itemcell->text .= '<input type="hidden" id="oldgrade_'.$userid.'_'.$item->id.'" name="oldgrade_'.$userid.'_'.$item->id.'" value="'.$oldval.'"/>';
                             $attributes = array('tabindex' => $tabindices[$item->id]['grade'], 'id'=>'grade_'.$userid.'_'.$item->id);
-                            $itemcell->text .= html_writer::select($scaleopt, 'grade_'.$userid.'_'.$item->id, $gradeval, array(-1=>$nogradestr), $attributes);;
+                            $itemcell->text .= html_writer::label(get_string('typescale', 'grades'), $attributes['id'], false, array('class' => 'accesshide'));
+                            $itemcell->text .= html_writer::select($scaleopt, 'grade_'.$userid.'_'.$item->id, $gradeval, array(-1=>$nogradestr), $attributes);
                         } elseif(!empty($scale)) {
                             $scales = explode(",", $scale->scale);
 

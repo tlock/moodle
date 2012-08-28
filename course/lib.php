@@ -1515,9 +1515,8 @@ function print_section($course, $section, $mods, $modnamesused, $absolute=false,
             // 2. the activity has dates set which do not include current, or
             // 3. the activity has any other conditions set (regardless of whether
             //    current user meets them)
-            $canviewhidden = has_capability(
-                'moodle/course:viewhiddenactivities',
-                get_context_instance(CONTEXT_MODULE, $mod->id));
+            $modcontext = context_module::instance($mod->id);
+            $canviewhidden = has_capability('moodle/course:viewhiddenactivities', $modcontext);
             $accessiblebutdim = false;
             if ($canviewhidden) {
                 $accessiblebutdim = !$mod->visible;
@@ -1733,9 +1732,10 @@ function print_section($course, $section, $mods, $modnamesused, $absolute=false,
                 }
                 if ($completionicon) {
                     $imgsrc = $OUTPUT->pix_url('i/completion-'.$completionicon);
-                    $imgalt = s(get_string('completion-alt-'.$completionicon, 'completion', $mod->name));
+                    $formattedname = format_string($mod->name, true, array('context' => $modcontext));
+                    $imgalt = get_string('completion-alt-' . $completionicon, 'completion', $formattedname);
                     if ($completion == COMPLETION_TRACKING_MANUAL && !$isediting) {
-                        $imgtitle = s(get_string('completion-title-'.$completionicon, 'completion', $mod->name));
+                        $imgtitle = get_string('completion-title-' . $completionicon, 'completion', $formattedname);
                         $newstate =
                             $completiondata->completionstate==COMPLETION_COMPLETE
                             ? COMPLETION_INCOMPLETE
@@ -2091,6 +2091,11 @@ function get_course_category_tree($id = 0, $depth = 0) {
         return array($categories, $categoryids);
     }
 
+    if (empty($categoryids)) {
+        // No categories available (probably all hidden).
+        return array();
+    }
+
     // The depth is 0 this function has just been called so we can finish it off
 
     list($ccselect, $ccjoin) = context_instance_preload_sql('c.id', CONTEXT_COURSE, 'ctx');
@@ -2178,22 +2183,6 @@ function make_categories_options() {
         }
     }
     return $cats;
-}
-
-/**
- * Gets the name of a course to be displayed when showing a list of courses.
- * By default this is just $course->fullname but user can configure it. The
- * result of this function should be passed through print_string.
- * @param object $course Moodle course object
- * @return string Display name of course (either fullname or short + fullname)
- */
-function get_course_display_name_for_list($course) {
-    global $CFG;
-    if (!empty($CFG->courselistshortnames)) {
-        return $course->shortname . ' ' .$course->fullname;
-    } else {
-        return $course->fullname;
-    }
 }
 
 /**
@@ -3208,8 +3197,8 @@ function make_editing_buttons(stdClass $mod, $absolute_ignored = true, $movesele
         );
     }
 
-    // Duplicate (require both target import caps to be able to duplicate, see modduplicate.php)
-    if (has_all_capabilities($dupecaps, $coursecontext)) {
+    // Duplicate (require both target import caps to be able to duplicate and backup2 support, see modduplicate.php)
+    if (has_all_capabilities($dupecaps, $coursecontext) && plugin_supports('mod', $mod->modname, FEATURE_BACKUP_MOODLE2)) {
         $actions[] = new action_link(
             new moodle_url($baseurl, array('duplicate' => $mod->id)),
             new pix_icon('t/copy', $str->duplicate, 'moodle', array('class' => 'iconsmall')),
@@ -3840,7 +3829,7 @@ function create_course($data, $editoroptions = NULL) {
     fix_course_sortorder();
 
     // update module restrictions
-    if ($course->restrictmodules) {
+    if ($course->restrictmodules || $CFG->restrictbydefault ) {
         if (isset($data->allowedmods)) {
             update_restricted_mods($course, $data->allowedmods);
         } else {

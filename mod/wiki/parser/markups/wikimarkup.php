@@ -18,7 +18,6 @@ abstract class wiki_markup_parser extends generic_parser {
     protected $wiki_page_id;
 
     //sections
-    protected $section_edit_text = "[edit]";
     protected $repeated_sections;
 
     protected $section_editing = true;
@@ -181,7 +180,7 @@ abstract class wiki_markup_parser extends generic_parser {
         $text = trim($text);
 
         if (!$this->pretty_print && $level == 1) {
-            $text .= parser_utils::h('a', $this->section_edit_text, array('href' => "edit.php?pageid={$this->wiki_page_id}&section=" . urlencode($text), 'class' => 'wiki_edit_section'));
+            $text .= parser_utils::h('a', '['.get_string('editsection', 'wiki').']', array('href' => "edit.php?pageid={$this->wiki_page_id}&section=" . urlencode($text), 'class' => 'wiki_edit_section'));
         }
 
         if ($level < 4) {
@@ -239,7 +238,7 @@ abstract class wiki_markup_parser extends generic_parser {
             $i++;
         }
 
-        $this->returnvalues['toc'] = "<div class=\"wiki-toc\"><p class=\"wiki-toc-title\">Table of contents</p>$toc</div>";
+        $this->returnvalues['toc'] = "<div class=\"wiki-toc\"><p class=\"wiki-toc-title\">" . get_string('tableofcontents', 'wiki') . "</p>$toc</div>";
     }
 
     /**

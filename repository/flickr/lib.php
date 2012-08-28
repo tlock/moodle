@@ -258,6 +258,7 @@ class repository_flickr extends repository {
         $c->download(array(
             array('url'=>$url, 'file'=>$fp)
         ));
+        fclose($fp);
         return array('path'=>$path, 'url'=>$url);
     }
 
@@ -276,6 +277,8 @@ class repository_flickr extends repository {
         if (empty($secret)) {
             $secret = '';
         }
+
+        parent::type_config_form($mform);
 
         $strrequired = get_string('required');
         $mform->addElement('text', 'api_key', get_string('apikey', 'repository_flickr'), array('value'=>$api_key,'size' => '40'));
