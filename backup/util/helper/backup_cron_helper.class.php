@@ -281,23 +281,25 @@ abstract class backup_cron_automated_helper {
         $midnight = usergetmidnight($now, $timezone);
         $date = usergetdate($now, $timezone);
 
-        //Get number of days (from today) to execute backups
-        $automateddays = substr($config->backup_auto_weekdays,$date['wday']) . $config->backup_auto_weekdays;
-        $daysfromtoday = strpos($automateddays, "1");
+        // Get number of days (from today) to execute backups
+        $automateddays = substr($config->backup_auto_weekdays, $date['wday']) . $config->backup_auto_weekdays;
+        $daysfromtoday = strpos($automateddays, "1", 1);
+
+        // If we can't find the next day, we set it to tomorrow
         if (empty($daysfromtoday)) {
             $daysfromtoday = 1;
         }
 
-        //If some day has been found
+        // If some day has been found
         if ($daysfromtoday !== false) {
-            //Calculate distance
-            $dist = ($daysfromtoday * 86400) +                //Days distance
-                    ($config->backup_auto_hour * 3600) +      //Hours distance
-                    ($config->backup_auto_minute * 60);       //Minutes distance
+            // Calculate distance
+            $dist = ($daysfromtoday * 86400) +                // Days distance
+                    ($config->backup_auto_hour * 3600) +      // Hours distance
+                    ($config->backup_auto_minute * 60);       // Minutes distance
             $result = $midnight + $dist;
         }
 
-        //If that time is past, call the function recursively to obtain the next valid day
+        // If that time is past, call the function recursively to obtain the next valid day
         if ($result > 0 && $result < time()) {
             $result = self::calculate_next_automated_backup($timezone, $result);
         }
@@ -350,13 +352,13 @@ abstract class backup_cron_automated_helper {
 
             $bc->execute_plan();
             $results = $bc->get_results();
-            $file = $results['backup_destination'];
+            $file = $results['backup_destination']; // may be empty if file already moved to target location
             $dir = $config->backup_auto_destination;
             $storage = (int)$config->backup_auto_storage;
             if (!file_exists($dir) || !is_dir($dir) || !is_writable($dir)) {
                 $dir = null;
             }
-            if (!empty($dir) && $storage !== 0) {
+            if ($file && !empty($dir) && $storage !== 0) {
                 $filename = backup_plan_dbops::get_default_backup_filename($format, $type, $course->id, $users, $anonymised, !$config->backup_shortname);
                 $outcome = $file->copy_content_to($dir.'/'.$filename);
                 if ($outcome && $storage === 1) {
@@ -460,6 +462,11 @@ abstract class backup_cron_automated_helper {
         $keep =     (int)$config->backup_auto_keep;
         $storage =  $config->backup_auto_storage;
         $dir =      $config->backup_auto_destination;
+
+        if ($keep == 0) {
+            // means keep all backup files
+            return true;
+        }
 
         $backupword = str_replace(' ', '_', moodle_strtolower(get_string('backupfilename')));
         $backupword = trim(clean_filename($backupword), '_');

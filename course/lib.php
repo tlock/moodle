@@ -2077,6 +2077,11 @@ function get_course_category_tree($id = 0, $depth = 0) {
         return array($categories, $categoryids);
     }
 
+    if (empty($categoryids)) {
+        // No categories available (probably all hidden).
+        return array();
+    }
+
     // The depth is 0 this function has just been called so we can finish it off
 
     list($ccselect, $ccjoin) = context_instance_preload_sql('c.id', CONTEXT_COURSE, 'ctx');
@@ -3773,7 +3778,7 @@ function create_course($data, $editoroptions = NULL) {
     fix_course_sortorder();
 
     // update module restrictions
-    if ($course->restrictmodules) {
+    if ($course->restrictmodules || $CFG->restrictbydefault ) {
         if (isset($data->allowedmods)) {
             update_restricted_mods($course, $data->allowedmods);
         } else {
