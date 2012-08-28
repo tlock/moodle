@@ -27,6 +27,7 @@ defined('MOODLE_INTERNAL') || die();
 require_once($CFG->libdir.'/filelib.php');
 require_once($CFG->libdir.'/eventslib.php');
 require_once($CFG->dirroot.'/user/selector/lib.php');
+require_once($CFG->dirroot.'/mod/forum/post_form.php');
 
 /// CONSTANTS ///////////////////////////////////////////////////////////
 
@@ -99,7 +100,8 @@ function forum_add_instance($forum, $mform = null) {
             $discussion = $DB->get_record('forum_discussions', array('id'=>$discussion->id), '*', MUST_EXIST);
             $post = $DB->get_record('forum_posts', array('id'=>$discussion->firstpost), '*', MUST_EXIST);
 
-            $post->message = file_save_draft_area_files($draftid, $modcontext->id, 'mod_forum', 'post', $post->id, array('subdirs'=>true), $post->message);
+            $post->message = file_save_draft_area_files($draftid, $modcontext->id, 'mod_forum', 'post', $post->id,
+                    mod_forum_post_form::attachment_options($forum), $post->message);
             $DB->set_field('forum_posts', 'message', $post->message, array('id'=>$post->id));
         }
     }
@@ -196,7 +198,8 @@ function forum_update_instance($forum, $mform) {
             $discussion = $DB->get_record('forum_discussions', array('id'=>$discussion->id), '*', MUST_EXIST);
             $post = $DB->get_record('forum_posts', array('id'=>$discussion->firstpost), '*', MUST_EXIST);
 
-            $post->message = file_save_draft_area_files($draftid, $modcontext->id, 'mod_forum', 'post', $post->id, array('subdirs'=>true), $post->message);
+            $post->message = file_save_draft_area_files($draftid, $modcontext->id, 'mod_forum', 'post', $post->id,
+                    mod_forum_post_form::editor_options(), $post->message);
         }
 
         $post->subject       = $forum->name;
@@ -380,7 +383,7 @@ WHERE
  * @return string A unique message-id
  */
 function forum_get_email_message_id($postid, $usertoid, $hostname) {
-    return '<'.hash('sha256',$postid.'to'.$usertoid.'@'.$hostname).'>';
+    return '<'.hash('sha256',$postid.'to'.$usertoid).'@'.$hostname.'>';
 }
 
 /**
@@ -1011,7 +1014,8 @@ function forum_cron() {
 
                 $attachment = $attachname='';
                 $usetrueaddress = true;
-                //directly email forum digests rather than sending them via messaging
+                // Directly email forum digests rather than sending them via messaging, use the
+                // site shortname as 'from name', the noreply address will be used by email_to_user.
                 $mailresult = email_to_user($userto, $site->shortname, $postsubject, $posttext, $posthtml, $attachment, $attachname, $usetrueaddress, $CFG->forum_replytouser);
 
                 if (!$mailresult) {
@@ -1307,23 +1311,33 @@ function forum_print_overview($courses,&$htmlarray) {
         return;
     }
 
-
-    // get all forum logs in ONE query (much better!)
+    // Courses to search for new posts
+    $coursessqls = array();
     $params = array();
-    $sql = "SELECT instance,cmid,l.course,COUNT(l.id) as count FROM {log} l "
-        ." JOIN {course_modules} cm ON cm.id = cmid "
-        ." WHERE (";
     foreach ($courses as $course) {
-        $sql .= '(l.course = ? AND l.time > ?) OR ';
-        $params[] = $course->id;
-        $params[] = $course->lastaccess;
+
+        // If the user has never entered into the course all posts are pending
+        if ($course->lastaccess == 0) {
+            $coursessqls[] = '(f.course = ?)';
+            $params[] = $course->id;
+
+        // Only posts created after the course last access
+        } else {
+            $coursessqls[] = '(f.course = ? AND p.created > ?)';
+            $params[] = $course->id;
+            $params[] = $course->lastaccess;
+        }
     }
-    $sql = substr($sql,0,-3); // take off the last OR
-
-    $sql .= ") AND l.module = 'forum' AND action = 'add post' "
-        ." AND userid != ? GROUP BY cmid,l.course,instance";
-
     $params[] = $USER->id;
+    $coursessql = implode(' OR ', $coursessqls);
+
+    $sql = "SELECT f.id, COUNT(*) as count "
+                .'FROM {forum} f '
+                .'JOIN {forum_discussions} d ON d.forum  = f.id '
+                .'JOIN {forum_posts} p ON p.discussion = d.id '
+                ."WHERE ($coursessql) "
+                .'AND p.userid != ? '
+                .'GROUP BY f.id';
 
     if (!$new = $DB->get_records_sql($sql, $params)) {
         $new = array(); // avoid warnings
@@ -2077,8 +2091,7 @@ function forum_search_posts($searchterms, $courseid=0, $limitfrom=0, $limitnum=5
                          u.lastname,
                          u.email,
                          u.picture,
-                         u.imagealt,
-                         u.email
+                         u.imagealt
                     FROM $fromsql
                    WHERE $selectsql
                 ORDER BY p.modified DESC";
@@ -3821,9 +3834,11 @@ function forum_print_mode_form($id, $mode, $forumtype='') {
     global $OUTPUT;
     if ($forumtype == 'single') {
         $select = new single_select(new moodle_url("/mod/forum/view.php", array('f'=>$id)), 'mode', forum_get_layout_modes(), $mode, null, "mode");
+        $select->set_label(get_string('displaymode', 'forum'), array('class' => 'accesshide'));
         $select->class = "forummode";
     } else {
         $select = new single_select(new moodle_url("/mod/forum/discuss.php", array('d'=>$id)), 'mode', forum_get_layout_modes(), $mode, null, "mode");
+        $select->set_label(get_string('displaymode', 'forum'), array('class' => 'accesshide'));
     }
     echo $OUTPUT->render($select);
 }
@@ -4230,7 +4245,8 @@ function forum_add_attachment($post, $forum, $cm, $mform=null, &$message=null) {
 
     $info = file_get_draft_area_info($post->attachments);
     $present = ($info['filecount']>0) ? '1' : '';
-    file_save_draft_area_files($post->attachments, $context->id, 'mod_forum', 'attachment', $post->id);
+    file_save_draft_area_files($post->attachments, $context->id, 'mod_forum', 'attachment', $post->id,
+            mod_forum_post_form::attachment_options($forum));
 
     $DB->set_field('forum_posts', 'attachment', $present, array('id'=>$post->id));
 
@@ -4262,7 +4278,8 @@ function forum_add_new_post($post, $mform, &$message) {
     $post->attachment = "";
 
     $post->id = $DB->insert_record("forum_posts", $post);
-    $post->message = file_save_draft_area_files($post->itemid, $context->id, 'mod_forum', 'post', $post->id, array('subdirs'=>true), $post->message);
+    $post->message = file_save_draft_area_files($post->itemid, $context->id, 'mod_forum', 'post', $post->id,
+            mod_forum_post_form::editor_options(), $post->message);
     $DB->set_field('forum_posts', 'message', $post->message, array('id'=>$post->id));
     forum_add_attachment($post, $forum, $cm, $mform, $message);
 
@@ -4308,7 +4325,8 @@ function forum_update_post($post, $mform, &$message) {
         $discussion->timestart = $post->timestart;
         $discussion->timeend   = $post->timeend;
     }
-    $post->message = file_save_draft_area_files($post->itemid, $context->id, 'mod_forum', 'post', $post->id, array('subdirs'=>true), $post->message);
+    $post->message = file_save_draft_area_files($post->itemid, $context->id, 'mod_forum', 'post', $post->id,
+            mod_forum_post_form::editor_options(), $post->message);
     $DB->set_field('forum_posts', 'message', $post->message, array('id'=>$post->id));
 
     $DB->update_record('forum_discussions', $discussion);
@@ -4371,7 +4389,8 @@ function forum_add_discussion($discussion, $mform=null, &$message=null, $userid=
     // TODO: Fix the calling code so that there always is a $cm when this function is called
     if (!empty($cm->id) && !empty($discussion->itemid)) {   // In "single simple discussions" this may not exist yet
         $context = get_context_instance(CONTEXT_MODULE, $cm->id);
-        $text = file_save_draft_area_files($discussion->itemid, $context->id, 'mod_forum', 'post', $post->id, array('subdirs'=>true), $post->message);
+        $text = file_save_draft_area_files($discussion->itemid, $context->id, 'mod_forum', 'post', $post->id,
+                mod_forum_post_form::editor_options(), $post->message);
         $DB->set_field('forum_posts', 'message', $text, array('id'=>$post->id));
     }
 

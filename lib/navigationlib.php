@@ -1924,6 +1924,9 @@ class global_navigation extends navigation_node {
         $activities = array();
 
         foreach ($sections as $key => $section) {
+            // Clone and unset summary to prevent $SESSION bloat (MDL-31802).
+            $sections[$key] = clone($section);
+            unset($sections[$key]->summary);
             $sections[$key]->hasactivites = false;
             if (!array_key_exists($section->section, $modinfo->sections)) {
                 continue;
@@ -3570,7 +3573,7 @@ class settings_navigation extends navigation_node {
             // Add the module chooser toggle
             $modchoosertoggleurl = clone($baseurl);
             if ($this->page->user_is_editing() && course_ajax_enabled($course)) {
-                if ($usemodchooser = get_user_preferences('usemodchooser', 1)) {
+                if ($usemodchooser = get_user_preferences('usemodchooser', $CFG->modchooserdefault)) {
                     $modchoosertogglestring = get_string('modchooserdisable', 'moodle');
                     $modchoosertoggleurl->param('modchooser', 'off');
                 } else {

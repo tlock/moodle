@@ -97,10 +97,20 @@
     $logparam = 'id='. $course->id;
     $loglabel = 'view';
     $infoid = $course->id;
-    if(!empty($section)) {
+    if ($section and $section > 0) {
         $loglabel = 'view section';
-        $sectionparams = array('course' => $course->id, 'section' => $section);
-        $coursesections = $DB->get_record('course_sections', $sectionparams, 'id', MUST_EXIST);
+
+        // Get section details and check it exists.
+        $modinfo = get_fast_modinfo($course);
+        $coursesections = $modinfo->get_section_info($section, MUST_EXIST);
+
+        // Check user is allowed to see it.
+        if (!$coursesections->uservisible) {
+            // Note: We actually already know they don't have this capability
+            // or uservisible would have been true; this is just to get the
+            // correct error message shown.
+            require_capability('moodle/course:viewhiddensections', $context);
+        }
         $infoid = $coursesections->id;
         $logparam .= '&sectionid='. $infoid;
     }
@@ -152,7 +162,7 @@
             set_user_preference('usemodchooser', $modchooser);
         }
 
-        if (has_capability('moodle/course:update', $context)) {
+        if (has_capability('moodle/course:sectionvisibility', $context)) {
             if ($hide && confirm_sesskey()) {
                 set_section_visible($course->id, $hide, '0');
                 redirect($PAGE->url);
@@ -162,7 +172,9 @@
                 set_section_visible($course->id, $show, '1');
                 redirect($PAGE->url);
             }
+        }
 
+        if (has_capability('moodle/course:update', $context)) {
             if (!empty($section)) {
                 if (!empty($move) and confirm_sesskey()) {
                     $destsection = $section + $move;
