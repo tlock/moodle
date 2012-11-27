@@ -144,6 +144,7 @@ class backup_assign_activity_structure_step extends backup_activity_structure_st
         // Define file annotations.
         // This file area hasn't itemid.
         $assign->annotate_files('mod_assign', 'intro', null);
+        $assign->annotate_files('assignfeedback_file', 'feedback_template', null);
 
         // Return the root element (choice), wrapped into standard activity structure.
 
