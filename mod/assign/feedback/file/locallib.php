@@ -42,6 +42,9 @@ define('ASSIGNFEEDBACK_FILE_MAXFILEUNZIPTIME', 120);
  */
 class assign_feedback_file extends assign_feedback_plugin {
 
+    // used to generate and compare blank feedback documents for offline grading
+    const BLANK_RTF_TEMPLATE = '{\rtf1\ansi}';
+
     /**
      * Get the name of the file feedback plugin.
      *
@@ -582,8 +585,82 @@ class assign_feedback_file extends assign_feedback_plugin {
     }
 
     /**
-     * Called by the assignment module when someone chooses something from the
-     * grading navigation or batch operations list.
+     * Download feedback templates in a zip
+     *
+     * @return string - The html response
+     */
+    function download_zip() {
+        global $CFG,$DB;
+
+        // more efficient to load this here
+        require_once($CFG->libdir.'/filelib.php');
+
+        $fs = get_file_storage();
+
+        // load all users with submit
+        $students = get_enrolled_users($this->assignment->get_context(), "mod/assign:submit");
+
+        // build a list of files to zip
+        $filesforzipping = array();
+
+        $groupmode = groups_get_activity_groupmode($this->assignment->get_course_module());
+        $groupid = 0;   // All users
+        $groupname = '';
+        if ($groupmode) {
+            $groupid = groups_get_activity_group($this->assignment->get_course_module(), true);
+            $groupname = groups_get_group_name($groupid).'-';
+        }
+
+        // construct the zip file name
+        $filename = clean_filename($this->assignment->get_course()->shortname.'-'.$this->assignment->get_instance()->name.'-'.$groupname.$this->assignment->get_course_module()->id."-feedbacks.zip"); //name of new zip file.
+
+        // create a temp template file
+        $tmp_feedback_filename = tempnam($CFG->tempdir.'/', 'blank_feedback_');
+        file_put_contents($tmp_feedback_filename, self::BLANK_RTF_TEMPLATE);
+        $tmp_feedback_file = new temp_file($tmp_feedback_filename);
+
+        if (!empty($groupname)) {
+            $groupname = ' ' . $groupname;
+        }
+
+        foreach ($students as $student) {
+            $userid = $student->id; //get userid
+            if ((groups_is_member($groupid,$userid) or !$groupmode or !$groupid)) {
+                if ($this->assignment->is_blind_marking()) {
+                    $prefix = clean_filename(get_string('participant', 'assign') . '_' . $groupname . $this->assignment->get_uniqueid_for_user($userid) . "_assignfeedback_file");
+                } else {
+                    $prefix = clean_filename($student->username . ' ' . fullname($student) . $groupname . '_' . $this->assignment->get_uniqueid_for_user($userid) . "_assignfeedback_file");
+                }
+
+                // check if there are any feedback files already for this user
+                $submission = $this->assignment->get_user_submission($userid, false);
+                $makeempty = true;
+                $grade = $this->assignment->get_user_grade($userid, true);
+                    $files = $fs->get_area_files($this->assignment->get_context()->id, 'assignfeedback_file', ASSIGNFEEDBACK_FILE_FILEAREA, $grade->id , "timemodified", false);
+                    if (count($files)) {
+                        foreach ($files as $file) {
+                            $fileforzipname =  $prefix . '_' . str_replace('_', ' ', $file->get_filename());
+                            $filesforzipping[$fileforzipname] = $file;
+                        }
+                        $makeempty = false;
+                    }
+
+                if ($makeempty) {
+                    $fileforzipname =  $prefix . '_Feedback.rtf';
+                    $filesforzipping[$fileforzipname] = $tmp_feedback_file;
+                }
+            }
+        }
+
+        // zip and send
+        if ($zipfile = $this->pack_files($filesforzipping)) {
+            $this->assignment->add_to_log('Download feedback template zip', get_string('downloadzip', 'assignfeedback_file'));
+            send_temp_file($zipfile, $filename); //send file and delete after sending.
+        }
+    }
+
+    /**
+     * Called by the assignment module when someone chooses something from the grading navigation or batch operations list
      *
      * @param string $action - The page to view
      * @return string - The html response
@@ -596,6 +673,9 @@ class assign_feedback_file extends assign_feedback_plugin {
         if ($action == 'uploadzip') {
             return $this->view_upload_zip();
         }
+        if ($action == 'downloadzip') {
+            return $this->download_zip();
+        }
 
         return '';
     }
@@ -607,7 +687,29 @@ class assign_feedback_file extends assign_feedback_plugin {
      * @return array The list of grading actions
      */
     public function get_grading_actions() {
-        return array('uploadzip'=>get_string('uploadzip', 'assignfeedback_file'));
+        return array(
+                        'uploadzip'=>get_string('uploadzip', 'assignfeedback_file'),
+                        'downloadzip'=>get_string('downloadzip', 'assignfeedback_file'),
+                    );
+
+    }
+
+    /**
+     * Generate zip file from array of given files
+     *
+     * @param array $filesforzipping - array of files to pass into archive_to_pathname - this array is indexed by the final file name and each element in the array is an instance of a stored_file object
+     * @return path of temp file - note this returned file does not have a .zip extension - it is a temp file.
+     */
+     private function pack_files($filesforzipping) {
+         global $CFG;
+         //create path for new zip file.
+         $tempzip = tempnam($CFG->tempdir.'/', 'assignment_');
+         //zip files
+         $zipper = new zip_packer();
+         if ($zipper->archive_to_pathname($filesforzipping, $tempzip)) {
+             return $tempzip;
+         }
+         return false;
     }
 
     /**
