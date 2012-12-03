@@ -49,12 +49,15 @@ echo $OUTPUT->doctype() ?>
     <div id="page-content">
         <table id="region-main-box" class="layout-table" summary="layout">
             <tr id="region-post-box">
+                <?php if ($hassidepre) { ?>
                 <td id="region-pre" class="block-region">
                     <div class="region-content">
                             <?php echo $OUTPUT->blocks_for_region('side-pre') ?>
                     </div>
                 </td>
-                <?php if ($hassidepre) { ?>
+                <?php
+                }
+                ?>
                 <td id="region-main-wrap">
                     <div id="region-main">
                         <div class="region-content">
@@ -63,7 +66,6 @@ echo $OUTPUT->doctype() ?>
                     </div>
                 </td>
                 <?php
-                }
                 if ($hassidepost) { ?>
                 <td id="region-post" class="block-region">
                     <div class="region-content">
