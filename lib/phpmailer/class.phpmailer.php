@@ -909,7 +909,8 @@ class PHPMailer {
         }
         $index++;
         if (!$connection) {
-          throw new phpmailerException($this->Lang('connect_host'));
+          $error = $this->smtp->getError();
+          throw new phpmailerException($this->Lang('connect_host').' '.$error['errstr']);
         }
       }
     } catch (phpmailerException $e) {
