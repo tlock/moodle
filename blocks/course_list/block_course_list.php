@@ -23,7 +23,7 @@ class block_course_list extends block_list {
         $this->content->icons = array();
         $this->content->footer = '';
 
-        $icon  = '<img src="' . $OUTPUT->pix_url('i/course') . '" class="icon" alt="" />&nbsp;';
+        $icon  = '<img src="' . $OUTPUT->pix_url('i/course') . '" class="icon" alt="" />';
 
         $adminseesall = true;
         if (isset($CFG->block_course_list_adminview)) {
@@ -109,7 +109,7 @@ class block_course_list extends block_list {
             return;
         }
 
-        $icon = '<img src="'.$OUTPUT->pix_url('i/mnethost') . '" class="icon" alt="" />&nbsp;';
+        $icon = '<img src="'.$OUTPUT->pix_url('i/mnethost') . '" class="icon" alt="" />';
 
         // shortcut - the rest is only for logged in users!
         if (!isloggedin() || isguestuser()) {
@@ -142,6 +142,14 @@ class block_course_list extends block_list {
         return false;
     }
 
+    /**
+     * Returns the role that best describes the course list block.
+     *
+     * @return string
+     */
+    public function get_aria_role() {
+        return 'navigation';
+    }
 }
 
 

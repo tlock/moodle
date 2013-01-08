@@ -933,7 +933,7 @@ class override_permissions_table_advanced extends capability_table_with_risks {
         global $DB;
 
     /// Get the capabilities from the parent context, so that can be shown in the interface.
-        $parentcontext = get_context_instance_by_id(get_parent_contextid($this->context));
+        $parentcontext = context::instance_by_id(get_parent_contextid($this->context));
         $this->parentpermissions = role_context_capabilities($this->roleid, $parentcontext);
     }
 
@@ -996,7 +996,7 @@ abstract class role_assign_user_selector_base extends user_selector_base {
         if (isset($options['context'])) {
             $this->context = $options['context'];
         } else {
-            $this->context = get_context_instance_by_id($options['contextid']);
+            $this->context = context::instance_by_id($options['contextid']);
         }
         $options['accesscontext'] = $this->context;
         parent::__construct($name, $options);
@@ -1043,10 +1043,11 @@ class potential_assignees_below_course extends role_assign_user_selector_base {
                   WHERE u.id IN ($enrolsql)
                         $wherecondition
                         AND ra.id IS NULL";
-        $order = ' ORDER BY lastname ASC, firstname ASC';
-
         $params['contextid'] = $this->context->id;
         $params['roleid'] = $this->roleid;
+
+        list($sort, $sortparams) = users_order_by_sql('u', $search, $this->accesscontext);
+        $order = ' ORDER BY ' . $sort;
 
         // Check to see if there are too many to show sensibly.
         if (!$this->is_validating()) {
@@ -1057,7 +1058,7 @@ class potential_assignees_below_course extends role_assign_user_selector_base {
         }
 
         // If not, show them.
-        $availableusers = $DB->get_records_sql($fields . $sql . $order, $params);
+        $availableusers = $DB->get_records_sql($fields . $sql . $order, array_merge($params, $sortparams));
 
         if (empty($availableusers)) {
             return array();
@@ -1070,6 +1071,135 @@ class potential_assignees_below_course extends role_assign_user_selector_base {
         }
 
         return array($groupname => $availableusers);
+    }
+}
+
+/**
+ * User selector subclass for the selection of users in the check permissions page.
+ *
+ * @copyright 2012 Petr Skoda {@link http://skodak.org}
+ */
+class role_check_users_selector extends user_selector_base {
+    const MAX_ENROLLED_PER_PAGE = 100;
+    const MAX_POTENTIAL_PER_PAGE = 100;
+
+    /** @var bool limit listing of users to enrolled only */
+    var $onlyenrolled;
+
+    /**
+     * Constructor.
+     *
+     * @param string $name the control name/id for use in the HTML.
+     * @param array $options other options needed to construct this selector.
+     * You must be able to clone a userselector by doing new get_class($us)($us->get_name(), $us->get_options());
+     */
+    public function __construct($name, $options) {
+        if (!isset($options['multiselect'])) {
+            $options['multiselect'] = false;
+        }
+        parent::__construct($name, $options);
+
+        $coursecontext = $this->accesscontext->get_course_context(false);
+        if ($coursecontext and $coursecontext->id != SITEID and !has_capability('moodle/role:manage', $coursecontext)) {
+            // Prevent normal teachers from looking up all users.
+            $this->onlyenrolled = true;
+        } else {
+            $this->onlyenrolled = false;
+        }
+    }
+
+    public function find_users($search) {
+        global $DB;
+
+        list($wherecondition, $params) = $this->search_sql($search, 'u');
+
+        $fields      = 'SELECT ' . $this->required_fields_sql('u');
+        $countfields = 'SELECT COUNT(1)';
+
+        $coursecontext = $this->accesscontext->get_course_context(false);
+
+        if ($coursecontext and $coursecontext != SITEID) {
+            $sql1 = " FROM {user} u
+                      JOIN {user_enrolments} ue ON (ue.userid = u.id)
+                      JOIN {enrol} e ON (e.id = ue.enrolid AND e.courseid = :courseid1)
+                     WHERE $wherecondition";
+            $params['courseid1'] = $coursecontext->instanceid;
+
+            if ($this->onlyenrolled) {
+                $sql2 = null;
+            } else {
+                $sql2 = " FROM {user} u
+                     LEFT JOIN ({user_enrolments} ue
+                                JOIN {enrol} e ON (e.id = ue.enrolid AND e.courseid = :courseid2)) ON (ue.userid = u.id)
+                         WHERE $wherecondition
+                               AND ue.id IS NULL";
+                $params['courseid2'] = $coursecontext->instanceid;
+            }
+
+        } else {
+            if ($this->onlyenrolled) {
+                // Bad luck, current user may not view only enrolled users.
+                return array();
+            }
+            $sql1 = null;
+            $sql2 = " FROM {user} u
+                     WHERE $wherecondition";
+        }
+
+        $params['contextid'] = $this->accesscontext->id;
+
+        list($sort, $sortparams) = users_order_by_sql('u', $search, $this->accesscontext);
+        $order = ' ORDER BY ' . $sort;
+
+        $result = array();
+
+        if ($search) {
+            $groupname1 = get_string('enrolledusersmatching', 'enrol', $search);
+            $groupname2 = get_string('potusersmatching', 'role', $search);
+        } else {
+            $groupname1 = get_string('enrolledusers', 'enrol');
+            $groupname2 = get_string('potusers', 'role');
+        }
+
+        if ($sql1) {
+            $enrolleduserscount = $DB->count_records_sql($countfields . $sql1, $params);
+            if (!$this->is_validating() and $enrolleduserscount > $this::MAX_ENROLLED_PER_PAGE) {
+                $result[$groupname1] = array();
+                $toomany = $this->too_many_results($search, $enrolleduserscount);
+                $result[implode(' - ', array_keys($toomany))] = array();
+
+            } else {
+                $enrolledusers = $DB->get_records_sql($fields . $sql1 . $order, array_merge($params, $sortparams));
+                if ($enrolledusers) {
+                    $result[$groupname1] = $enrolledusers;
+                }
+            }
+            if ($sql2) {
+                $result[''] = array();
+            }
+        }
+        if ($sql2) {
+            $otheruserscount = $DB->count_records_sql($countfields . $sql2, $params);
+            if (!$this->is_validating() and $otheruserscount > $this::MAX_POTENTIAL_PER_PAGE) {
+                $result[$groupname2] = array();
+                $toomany = $this->too_many_results($search, $otheruserscount);
+                $result[implode(' - ', array_keys($toomany))] = array();
+            } else {
+                $otherusers = $DB->get_records_sql($fields . $sql2 . $order, array_merge($params, $sortparams));
+                if ($otherusers) {
+                    $result[$groupname2] = $otherusers;
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    protected function get_options() {
+        global $CFG;
+        $options = parent::get_options();
+        $options['file'] = $CFG->admin . '/roles/lib.php';
+        return $options;
     }
 }
 
@@ -1094,7 +1224,9 @@ class potential_assignees_course_and_above extends role_assign_user_selector_bas
                            FROM {role_assignments} r
                           WHERE r.contextid = :contextid
                                 AND r.roleid = :roleid)";
-        $order = ' ORDER BY lastname ASC, firstname ASC';
+
+        list($sort, $sortparams) = users_order_by_sql('', $search, $this->accesscontext);
+        $order = ' ORDER BY ' . $sort;
 
         $params['contextid'] = $this->context->id;
         $params['roleid'] = $this->roleid;
@@ -1106,7 +1238,7 @@ class potential_assignees_course_and_above extends role_assign_user_selector_bas
             }
         }
 
-        $availableusers = $DB->get_records_sql($fields . $sql . $order, $params);
+        $availableusers = $DB->get_records_sql($fields . $sql . $order, array_merge($params, $sortparams));
 
         if (empty($availableusers)) {
             return array();
@@ -1140,6 +1272,9 @@ class existing_role_holders extends role_assign_user_selector_base {
         $params = array_merge($params, $ctxparams);
         $params['roleid'] = $this->roleid;
 
+        list($sort, $sortparams) = users_order_by_sql('u', $search, $this->accesscontext);
+        $params = array_merge($params, $sortparams);
+
         $sql = "SELECT ra.id as raid," . $this->required_fields_sql('u') . ",ra.contextid,ra.component
                 FROM {role_assignments} ra
                 JOIN {user} u ON u.id = ra.userid
@@ -1148,7 +1283,7 @@ class existing_role_holders extends role_assign_user_selector_base {
                     $wherecondition AND
                     ctx.id $ctxcondition AND
                     ra.roleid = :roleid
-                ORDER BY ctx.depth DESC, ra.component, u.lastname, u.firstname";
+                ORDER BY ctx.depth DESC, ra.component, $sort";
         $contextusers = $DB->get_records_sql($sql, $params);
 
         // No users at all.
@@ -1230,7 +1365,7 @@ class existing_role_holders extends role_assign_user_selector_base {
     }
 
     protected function parent_con_group_name($search, $contextid) {
-        $context = get_context_instance_by_id($contextid);
+        $context = context::instance_by_id($contextid);
         $contextname = print_context_name($context, true, true);
         if ($search) {
             $a = new stdClass;
@@ -1477,7 +1612,7 @@ class role_allow_switch_page extends role_allow_role_page {
 function roles_get_potential_user_selector($context, $name, $options) {
         $blockinsidecourse = false;
         if ($context->contextlevel == CONTEXT_BLOCK) {
-            $parentcontext = get_context_instance_by_id(get_parent_contextid($context));
+            $parentcontext = context::instance_by_id(get_parent_contextid($context));
             $blockinsidecourse = in_array($parentcontext->contextlevel, array(CONTEXT_MODULE, CONTEXT_COURSE));
         }
 
@@ -1495,10 +1630,14 @@ class admins_potential_selector extends user_selector_base {
      * @param string $name control name
      * @param array $options should have two elements with keys groupid and courseid.
      */
-    public function __construct() {
-        global $CFG, $USER;
-        $admins = explode(',', $CFG->siteadmins);
-        parent::__construct('addselect', array('multiselect'=>false, 'exclude'=>$admins));
+    public function __construct($name = null, $options = array()) {
+        global $CFG;
+        if (is_null($name)) {
+            $name = 'addselect';
+        }
+        $options['multiselect'] = false;
+        $options['exclude'] = explode(',', $CFG->siteadmins);
+        parent::__construct($name, $options);
     }
 
     public function find_users($search) {
@@ -1510,8 +1649,11 @@ class admins_potential_selector extends user_selector_base {
 
         $sql = " FROM {user}
                 WHERE $wherecondition AND mnethostid = :localmnet";
-        $order = ' ORDER BY lastname ASC, firstname ASC';
+
         $params['localmnet'] = $CFG->mnet_localhost_id; // it could be dangerous to make remote users admins and also this could lead to other problems
+
+        list($sort, $sortparams) = users_order_by_sql('', $search, $this->accesscontext);
+        $order = ' ORDER BY ' . $sort;
 
         // Check to see if there are too many to show sensibly.
         if (!$this->is_validating()) {
@@ -1521,7 +1663,7 @@ class admins_potential_selector extends user_selector_base {
             }
         }
 
-        $availableusers = $DB->get_records_sql($fields . $sql . $order, $params);
+        $availableusers = $DB->get_records_sql($fields . $sql . $order, array_merge($params, $sortparams));
 
         if (empty($availableusers)) {
             return array();
@@ -1549,9 +1691,12 @@ class admins_existing_selector extends user_selector_base {
      * @param string $name control name
      * @param array $options should have two elements with keys groupid and courseid.
      */
-    public function __construct() {
-        global $CFG, $USER;
-        parent::__construct('removeselect', array('multiselect'=>false));
+    public function __construct($name = null, $options = array()) {
+        if (is_null($name)) {
+            $name = 'removeselect';
+        }
+        $options['multiselect'] = false;
+        parent::__construct($name, $options);
     }
 
     public function find_users($search) {
@@ -1568,7 +1713,10 @@ class admins_existing_selector extends user_selector_base {
         }
         $sql = " FROM {user}
                 WHERE $wherecondition";
-        $order = ' ORDER BY lastname ASC, firstname ASC';
+
+        list($sort, $sortparams) = users_order_by_sql('', $search, $this->accesscontext);
+        $params = array_merge($params, $sortparams);
+        $order = ' ORDER BY ' . $sort;
 
         $availableusers = $DB->get_records_sql($fields . $sql . $order, $params);
 
@@ -1577,13 +1725,10 @@ class admins_existing_selector extends user_selector_base {
         }
 
         $mainadmin = array();
-        $adminids = explode(',', $CFG->siteadmins);
-        foreach ($adminids as $id) {
-            if (isset($availableusers[$id])) {
-                $mainadmin = array($id=>$availableusers[$id]);
-                unset($availableusers[$id]);
-                break;
-            }
+        $mainadminuser = get_admin();
+        if ($mainadminuser && isset($availableusers[$mainadminuser->id])) {
+            $mainadmin = array($mainadminuser->id => $availableusers[$mainadminuser->id]);
+            unset($availableusers[$mainadminuser->id]);
         }
 
         $result = array();

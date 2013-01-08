@@ -25,14 +25,19 @@ defined('MOODLE_INTERNAL') || die();
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class tinymce_spellchecker extends editor_tinymce_plugin {
+    /** @var array list of buttons defined by this plugin */
+    protected $buttons = array('spellchecker');
+
     protected function update_init_params(array &$params, context $context,
             array $options = null) {
         global $CFG;
 
         // Check at least one language is supported.
-        $config = $params['moodle_config'];
-        $spelllanguagelist = empty($config->spelllanguagelist) ? '' : $config->spelllanguagelist;
+        $spelllanguagelist = $this->get_config('spelllanguagelist', '');
         if ($spelllanguagelist !== '') {
+            // Prevent the built-in spell checker in Firefox, Safari and other sane browsers.
+            unset($params['gecko_spellcheck']);
+
             // Add button after code button in advancedbuttons3.
             $added = $this->add_button_after($params, 3, 'spellchecker', 'code', false);
 

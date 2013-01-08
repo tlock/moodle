@@ -1696,9 +1696,8 @@ class accesslib_testcase extends advanced_testcase {
 
         // ====== $context->get_child_contexts() ================================
 
-        $CFG->debug = 0;
         $children = $systemcontext->get_child_contexts();
-        $CFG->debug = DEBUG_DEVELOPER;
+        $this->resetDebugging();
         $this->assertEquals(count($children)+1, $DB->count_records('context'));
 
         $context = context_coursecat::instance($testcategories[3]);
@@ -1770,7 +1769,8 @@ class accesslib_testcase extends advanced_testcase {
 
         context_helper::reset_caches();
         context_helper::preload_course($SITE->id);
-        $this->assertEquals(7, context_inspection::test_context_cache_size()); // depends on number of default blocks
+        $numfrontpagemodules = $DB->count_records('course_modules', array('course' => $SITE->id));
+        $this->assertEquals(6 + $numfrontpagemodules, context_inspection::test_context_cache_size()); // depends on number of default blocks
 
         // ====== assign_capability(), unassign_capability() ====================
 
@@ -2075,7 +2075,8 @@ class accesslib_testcase extends advanced_testcase {
         load_all_capabilities();
         $context = context_course::instance($testcourses[2]);
         $page = $DB->get_record('page', array('course'=>$testcourses[2]));
-        $pagecontext = context_module::instance($page->id);
+        $pagecm = get_coursemodule_from_instance('page', $page->id);
+        $pagecontext = context_module::instance($pagecm->id);
 
         $context->mark_dirty();
         $this->assertTrue(isset($ACCESSLIB_PRIVATE->dirtycontexts[$context->path]));
@@ -2271,7 +2272,7 @@ class accesslib_testcase extends advanced_testcase {
 
         foreach ($DB->get_records('context') as $contextid=>$record) {
             $context = context::instance_by_id($contextid);
-            $this->assertSame(get_context_instance_by_id($contextid), $context);
+            $this->assertSame(context::instance_by_id($contextid, IGNORE_MISSING), $context);
             $this->assertSame(get_context_instance($record->contextlevel, $record->instanceid), $context);
             $this->assertSame(get_parent_contexts($context), $context->get_parent_context_ids());
             if ($context->id == SYSCONTEXTID) {
@@ -2281,9 +2282,8 @@ class accesslib_testcase extends advanced_testcase {
             }
         }
 
-        $CFG->debug = 0;
         $children = get_child_contexts($systemcontext);
-        $CFG->debug = DEBUG_DEVELOPER;
+        $this->resetDebugging();
         $this->assertEquals(count($children), $DB->count_records('context')-1);
         unset($children);
 
@@ -2314,7 +2314,8 @@ class accesslib_testcase extends advanced_testcase {
 
         context_helper::reset_caches();
         preload_course_contexts($SITE->id);
-        $this->assertEquals(context_inspection::test_context_cache_size(), 1);
+        $this->assertEquals(1 + $DB->count_records('course_modules', array('course' => $SITE->id)),
+                context_inspection::test_context_cache_size());
 
         context_helper::reset_caches();
         list($select, $join) = context_instance_preload_sql('c.id', CONTEXT_COURSECAT, 'ctx');
@@ -2360,11 +2361,11 @@ class accesslib_testcase extends advanced_testcase {
         $url = get_context_url($coursecontext);
         $this->assertFalse($url instanceof modole_url);
 
-        $page = $DB->get_record('page', array('id'=>$testpages[7]));
-        $context = context_module::instance($page->id);
+        $pagecm = get_coursemodule_from_instance('page', $testpages[7]);
+        $context = context_module::instance($pagecm->id);
         $coursecontext = get_course_context($context);
         $this->assertEquals($coursecontext->contextlevel, CONTEXT_COURSE);
-        $this->assertEquals(get_courseid_from_context($context), $page->course);
+        $this->assertEquals(get_courseid_from_context($context), $pagecm->course);
 
         $caps = fetch_context_capabilities($systemcontext);
         $this->assertTrue(is_array($caps));

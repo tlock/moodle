@@ -62,7 +62,7 @@ if (confirm_sesskey() && (!empty($scoid))) {
             }
             if (substr($element, 0, 15) == 'adl.nav.request') {
                 // SCORM 2004 Sequencing Request
-                require_once($CFG->dirroot.'/mod/scorm/datamodels/sequencinglib.php');
+                require_once($CFG->dirroot.'/mod/scorm/datamodels/scorm_13lib.php');
 
                 $search = array('@continue@', '@previous@', '@\{target=(\S+)\}choice@', '@exit@', '@exitAll@', '@abandon@', '@abandonAll@');
                 $replace = array('continue_', 'previous_', '\1', 'exit_', 'exitall_', 'abandon_', 'abandonall');
@@ -80,12 +80,6 @@ if (confirm_sesskey() && (!empty($scoid))) {
                     if ($matched == 'true') {
                         $request = 'adl.nav.request_valid["'.$action.'"] = "'.$valid.'";';
                     }
-                }
-            }
-            // Log every datamodel update requested
-            if (substr($element, 0, 15) == 'adl.nav.request' || substr($element, 0, 3) == 'cmi') {
-                if (scorm_debugging($scorm)) {
-                    add_to_log($course->id, 'scorm', 'trk: scoid/'.$scoid.' at: '.$attempt, 'view.php?id='.$cm->id, "$element => $value", $cm->id);
                 }
             }
         }

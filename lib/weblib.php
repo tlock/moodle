@@ -1072,7 +1072,7 @@ function format_text($text, $format = FORMAT_MOODLE, $options = NULL, $courseid_
         if (is_object($options['context'])) {
             $context = $options['context'];
         } else {
-            $context = get_context_instance_by_id($options['context']);
+            $context = context::instance_by_id($options['context']);
         }
     } else if ($courseid_do_not_use) {
         // legacy courseid
@@ -1227,14 +1227,16 @@ function format_text($text, $format = FORMAT_MOODLE, $options = NULL, $courseid_
 /**
  * Resets all data related to filters, called during upgrade or when filter settings change.
  *
- * @global object
- * @global object
+ * @param bool $phpunitreset true means called from our PHPUnit integration test reset
  * @return void
  */
-function reset_text_filters_cache() {
+function reset_text_filters_cache($phpunitreset = false) {
     global $CFG, $DB;
 
-    $DB->delete_records('cache_text');
+    if (!$phpunitreset) {
+        $DB->delete_records('cache_text');
+    }
+
     $purifdir = $CFG->cachedir.'/htmlpurifier';
     remove_dir($purifdir, true);
 }
@@ -1281,7 +1283,7 @@ function format_string($string, $striplinks = true, $options = NULL) {
         // fallback to $PAGE->context this may be problematic in CLI and other non-standard pages :-(
         $options['context'] = $PAGE->context;
     } else if (is_numeric($options['context'])) {
-        $options['context'] = get_context_instance_by_id($options['context']);
+        $options['context'] = context::instance_by_id($options['context']);
     }
 
     if (!$options['context']) {
@@ -1838,7 +1840,26 @@ function get_html_lang($dir = false) {
 
 /**
  * Send the HTTP headers that Moodle requires.
- * @param $cacheable Can this page be cached on back?
+ *
+ * There is a backwards compatibility hack for legacy code
+ * that needs to add custom IE compatibility directive.
+ *
+ * Example:
+ * <code>
+ * if (!isset($CFG->additionalhtmlhead)) {
+ *     $CFG->additionalhtmlhead = '';
+ * }
+ * $CFG->additionalhtmlhead .= '<meta http-equiv="X-UA-Compatible" content="IE=8" />';
+ * header('X-UA-Compatible: IE=8');
+ * echo $OUTPUT->header();
+ * </code>
+ *
+ * Please note the $CFG->additionalhtmlhead alone might not work,
+ * you should send the IE compatibility header() too.
+ *
+ * @param string $contenttype
+ * @param bool $cacheable Can this page be cached on back?
+ * @return void, sends HTTP headers
  */
 function send_headers($contenttype, $cacheable = true) {
     global $CFG;
@@ -1846,6 +1867,10 @@ function send_headers($contenttype, $cacheable = true) {
     @header('Content-Type: ' . $contenttype);
     @header('Content-Script-Type: text/javascript');
     @header('Content-Style-Type: text/css');
+
+    if (empty($CFG->additionalhtmlhead) or stripos($CFG->additionalhtmlhead, 'X-UA-Compatible') === false) {
+        @header('X-UA-Compatible: IE=edge');
+    }
 
     if ($cacheable) {
         // Allow caching on "back" (but not on normal clicks)
@@ -2185,6 +2210,7 @@ function navmenulist($course, $sections, $modinfo, $strsection, $strjumpto, $wid
     $menu = array();
     $doneheading = false;
 
+    $courseformatoptions = course_get_format($course)->get_format_options();
     $coursecontext = context_course::instance($course->id);
 
     $menu[] = '<ul class="navmenulist"><li class="jumpto section"><span>'.$strjumpto.'</span><ul>';
@@ -2194,7 +2220,8 @@ function navmenulist($course, $sections, $modinfo, $strsection, $strjumpto, $wid
             continue;
         }
 
-        if ($mod->sectionnum > $course->numsections) {   /// Don't show excess hidden sections
+        // For course formats using 'numsections' do not show extra sections
+        if (isset($courseformatoptions['numsections']) && $mod->sectionnum > $courseformatoptions['numsections']) {
             break;
         }
 
@@ -2205,8 +2232,9 @@ function navmenulist($course, $sections, $modinfo, $strsection, $strjumpto, $wid
         if ($mod->sectionnum >= 0 and $section != $mod->sectionnum) {
             $thissection = $sections[$mod->sectionnum];
 
-            if ($thissection->visible or !$course->hiddensections or
-                      has_capability('moodle/course:viewhiddensections', $coursecontext)) {
+            if ($thissection->visible or
+                    (isset($courseformatoptions['hiddensections']) and !$courseformatoptions['hiddensections']) or
+                    has_capability('moodle/course:viewhiddensections', $coursecontext)) {
                 $thissection->summary = strip_tags(format_string($thissection->summary,true));
                 if (!$doneheading) {
                     $menu[] = '</ul></li>';
@@ -2851,9 +2879,13 @@ function debugging($message = '', $level = DEBUG_NORMAL, $backtrace = null) {
         }
         $from = format_backtrace($backtrace, CLI_SCRIPT);
         if (PHPUNIT_TEST) {
-            echo 'Debugging: ' . $message . "\n" . $from;
+            if (phpunit_util::debugging_triggered($message, $level, $from)) {
+                // We are inside test, the debug message was logged.
+                return true;
+            }
+        }
 
-        } else if (NO_DEBUG_DISPLAY) {
+        if (NO_DEBUG_DISPLAY) {
             // script does not want any errors or debugging in output,
             // we send the info to error log instead
             error_log('Debugging: ' . $message . $from);

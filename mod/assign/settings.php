@@ -27,12 +27,12 @@ defined('MOODLE_INTERNAL') || die;
 require_once($CFG->dirroot . '/mod/assign/adminlib.php');
 
 $ADMIN->add('modules', new admin_category('assignmentplugins',
-                new lang_string('assignmentplugins', 'assign'), !$module->visible));
+                new lang_string('assignmentplugins', 'assign'), $module->is_enabled() === false));
 $ADMIN->add('assignmentplugins', new admin_category('assignsubmissionplugins',
-                new lang_string('submissionplugins', 'assign'), !$module->visible));
+                new lang_string('submissionplugins', 'assign'), $module->is_enabled() === false));
 $ADMIN->add('assignsubmissionplugins', new assign_admin_page_manage_assign_plugins('assignsubmission'));
 $ADMIN->add('assignmentplugins', new admin_category('assignfeedbackplugins',
-                new lang_string('feedbackplugins', 'assign'), !$module->visible));
+                new lang_string('feedbackplugins', 'assign'), $module->is_enabled() === false));
 $ADMIN->add('assignfeedbackplugins', new assign_admin_page_manage_assign_plugins('assignfeedback'));
 
 
@@ -60,7 +60,7 @@ if ($ADMIN->fulltree) {
                        new lang_string('sendsubmissionreceipts_help', 'mod_assign'), 1));
     $settings->add(new admin_setting_configtextarea('assign/submissionstatement',
                        new lang_string('submissionstatement', 'mod_assign'),
-                       new lang_string('submissionstatement_help', 'mod_assign'), ''));
+                       new lang_string('submissionstatement_help', 'mod_assign'), get_string('submissionstatementdefault', 'mod_assign')));
     $settings->add(new admin_setting_configcheckbox('assign/requiresubmissionstatement',
                        new lang_string('requiresubmissionstatement', 'mod_assign'),
                        new lang_string('requiresubmissionstatement_help', 'mod_assign'), 0));

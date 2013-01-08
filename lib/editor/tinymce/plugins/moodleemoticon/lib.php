@@ -24,14 +24,19 @@ defined('MOODLE_INTERNAL') || die();
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class tinymce_moodleemoticon extends editor_tinymce_plugin {
+    /** @var array list of buttons defined by this plugin */
+    protected $buttons = array('moodleemoticon');
+
     protected function update_init_params(array &$params, context $context,
             array $options = null) {
         global $OUTPUT;
 
-        // If emoticon filter is disabled, do not add button.
-        $filters = filter_get_active_in_context($context);
-        if (!array_key_exists('filter/emoticon', $filters)) {
-            return;
+        if ($this->get_config('requireemoticon', 1)) {
+            // If emoticon filter is disabled, do not add button.
+            $filters = filter_get_active_in_context($context);
+            if (!array_key_exists('filter/emoticon', $filters)) {
+                return;
+            }
         }
 
         // Add button after 'image' in advancedbuttons3.

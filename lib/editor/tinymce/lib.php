@@ -27,7 +27,7 @@ defined('MOODLE_INTERNAL') || die();
 
 class tinymce_texteditor extends texteditor {
     /** @var string active version - this is the directory name where to find tinymce code */
-    public $version = '3.6.0';
+    public $version = '3.5.7b';
 
     /**
      * Is the current browser supported by this editor?
@@ -96,10 +96,11 @@ class tinymce_texteditor extends texteditor {
      */
     public function use_editor($elementid, array $options=null, $fpoptions=null) {
         global $PAGE;
+        // Note: use full moodle_url instance to prevent standard JS loader.
         if (debugging('', DEBUG_DEVELOPER)) {
-            $PAGE->requires->js('/lib/editor/tinymce/tiny_mce/'.$this->version.'/tiny_mce_src.js');
+            $PAGE->requires->js(new moodle_url('/lib/editor/tinymce/tiny_mce/'.$this->version.'/tiny_mce_src.js'));
         } else {
-            $PAGE->requires->js('/lib/editor/tinymce/tiny_mce/'.$this->version.'/tiny_mce.js');
+            $PAGE->requires->js(new moodle_url('/lib/editor/tinymce/tiny_mce/'.$this->version.'/tiny_mce.js'));
         }
         $PAGE->requires->js_init_call('M.editor_tinymce.init_editor', array($elementid, $this->get_init_params($elementid, $options)), true);
         if ($fpoptions) {
@@ -122,9 +123,16 @@ class tinymce_texteditor extends texteditor {
         $context = empty($options['context']) ? context_system::instance() : $options['context'];
 
         $config = get_config('editor_tinymce');
+        if (!isset($config->disabledsubplugins)) {
+            $config->disabledsubplugins = '';
+        }
 
         $fontselectlist = empty($config->fontselectlist) ? '' : $config->fontselectlist;
-        $fontbutton = ($fontselectlist === '') ? '' : 'fontselect,';
+
+        $langrev = -1;
+        if (!empty($CFG->cachejs)) {
+            $langrev = get_string_manager()->get_revision();
+        }
 
         $params = array(
             'moodle_config' => $config,
@@ -148,16 +156,10 @@ class tinymce_texteditor extends texteditor {
                 'searchreplace,paste,directionality,fullscreen,nonbreaking,contextmenu,' .
                 'insertdatetime,save,iespell,preview,print,noneditable,visualchars,' .
                 'xhtmlxtras,template,pagebreak',
+            'gecko_spellcheck' => true,
             'theme_advanced_font_sizes' => "1,2,3,4,5,6,7",
             'theme_advanced_layout_manager' => "SimpleLayout",
             'theme_advanced_toolbar_align' => "left",
-            'theme_advanced_buttons1' => $fontbutton . 'fontsizeselect,formatselect,|,' .
-                'undo,redo,|,search,replace,|,fullscreen',
-            'theme_advanced_buttons2' => 'bold,italic,underline,strikethrough,sub,sup,|,' .
-                'justifyleft,justifycenter,justifyright,|,' .
-                'cleanup,removeformat,pastetext,pasteword,|,forecolor,backcolor,|,ltr,rtl',
-            'theme_advanced_buttons3' => 'bullist,numlist,outdent,indent,|,' .
-                'link,unlink,|,image,nonbreaking,charmap,table,|,code',
             'theme_advanced_fonts' => $fontselectlist,
             'theme_advanced_resize_horizontal' => true,
             'theme_advanced_resizing' => true,
@@ -165,7 +167,22 @@ class tinymce_texteditor extends texteditor {
             'min_height' => 30,
             'theme_advanced_toolbar_location' => "top",
             'theme_advanced_statusbar_location' => "bottom",
+            'language_load' => false, // We load all lang strings directly from Moodle.
+            'langrev' => $langrev,
         );
+
+        // Should we override the default toolbar layout unconditionally?
+        $customtoolbar = self::parse_toolbar_setting($config->customtoolbar);
+        if ($customtoolbar) {
+            $i = 1;
+            foreach ($customtoolbar as $line) {
+                $params['theme_advanced_buttons'.$i] = $line;
+                $i++;
+            }
+        } else {
+            // At least one line is required.
+            $params['theme_advanced_buttons1'] = '';
+        }
 
         if (!empty($options['legacy']) or !empty($options['noclean']) or !empty($options['trusted'])) {
             // now deal somehow with non-standard tags, people scream when we do not make moodle code xtml strict,
@@ -177,11 +194,6 @@ class tinymce_texteditor extends texteditor {
         $params['extended_valid_elements'] = 'nolink,tex,algebra,lang[lang]';
         $params['custom_elements'] = 'nolink,~tex,~algebra,lang';
 
-        if (empty($options['legacy'])) {
-            if (isset($options['maxfiles']) and $options['maxfiles'] != 0) {
-                $params['file_browser_callback'] = "M.editor_tinymce.filepicker";
-            }
-        }
         //Add onblur event for client side text validation
         if (!empty($options['required'])) {
             $params['init_instance_callback'] = 'M.editor_tinymce.onblur_event';
@@ -194,6 +206,39 @@ class tinymce_texteditor extends texteditor {
         unset($params['moodle_config']);
 
         return $params;
+    }
+
+    /**
+     * Parse the custom toolbar setting.
+     * @param string $customtoolbar
+     * @return array csv toolbar lines
+     */
+    public static function parse_toolbar_setting($customtoolbar) {
+        $result = array();
+        $customtoolbar = trim($customtoolbar);
+        if ($customtoolbar === '') {
+            return $result;
+        }
+        $customtoolbar = str_replace("\r", "\n", $customtoolbar);
+        $customtoolbar = strtolower($customtoolbar);
+        $i = 0;
+        foreach (explode("\n", $customtoolbar) as $line) {
+            $line = preg_replace('/[^a-z0-9_,\|\-]/', ',', $line);
+            $line = str_replace('|', ',|,', $line);
+            $line = preg_replace('/,,+/', ',', $line);
+            $line = trim($line, ',|');
+            if ($line === '') {
+                continue;
+            }
+            if ($i == 10) {
+                // Maximum is ten lines, merge the rest to the last line.
+                $result[9] = $result[9].','.$line;
+            } else {
+                $result[] = $line;
+                $i++;
+            }
+        }
+        return $result;
     }
 
     /**

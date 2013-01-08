@@ -35,7 +35,7 @@ $group = $DB->get_record('groups', array('id'=>$groupid), '*', MUST_EXIST);
 $course = $DB->get_record('course', array('id'=>$group->courseid), '*', MUST_EXIST);
 
 $PAGE->set_url('/group/members.php', array('group'=>$groupid));
-$PAGE->set_pagelayout('standard');
+$PAGE->set_pagelayout('admin');
 
 require_login($course);
 $context = context_course::instance($course->id);
@@ -67,6 +67,10 @@ if (optional_param('remove', false, PARAM_BOOL) && confirm_sesskey()) {
     $userstoremove = $groupmembersselector->get_selected_users();
     if (!empty($userstoremove)) {
         foreach ($userstoremove as $user) {
+            if (!groups_remove_member_allowed($groupid, $user->id)) {
+                print_error('errorremovenotpermitted', 'group', $returnurl,
+                        $user->fullname);
+            }
             if (!groups_remove_member($groupid, $user->id)) {
                 print_error('erroraddremoveuser', 'group', $returnurl);
             }

@@ -249,14 +249,14 @@ function resource_get_coursemodule_info($coursemodule) {
     }
 
     if ($resource->tobemigrated) {
-        $info->icon ='i/cross_red_big';
+        $info->icon ='i/invalid';
         return $info;
     }
     $fs = get_file_storage();
     $files = $fs->get_area_files($context->id, 'mod_resource', 'content', 0, 'sortorder DESC, id ASC', false); // TODO: this is not very efficient!!
     if (count($files) >= 1) {
         $mainfile = reset($files);
-        $info->icon = file_file_icon($mainfile);
+        $info->icon = file_file_icon($mainfile, 24);
         $resource->mainfile = $mainfile->get_filename();
     }
 
@@ -512,8 +512,8 @@ function resource_dndupload_handle($uploadinfo) {
     $data->popupwidth = $config->popupwidth;
     $data->printheading = $config->printheading;
     $data->printintro = $config->printintro;
-    $data->showsize = $config->showsize;
-    $data->showtype = $config->showtype;
+    $data->showsize = (isset($config->showsize)) ? $config->showsize : 0;
+    $data->showtype = (isset($config->showtype)) ? $config->showtype : 0;
     $data->filterfiles = $config->filterfiles;
 
     return resource_add_instance($data, null);

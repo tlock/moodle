@@ -193,6 +193,7 @@ if (empty($CFG->version)) {
 
 if ($version > $CFG->version) {  // upgrade
     purge_all_caches();
+
     $PAGE->set_pagelayout('maintenance');
     $PAGE->set_popup_notification_allowed(false);
 
@@ -261,6 +262,18 @@ if ($version > $CFG->version) {  // upgrade
         }
 
         $output = $PAGE->get_renderer('core', 'admin');
+
+        $deployer = available_update_deployer::instance();
+        if ($deployer->enabled()) {
+            $deployer->initialize($reloadurl, $reloadurl);
+
+            $deploydata = $deployer->submitted_data();
+            if (!empty($deploydata)) {
+                echo $output->upgrade_plugin_confirm_deploy_page($deployer, $deploydata);
+                die();
+            }
+        }
+
         echo $output->upgrade_plugin_check_page(plugin_manager::instance(), available_update_checker::instance(),
                 $version, $showallplugins, $reloadurl,
                 new moodle_url('/admin/index.php', array('confirmupgrade'=>1, 'confirmrelease'=>1, 'confirmplugincheck'=>1)));
@@ -304,6 +317,17 @@ if (moodle_needs_upgrading()) {
             }
 
             $output = $PAGE->get_renderer('core', 'admin');
+
+            $deployer = available_update_deployer::instance();
+            if ($deployer->enabled()) {
+                $deployer->initialize($PAGE->url, $PAGE->url);
+
+                $deploydata = $deployer->submitted_data();
+                if (!empty($deploydata)) {
+                    echo $output->upgrade_plugin_confirm_deploy_page($deployer, $deploydata);
+                    die();
+                }
+            }
 
             // check plugin dependencies first
             $failed = array();
@@ -352,6 +376,10 @@ if (during_initial_install()) {
             unset($SESSION->sessionverify);
         }
     }
+
+    // Cleanup SESSION to make sure other code does not complain in the future.
+    unset($SESSION->has_timed_out);
+    unset($SESSION->wantsurl);
 
     // at this stage there can be only one admin unless more were added by install - users may change username, so do not rely on that
     $adminids = explode(',', $CFG->siteadmins);
@@ -416,9 +444,30 @@ $cronoverdue = ($lastcron < time() - 3600 * 24);
 $dbproblems = $DB->diagnose();
 $maintenancemode = !empty($CFG->maintenance_enabled);
 
+// Available updates for Moodle core
 $updateschecker = available_update_checker::instance();
-$availableupdates = $updateschecker->get_update_info('core',
+$availableupdates = array();
+$availableupdates['core'] = $updateschecker->get_update_info('core',
     array('minmaturity' => $CFG->updateminmaturity, 'notifybuilds' => $CFG->updatenotifybuilds));
+
+// Available updates for contributed plugins
+$pluginman = plugin_manager::instance();
+foreach ($pluginman->get_plugins() as $plugintype => $plugintypeinstances) {
+    foreach ($plugintypeinstances as $pluginname => $plugininfo) {
+        if (!empty($plugininfo->availableupdates)) {
+            foreach ($plugininfo->availableupdates as $pluginavailableupdate) {
+                if ($pluginavailableupdate->version > $plugininfo->versiondisk) {
+                    if (!isset($availableupdates[$plugintype.'_'.$pluginname])) {
+                        $availableupdates[$plugintype.'_'.$pluginname] = array();
+                    }
+                    $availableupdates[$plugintype.'_'.$pluginname][] = $pluginavailableupdate;
+                }
+            }
+        }
+    }
+}
+
+// The timestamp of the most recent check for available updates
 $availableupdatesfetch = $updateschecker->get_last_timefetched();
 
 $buggyiconvnomb = (!function_exists('mb_convert_encoding') and @iconv('UTF-8', 'UTF-8//IGNORE', '100'.chr(130).'€') !== '100€');

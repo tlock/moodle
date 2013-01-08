@@ -165,6 +165,15 @@ class assign_submission_onlinetext extends assign_submission_plugin {
     }
 
     /**
+     * Return a list of the text fields that can be imported/exported by this plugin
+     *
+     * @return array An array of field names and descriptions. (name=>description, ...)
+     */
+    public function get_editor_fields() {
+        return array('onlinetext' => get_string('pluginname', 'assignsubmission_comments'));
+    }
+
+    /**
      * Get the saved text content from the editor
      *
      * @param string $name
@@ -217,7 +226,12 @@ class assign_submission_onlinetext extends assign_submission_plugin {
         $showviewlink = true;
 
         if ($onlinetextsubmission) {
-            $text = format_text($onlinetextsubmission->onlinetext, $onlinetextsubmission->onlineformat, array('context'=>$this->assignment->get_context()));
+            $text = $this->assignment->render_editor_content(ASSIGNSUBMISSION_ONLINETEXT_FILEAREA,
+                                                             $onlinetextsubmission->submission,
+                                                             $this->get_type(),
+                                                             'onlinetext',
+                                                             'assignsubmission_onlinetext');
+
             $shorttext = shorten_text($text, 140);
             $plagiarismlinks = '';
             if (!empty($CFG->enableplagiarism)) {
@@ -250,7 +264,18 @@ class assign_submission_onlinetext extends assign_submission_plugin {
         if ($onlinetextsubmission) {
             $user = $DB->get_record("user", array("id"=>$submission->userid),'id,username,firstname,lastname', MUST_EXIST);
 
-            $prefix = clean_filename(fullname($user) . "_" .$submission->userid . "_");
+            if (!$this->assignment->is_blind_marking()) {
+                $filename = str_replace('_', '', fullname($user)) . '_' .
+                            $this->assignment->get_uniqueid_for_user($submission->userid) . '_' .
+                            $this->get_name() . '_';
+                $prefix = clean_filename($filename);
+            } else {
+                $filename = get_string('participant', 'assign') . '_' .
+                            $this->assignment->get_uniqueid_for_user($submission->userid) . '_' .
+                            $this->get_name() . '_';
+                $prefix = clean_filename($filename);
+            }
+
             $finaltext = str_replace('@@PLUGINFILE@@/', $prefix, $onlinetextsubmission->onlinetext);
             $submissioncontent = "<html><body>". format_text($finaltext, $onlinetextsubmission->onlineformat, array('context'=>$this->assignment->get_context())). "</body></html>";      //fetched from database
 
@@ -402,7 +427,9 @@ class assign_submission_onlinetext extends assign_submission_plugin {
      * @return bool
      */
     public function is_empty(stdClass $submission) {
-        return $this->view($submission) == '';
+        $onlinetextsubmission = $this->get_onlinetext_submission($submission->id);
+
+        return empty($onlinetextsubmission->onlinetext);
     }
 
     /**

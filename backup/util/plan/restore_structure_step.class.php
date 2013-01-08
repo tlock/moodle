@@ -218,8 +218,14 @@ abstract class restore_structure_step extends restore_step {
      */
     public function add_related_files($component, $filearea, $mappingitemname, $filesctxid = null, $olditemid = null) {
         $filesctxid = is_null($filesctxid) ? $this->task->get_old_contextid() : $filesctxid;
-        restore_dbops::send_files_to_pool($this->get_basepath(), $this->get_restoreid(), $component,
-                                          $filearea, $filesctxid, $this->task->get_userid(), $mappingitemname, $olditemid);
+        $results = restore_dbops::send_files_to_pool($this->get_basepath(), $this->get_restoreid(), $component,
+                $filearea, $filesctxid, $this->task->get_userid(), $mappingitemname, $olditemid);
+        $resultstoadd = array();
+        foreach ($results as $result) {
+            $this->log($result->message, $result->level);
+            $resultstoadd[$result->code] = true;
+        }
+        $this->task->add_result($resultstoadd);
     }
 
     /**
@@ -272,6 +278,7 @@ abstract class restore_structure_step extends restore_step {
     /**
      * As far as restore structure steps are implementing restore_plugin stuff, they need to
      * have the parent task available for wrapping purposes (get course/context....)
+     * @return restore_task|null
      */
     public function get_task() {
         return $this->task;

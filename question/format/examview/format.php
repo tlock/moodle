@@ -37,18 +37,18 @@ require_once($CFG->libdir . '/xmlize.php');
 class qformat_examview extends qformat_based_on_xml {
 
     public $qtypes = array(
-        'tf' => TRUEFALSE,
-        'mc' => MULTICHOICE,
-        'yn' => TRUEFALSE,
-        'co' => SHORTANSWER,
-        'ma' => MATCH,
+        'tf' => 'truefalse',
+        'mc' => 'multichoice',
+        'yn' => 'truefalse',
+        'co' => 'shortanswer',
+        'ma' => 'match',
         'mtf' => 99,
-        'nr' => NUMERICAL,
+        'nr' => 'numerical',
         'pr' => 99,
-        'es' => ESSAY,
+        'es' => 'essay',
         'ca' => 99,
         'ot' => 99,
-        'sa' => SHORTANSWER,
+        'sa' => 'shortanswer',
     );
 
     public $matching_questions = array();
@@ -59,28 +59,6 @@ class qformat_examview extends qformat_based_on_xml {
 
     public function mime_type() {
         return 'application/xml';
-    }
-
-    /**
-     * Some softwares put entities in exported files.
-     * This method try to clean up known problems.
-     * @param string str string to correct
-     * @return string the corrected string
-     */
-    public function cleaninput($str) {
-
-        $html_code_list = array(
-            "&#039;" => "'",
-            "&#8217;" => "'",
-            "&#8220;" => "\"",
-            "&#8221;" => "\"",
-            "&#8211;" => "-",
-            "&#8212;" => "-",
-        );
-        $str = strtr($str, $html_code_list);
-        // Use textlib entities_to_utf8 function to convert only numerical entities.
-        $str = textlib::entities_to_utf8( $str, false);
-        return $str;
     }
 
     /**
@@ -107,19 +85,6 @@ class qformat_examview extends qformat_based_on_xml {
         // Currently we throw the tags we found.
         $text = strip_tags($text);
         return $text;
-    }
-
-    protected function add_blank_combined_feedback($question) {
-        $question->correctfeedback['text'] = '';
-        $question->correctfeedback['format'] = $question->questiontextformat;
-        $question->correctfeedback['files'] = array();
-        $question->partiallycorrectfeedback['text'] = '';
-        $question->partiallycorrectfeedback['format'] = $question->questiontextformat;
-        $question->partiallycorrectfeedback['files'] = array();
-        $question->incorrectfeedback['text'] = '';
-        $question->incorrectfeedback['format'] = $question->questiontextformat;
-        $question->incorrectfeedback['files'] = array();
-        return $question;
     }
 
     public function parse_matching_groups($matching_groups) {
@@ -166,8 +131,8 @@ class qformat_examview extends qformat_based_on_xml {
             $question->questiontext = $htmltext;
             $question->questiontextformat = FORMAT_HTML;
             $question->questiontextfiles = array();
-            $question->name = shorten_text( $question->questiontext, 250 );
-            $question->qtype = MATCH;
+            $question->name = $this->create_default_question_name($question->questiontext, get_string('questionname', 'question'));
+            $question->qtype = 'match';
             $question = $this->add_blank_combined_feedback($question);
             $question->subquestions = array();
             $question->subanswers = array();
@@ -235,26 +200,26 @@ class qformat_examview extends qformat_based_on_xml {
         $question->questiontext = $this->cleaninput($htmltext);
         $question->questiontextformat = FORMAT_HTML;
         $question->questiontextfiles = array();
-        $question->name = shorten_text( $question->questiontext, 250 );
+        $question->name = $this->create_default_question_name($question->questiontext, get_string('questionname', 'question'));
 
         switch ($question->qtype) {
-            case MULTICHOICE:
+            case 'multichoice':
                 $question = $this->parse_mc($qrec['#'], $question);
                 break;
-            case MATCH:
+            case 'match':
                 $groupname = trim($qrec['@']['group']);
                 $question = $this->parse_ma($qrec['#'], $groupname);
                 break;
-            case TRUEFALSE:
+            case 'truefalse':
                 $question = $this->parse_tf_yn($qrec['#'], $question);
                 break;
-            case SHORTANSWER:
+            case 'shortanswer':
                 $question = $this->parse_co($qrec['#'], $question);
                 break;
-            case ESSAY:
+            case 'essay':
                 $question = $this->parse_es($qrec['#'], $question);
                 break;
-            case NUMERICAL:
+            case 'numerical':
                 $question = $this->parse_nr($qrec['#'], $question);
                 break;
                 break;

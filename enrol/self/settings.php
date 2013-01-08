@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,8 +17,7 @@
 /**
  * Self enrolment plugin settings and presets.
  *
- * @package    enrol
- * @subpackage self
+ * @package    enrol_self
  * @copyright  2010 Petr Skoda  {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -39,6 +37,21 @@ if ($ADMIN->fulltree) {
 
     $settings->add(new admin_setting_configcheckbox('enrol_self/showhint',
         get_string('showhint', 'enrol_self'), get_string('showhint_desc', 'enrol_self'), 0));
+
+    // Note: let's reuse the ext sync constants and strings here, internally it is very similar,
+    //       it describes what should happend when users are not supposed to be enerolled any more.
+    $options = array(
+        ENROL_EXT_REMOVED_KEEP           => get_string('extremovedkeep', 'enrol'),
+        ENROL_EXT_REMOVED_SUSPENDNOROLES => get_string('extremovedsuspendnoroles', 'enrol'),
+        ENROL_EXT_REMOVED_UNENROL        => get_string('extremovedunenrol', 'enrol'),
+    );
+    $settings->add(new admin_setting_configselect('enrol_self/expiredaction', get_string('expiredaction', 'enrol_self'), get_string('expiredaction_help', 'enrol_self'), ENROL_EXT_REMOVED_KEEP, $options));
+
+    $options = array();
+    for ($i=0; $i<24; $i++) {
+        $options[$i] = $i;
+    }
+    $settings->add(new admin_setting_configselect('enrol_self/expirynotifyhour', get_string('expirynotifyhour', 'core_enrol'), '', 6, $options));
 
     //--- enrol instance defaults ----------------------------------------------------------------------------
     $settings->add(new admin_setting_heading('enrol_self_defaults',
@@ -67,6 +80,13 @@ if ($ADMIN->fulltree) {
 
     $settings->add(new admin_setting_configduration('enrol_self/enrolperiod',
         get_string('enrolperiod', 'enrol_self'), get_string('enrolperiod_desc', 'enrol_self'), 0));
+
+    $options = array(0 => get_string('no'), 1 => get_string('expirynotifyenroller', 'core_enrol'), 2 => get_string('expirynotifyall', 'core_enrol'));
+    $settings->add(new admin_setting_configselect('enrol_self/expirynotify',
+        get_string('expirynotify', 'core_enrol'), get_string('expirynotify_help', 'core_enrol'), 0, $options));
+
+    $settings->add(new admin_setting_configduration('enrol_self/expirythreshold',
+        get_string('expirythreshold', 'core_enrol'), get_string('expirythreshold_help', 'core_enrol'), 86400, 86400));
 
     $options = array(0 => get_string('never'),
                      1800 * 3600 * 24 => get_string('numdays', '', 1800),

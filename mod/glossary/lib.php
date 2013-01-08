@@ -637,7 +637,7 @@ function glossary_rating_permissions($contextid, $component, $ratingarea) {
         // default restrictive permissions.
         return null;
     }
-    $context = get_context_instance_by_id($contextid);
+    $context = context::instance_by_id($contextid);
     return array(
         'view'    => has_capability('mod/glossary:viewrating', $context),
         'viewany' => has_capability('mod/glossary:viewanyrating', $context),
@@ -1234,7 +1234,8 @@ function glossary_print_entry_icons($course, $cm, $glossary, $entry, $mode='',$h
 
     if (!$entry->approved) {
         $output = true;
-        $return .= get_string('entryishidden','glossary');
+        $return .= html_writer::tag('span', get_string('entryishidden','glossary'),
+            array('class' => 'glossary-hidden-note'));
     }
 
     $iscurrentuser = ($entry->userid == $USER->id);
@@ -1245,7 +1246,7 @@ function glossary_print_entry_icons($course, $cm, $glossary, $entry, $mode='',$h
             $mainglossary = $DB->get_record('glossary', array('mainglossary'=>1,'course'=>$course->id));
             if ( $mainglossary ) {  // if there is a main glossary defined, allow to export the current entry
                 $output = true;
-                $return .= ' <a title="'.get_string('exporttomainglossary','glossary') . '" href="exportentry.php?id='.$entry->id.'&amp;prevmode='.$mode.'&amp;hook='.urlencode($hook).'"><img src="'.$OUTPUT->pix_url('export', 'glossary').'" class="iconsmall" alt="'.get_string('exporttomainglossary','glossary').$altsuffix.'" /></a>';
+                $return .= '<a class="action-icon" title="'.get_string('exporttomainglossary','glossary') . '" href="exportentry.php?id='.$entry->id.'&amp;prevmode='.$mode.'&amp;hook='.urlencode($hook).'"><img src="'.$OUTPUT->pix_url('export', 'glossary').'" class="smallicon" alt="'.get_string('exporttomainglossary','glossary').$altsuffix.'" /></a>';
             }
         }
 
@@ -1261,19 +1262,19 @@ function glossary_print_entry_icons($course, $cm, $glossary, $entry, $mode='',$h
         $ineditperiod = ((time() - $entry->timecreated <  $CFG->maxeditingtime) || $glossary->editalways);
         if ( !$importedentry and (has_capability('mod/glossary:manageentries', $context) or ($entry->userid == $USER->id and ($ineditperiod and has_capability('mod/glossary:write', $context))))) {
             $output = true;
-            $return .= " <a title=\"" . get_string("delete") . "\" href=\"deleteentry.php?id=$cm->id&amp;mode=delete&amp;entry=$entry->id&amp;prevmode=$mode&amp;hook=".urlencode($hook)."\"><img src=\"";
+            $return .= "<a class='action-icon' title=\"" . get_string("delete") . "\" href=\"deleteentry.php?id=$cm->id&amp;mode=delete&amp;entry=$entry->id&amp;prevmode=$mode&amp;hook=".urlencode($hook)."\"><img src=\"";
             $return .= $icon;
-            $return .= "\" class=\"iconsmall\" alt=\"" . get_string("delete") .$altsuffix."\" /></a> ";
+            $return .= "\" class=\"smallicon\" alt=\"" . get_string("delete") .$altsuffix."\" /></a>";
 
-            $return .= " <a title=\"" . get_string("edit") . "\" href=\"edit.php?cmid=$cm->id&amp;id=$entry->id&amp;mode=$mode&amp;hook=".urlencode($hook)."\"><img src=\"" . $OUTPUT->pix_url('t/edit') . "\" class=\"iconsmall\" alt=\"" . get_string("edit") .$altsuffix. "\" /></a>";
+            $return .= "<a class='action-icon' title=\"" . get_string("edit") . "\" href=\"edit.php?cmid=$cm->id&amp;id=$entry->id&amp;mode=$mode&amp;hook=".urlencode($hook)."\"><img src=\"" . $OUTPUT->pix_url('t/edit') . "\" class=\"smallicon\" alt=\"" . get_string("edit") .$altsuffix. "\" /></a>";
         } elseif ( $importedentry ) {
-            $return .= " <font size=\"-1\">" . get_string("exportedentry","glossary") . "</font>";
+            $return .= "<font size=\"-1\">" . get_string("exportedentry","glossary") . "</font>";
         }
     }
     if (!empty($CFG->enableportfolios) && (has_capability('mod/glossary:exportentry', $context) || ($iscurrentuser && has_capability('mod/glossary:exportownentry', $context)))) {
         require_once($CFG->libdir . '/portfoliolib.php');
         $button = new portfolio_add_button();
-        $button->set_callback_options('glossary_entry_portfolio_caller',  array('id' => $cm->id, 'entryid' => $entry->id), '/mod/glossary/locallib.php');
+        $button->set_callback_options('glossary_entry_portfolio_caller',  array('id' => $cm->id, 'entryid' => $entry->id), 'mod_glossary');
 
         $filecontext = $context;
         if ($entry->sourceglossaryid == $cm->instance) {
@@ -1282,7 +1283,9 @@ function glossary_print_entry_icons($course, $cm, $glossary, $entry, $mode='',$h
             }
         }
         $fs = get_file_storage();
-        if ($files = $fs->get_area_files($filecontext->id, 'mod_glossary', 'attachment', $entry->id, "timemodified", false)) {
+        if ($files = $fs->get_area_files($filecontext->id, 'mod_glossary', 'attachment', $entry->id, "timemodified", false)
+         || $files = $fs->get_area_files($filecontext->id, 'mod_glossary', 'entry', $entry->id, "timemodified", false)) {
+
             $button->set_formats(PORTFOLIO_FORMAT_RICHHTML);
         } else {
             $button->set_formats(PORTFOLIO_FORMAT_PLAINHTML);
@@ -1290,8 +1293,6 @@ function glossary_print_entry_icons($course, $cm, $glossary, $entry, $mode='',$h
 
         $return .= $button->to_html(PORTFOLIO_ADD_ICON_LINK);
     }
-    $return .= "&nbsp;&nbsp;"; // just to make up a little the output in Mozilla ;)
-
     $return .= '</span>';
 
     if (!empty($CFG->usecomments) && has_capability('mod/glossary:comment', $context) and $glossary->allowcomments) {
@@ -1392,7 +1393,11 @@ function  glossary_print_entry_approval($cm, $entry, $mode, $align="right", $ins
         if ($insidetable) {
             echo '<table class="glossaryapproval" align="'.$align.'"><tr><td align="'.$align.'">';
         }
-        echo '<a title="'.get_string('approve','glossary').'" href="approve.php?eid='.$entry->id.'&amp;mode='.$mode.'&amp;sesskey='.sesskey().'"><img align="'.$align.'" src="'.$OUTPUT->pix_url('i/approve') . '" style="border:0px; width:34px; height:34px" alt="'.get_string('approve','glossary').'" /></a>';
+        echo $OUTPUT->action_icon(
+            new moodle_url('approve.php', array('eid' => $entry->id, 'mode' => $mode, 'sesskey' => sesskey())),
+            new pix_icon('t/approve', get_string('approve','glossary'), '',
+                array('class' => 'iconsmall', 'align' => $align))
+        );
         if ($insidetable) {
             echo '</td></tr></table>';
         }

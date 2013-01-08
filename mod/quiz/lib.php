@@ -138,6 +138,14 @@ function quiz_update_instance($quiz, $mform) {
         quiz_update_grades($quiz);
     }
 
+    $updateattempts = $oldquiz->timelimit != $quiz->timelimit
+                   || $oldquiz->timeclose != $quiz->timeclose
+                   || $oldquiz->graceperiod != $quiz->graceperiod;
+    if ($updateattempts) {
+        require_once($CFG->dirroot . '/mod/quiz/locallib.php');
+        quiz_update_open_attempts(array('quizid'=>$quiz->id));
+    }
+
     // Delete any previous preview attempts.
     quiz_delete_previews($quiz);
 
@@ -284,13 +292,25 @@ function quiz_update_effective_access($quiz, $userid) {
             $override->timeopen = min($opens);
         }
         if (is_null($override->timeclose) && count($closes)) {
-            $override->timeclose = max($closes);
+            if (in_array(0, $closes)) {
+                $override->timeclose = 0;
+            } else {
+                $override->timeclose = max($closes);
+            }
         }
         if (is_null($override->timelimit) && count($limits)) {
-            $override->timelimit = max($limits);
+            if (in_array(0, $limits)) {
+                $override->timelimit = 0;
+            } else {
+                $override->timelimit = max($limits);
+            }
         }
         if (is_null($override->attempts) && count($attempts)) {
-            $override->attempts = max($attempts);
+            if (in_array(0, $attempts)) {
+                $override->attempts = 0;
+            } else {
+                $override->attempts = max($attempts);
+            }
         }
         if (is_null($override->password) && count($passwords)) {
             $override->password = array_shift($passwords);
@@ -446,32 +466,20 @@ function quiz_user_complete($course, $user, $mod, $quiz) {
  */
 function quiz_cron() {
     global $CFG;
+
+    require_once($CFG->dirroot . '/mod/quiz/cronlib.php');
     mtrace('');
 
-    // Since the quiz specifies $module->cron = 60, so that the subplugins can
-    // have frequent cron if they need it, we now need to do our own scheduling.
-    $quizconfig = get_config('quiz');
-    if (!isset($quizconfig->overduelastrun)) {
-        $quizconfig->overduelastrun = 0;
-        $quizconfig->overduedoneto  = 0;
-    }
-
     $timenow = time();
-    if ($timenow > $quizconfig->overduelastrun + 3600) {
-        require_once($CFG->dirroot . '/mod/quiz/cronlib.php');
-        $overduehander = new mod_quiz_overdue_attempt_updater();
+    $overduehander = new mod_quiz_overdue_attempt_updater();
 
-        $processto = $timenow - $quizconfig->graceperiodmin;
+    $processto = $timenow - get_config('quiz', 'graceperiodmin');
 
-        mtrace('  Looking for quiz overdue quiz attempts between ' .
-                userdate($quizconfig->overduedoneto) . ' and ' . userdate($processto) . '...');
+    mtrace('  Looking for quiz overdue quiz attempts...');
 
-        list($count, $quizcount) = $overduehander->update_overdue_attempts($timenow, $quizconfig->overduedoneto, $processto);
-        set_config('overduelastrun', $timenow, 'quiz');
-        set_config('overduedoneto', $processto, 'quiz');
+    list($count, $quizcount) = $overduehander->update_overdue_attempts($timenow, $processto);
 
-        mtrace('  Considered ' . $count . ' attempts in ' . $quizcount . ' quizzes.');
-    }
+    mtrace('  Considered ' . $count . ' attempts in ' . $quizcount . ' quizzes.');
 
     // Run cron for our sub-plugin types.
     cron_execute_plugin_type('quiz', 'quiz reports');
@@ -885,6 +893,7 @@ function quiz_get_recent_mod_activity(&$activities, &$index, $timestart,
         $tmpactivity->sectionnum = $cm->sectionnum;
         $tmpactivity->timestamp  = $attempt->timefinish;
 
+        $tmpactivity->content = new stdClass();
         $tmpactivity->content->attemptid = $attempt->id;
         $tmpactivity->content->attempt   = $attempt->attempt;
         if (quiz_has_grades($quiz) && $options->marks >= question_display_options::MARK_AND_MAX) {
@@ -895,6 +904,7 @@ function quiz_get_recent_mod_activity(&$activities, &$index, $timestart,
             $tmpactivity->content->maxgrade  = null;
         }
 
+        $tmpactivity->user = new stdClass();
         $tmpactivity->user->id        = $attempt->userid;
         $tmpactivity->user->firstname = $attempt->firstname;
         $tmpactivity->user->lastname  = $attempt->lastname;
@@ -1024,6 +1034,8 @@ function quiz_process_options($quiz) {
         $quiz->feedbackboundaries[-1] = $quiz->grade + 1;
         $quiz->feedbackboundaries[$numboundaries] = 0;
         $quiz->feedbackboundarycount = $numboundaries;
+    } else {
+        $quiz->feedbackboundarycount = -1;
     }
 
     // Combing the individual settings into the review columns.
@@ -1150,8 +1162,14 @@ function quiz_update_events($quiz, $override = null) {
         $addopen  = empty($current->id) || !empty($current->timeopen);
         $addclose = empty($current->id) || !empty($current->timeclose);
 
+        if (!empty($quiz->coursemodule)) {
+            $cmid = $quiz->coursemodule;
+        } else {
+            $cmid = get_coursemodule_from_instance('quiz', $quiz->id, $quiz->course)->id;
+        }
+
         $event = new stdClass();
-        $event->description = format_module_intro('quiz', $quiz, $quiz->coursemodule);
+        $event->description = format_module_intro('quiz', $quiz, $cmid);
         // Events module won't show user events when the courseid is nonzero.
         $event->courseid    = ($userid) ? 0 : $quiz->course;
         $event->groupid     = $groupid;
@@ -1341,8 +1359,18 @@ function quiz_reset_userdata($data) {
 
     // Updating dates - shift may be negative too.
     if ($data->timeshift) {
+        $DB->execute("UPDATE {quiz_overrides}
+                         SET timeopen = timeopen + ?
+                       WHERE quiz IN (SELECT id FROM {quiz} WHERE course = ?)
+                         AND timeopen <> 0", array($data->timeshift, $data->courseid));
+        $DB->execute("UPDATE {quiz_overrides}
+                         SET timeclose = timeclose + ?
+                       WHERE quiz IN (SELECT id FROM {quiz} WHERE course = ?)
+                         AND timeclose <> 0", array($data->timeshift, $data->courseid));
+
         shift_course_mod_dates('quiz', array('timeopen', 'timeclose'),
                 $data->timeshift, $data->courseid);
+
         $status[] = array(
             'component' => $componentstr,
             'item' => get_string('openclosedatesupdated', 'quiz'),
@@ -1350,54 +1378,6 @@ function quiz_reset_userdata($data) {
     }
 
     return $status;
-}
-
-/**
- * Checks whether the current user is allowed to view a file uploaded in a quiz.
- * Teachers can view any from their courses, students can only view their own.
- *
- * @param int $attemptuniqueid int attempt id
- * @param int $questionid int question id
- * @return bool to indicate access granted or denied
- */
-function quiz_check_file_access($attemptuniqueid, $questionid, $context = null) {
-    global $USER, $DB, $CFG;
-    require_once($CFG->dirroot . '/mod/quiz/locallib.php');
-
-    $attempt = $DB->get_record('quiz_attempts', array('uniqueid' => $attemptuniqueid));
-    $attemptobj = quiz_attempt::create($attempt->id);
-
-    // Does the question exist?
-    if (!$question = $DB->get_record('question', array('id' => $questionid))) {
-        return false;
-    }
-
-    if ($context === null) {
-        $quiz = $DB->get_record('quiz', array('id' => $attempt->quiz));
-        $cm = get_coursemodule_from_id('quiz', $quiz->id);
-        $context = context_module::instance($cm->id);
-    }
-
-    // Load those questions and the associated states.
-    $attemptobj->load_questions(array($questionid));
-    $attemptobj->load_question_states(array($questionid));
-
-    // Obtain the state.
-    $state = $attemptobj->get_question_state($questionid);
-    // Obtain the question.
-    $question = $attemptobj->get_question($questionid);
-
-    // Access granted if the current user submitted this file.
-    if ($attempt->userid != $USER->id) {
-        return false;
-    }
-    // Access granted if the current user has permission to grade quizzes in this course.
-    if (!(has_capability('mod/quiz:viewreports', $context) ||
-            has_capability('mod/quiz:grade', $context))) {
-        return false;
-    }
-
-    return array($question, $state, array());
 }
 
 /**
@@ -1668,7 +1648,7 @@ function quiz_extend_settings_navigation($settings, $quiznode) {
                 array('cmid'=>$PAGE->cm->id, 'sesskey'=>sesskey()));
         $node = navigation_node::create(get_string('preview', 'quiz'), $url,
                 navigation_node::TYPE_SETTING, null, 'mod_quiz_preview',
-                new pix_icon('t/preview', ''));
+                new pix_icon('i/preview', ''));
         $quiznode->add_node($node, $beforekey);
     }
 

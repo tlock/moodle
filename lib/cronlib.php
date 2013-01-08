@@ -350,6 +350,9 @@ function cron_run() {
     cron_execute_plugin_type('gradereport');
     mtrace('Finished gradebook plugins');
 
+    // run calendar cron
+    require_once "{$CFG->dirroot}/calendar/lib.php";
+    calendar_cron();
 
     // Run external blog cron if needed
     if (!empty($CFG->enableblogs) && $CFG->useexternalblogs) {
@@ -465,10 +468,6 @@ function cron_run() {
     // cleanup file trash - not very important
     $fs = get_file_storage();
     $fs->cron();
-
-    mtrace("Clean up cached external files");
-    // 1 week
-    cache_file::cleanup(array(), 60 * 60 * 24 * 7);
 
     mtrace("Cron script completed correctly");
 

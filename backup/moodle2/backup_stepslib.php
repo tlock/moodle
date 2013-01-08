@@ -341,6 +341,9 @@ class backup_module_structure_step extends backup_structure_step {
         // many plagiarism plugins storing information about this course
         $this->add_plugin_structure('plagiarism', $module, true);
 
+        // attach local plugin structure to $module, multiple allowed
+        $this->add_plugin_structure('local', $module, true);
+
         // Define the tree
         $module->add_child($availinfo);
         $availinfo->add_child($availability);
@@ -386,6 +389,9 @@ class backup_section_structure_step extends backup_structure_step {
         // attach format plugin structure to $section element, only one allowed
         $this->add_plugin_structure('format', $section, false);
 
+        // attach local plugin structure to $section element, multiple allowed
+        $this->add_plugin_structure('local', $section, true);
+
         // Add nested elements for _availability table
         $avail = new backup_nested_element('availability', array('id'), array(
                 'sourcecmid', 'requiredcompletion', 'gradeitemid', 'grademin', 'grademax'));
@@ -393,6 +399,11 @@ class backup_section_structure_step extends backup_structure_step {
             'userfield', 'operator', 'value', 'customfield', 'customfieldtype'));
         $section->add_child($avail);
         $section->add_child($availfield);
+
+        // Add nested elements for course_format_options table
+        $formatoptions = new backup_nested_element('course_format_options', array('id'), array(
+            'format', 'name', 'value'));
+        $section->add_child($formatoptions);
 
         // Define sources
         $section->set_source_table('course_sections', array('id' => backup::VAR_SECTIONID));
@@ -402,6 +413,12 @@ class backup_section_structure_step extends backup_structure_step {
               FROM {course_sections_avail_fields} csaf
          LEFT JOIN {user_info_field} uif ON uif.id = csaf.customfieldid
              WHERE csaf.coursesectionid = ?', array(backup::VAR_SECTIONID));
+        $formatoptions->set_source_sql('SELECT cfo.id, cfo.format, cfo.name, cfo.value
+              FROM {course} c
+              JOIN {course_format_options} cfo
+              ON cfo.courseid = c.id AND cfo.format = c.format
+              WHERE c.id = ? AND cfo.sectionid = ?',
+                array(backup::VAR_COURSEID, backup::VAR_SECTIONID));
 
         // Aliases
         $section->set_source_alias('section', 'number');
@@ -428,10 +445,10 @@ class backup_course_structure_step extends backup_structure_step {
 
         $course = new backup_nested_element('course', array('id', 'contextid'), array(
             'shortname', 'fullname', 'idnumber',
-            'summary', 'summaryformat', 'format', 'coursedisplay', 'showgrades',
-            'newsitems', 'startdate', 'numsections',
+            'summary', 'summaryformat', 'format', 'showgrades',
+            'newsitems', 'startdate',
             'marker', 'maxbytes', 'legacyfiles', 'showreports',
-            'visible', 'hiddensections', 'groupmode', 'groupmodeforce',
+            'visible', 'groupmode', 'groupmodeforce',
             'defaultgroupingid', 'lang', 'theme',
             'timecreated', 'timemodified',
             'requested',
@@ -464,6 +481,10 @@ class backup_course_structure_step extends backup_structure_step {
         // many plagiarism plugins storing information about this course
         $this->add_plugin_structure('plagiarism', $course, true);
 
+        // attach local plugin structure to $course element; multiple local plugins
+        // can save course data if required
+        $this->add_plugin_structure('local', $course, true);
+
         // Build the tree
 
         $course->add_child($category);
@@ -475,6 +496,12 @@ class backup_course_structure_step extends backup_structure_step {
 
         $courserec = $DB->get_record('course', array('id' => $this->task->get_courseid()));
         $courserec->contextid = $this->task->get_contextid();
+
+        $formatoptions = course_get_format($courserec)->get_format_options();
+        $course->add_final_elements(array_keys($formatoptions));
+        foreach ($formatoptions as $key => $value) {
+            $courserec->$key = $value;
+        }
 
         $course->set_source_array(array($courserec));
 
@@ -520,11 +547,14 @@ class backup_enrolments_structure_step extends backup_structure_step {
         $enrols = new backup_nested_element('enrols');
 
         $enrol = new backup_nested_element('enrol', array('id'), array(
-            'enrol', 'status', 'sortorder', 'name', 'enrolperiod', 'enrolstartdate',
+            'enrol', 'status', 'name', 'enrolperiod', 'enrolstartdate',
             'enrolenddate', 'expirynotify', 'expirytreshold', 'notifyall',
-            'password', 'cost', 'currency', 'roleid', 'customint1', 'customint2', 'customint3',
-            'customint4', 'customchar1', 'customchar2', 'customdec1', 'customdec2',
-            'customtext1', 'customtext2', 'timecreated', 'timemodified'));
+            'password', 'cost', 'currency', 'roleid',
+            'customint1', 'customint2', 'customint3', 'customint4', 'customint5', 'customint6', 'customint7', 'customint8',
+            'customchar1', 'customchar2', 'customchar3',
+            'customdec1', 'customdec2',
+            'customtext1', 'customtext2', 'customtext3', 'customtext4',
+            'timecreated', 'timemodified'));
 
         $userenrolments = new backup_nested_element('user_enrolments');
 
@@ -538,9 +568,8 @@ class backup_enrolments_structure_step extends backup_structure_step {
         $enrol->add_child($userenrolments);
         $userenrolments->add_child($enrolment);
 
-        // Define sources
-
-        $enrol->set_source_table('enrol', array('courseid' => backup::VAR_COURSEID));
+        // Define sources - the instances are restored using the same sortorder, we do not need to store it in xml and deal with it afterwards.
+        $enrol->set_source_sql("SELECT * FROM {enrol} WHERE courseid = :courseid ORDER BY sortorder", array('courseid' => backup::VAR_COURSEID));
 
         // User enrolments only added only if users included
         if ($users) {
@@ -883,7 +912,7 @@ class backup_gradebook_structure_step extends backup_structure_step {
         $grade_category   = new backup_nested_element('grade_category', array('id'), array(
                 //'courseid',
                 'parent', 'depth', 'path', 'fullname', 'aggregation', 'keephigh',
-                'dropload', 'aggregateonlygraded', 'aggregateoutcomes', 'aggregatesubcats',
+                'droplow', 'aggregateonlygraded', 'aggregateoutcomes', 'aggregatesubcats',
                 'timecreated', 'timemodified', 'hidden'));
 
         $letters = new backup_nested_element('grade_letters');
@@ -1002,7 +1031,7 @@ class backup_groups_structure_step extends backup_structure_step {
         $members = new backup_nested_element('group_members');
 
         $member = new backup_nested_element('group_member', array('id'), array(
-            'userid', 'timeadded'));
+            'userid', 'timeadded', 'component', 'itemid'));
 
         $groupings = new backup_nested_element('groupings');
 
@@ -1094,7 +1123,7 @@ class backup_users_structure_step extends backup_structure_step {
             'lastaccess', 'lastlogin', 'currentlogin',
             'mailformat', 'maildigest', 'maildisplay', 'htmleditor',
             'autosubscribe', 'trackforums', 'timecreated',
-            'timemodified', 'trustbitmask', 'screenreader');
+            'timemodified', 'trustbitmask');
 
         // Then, the fields potentially needing anonymization
         $anonfields = array(
@@ -1783,6 +1812,9 @@ class backup_questions_structure_step extends backup_structure_step {
         // attach qtype plugin structure to $question element, only one allowed
         $this->add_plugin_structure('qtype', $question, false);
 
+        // attach local plugin stucture to $question element, multiple allowed
+        $this->add_plugin_structure('local', $question, true);
+
         $qhints = new backup_nested_element('question_hints');
 
         $qhint = new backup_nested_element('question_hint', array('id'), array(
@@ -1902,12 +1934,18 @@ class backup_activity_grading_structure_step extends backup_structure_step {
         // Build the tree including the method specific structures
         // (beware - the order of how gradingform plugins structures are attached is important)
         $areas->add_child($area);
+        // attach local plugin stucture to $area element, multiple allowed
+        $this->add_plugin_structure('local', $area, true);
         $area->add_child($definitions);
         $definitions->add_child($definition);
         $this->add_plugin_structure('gradingform', $definition, true);
+        // attach local plugin stucture to $definition element, multiple allowed
+        $this->add_plugin_structure('local', $definition, true);
         $definition->add_child($instances);
         $instances->add_child($instance);
         $this->add_plugin_structure('gradingform', $instance, false);
+        // attach local plugin stucture to $instance element, multiple allowed
+        $this->add_plugin_structure('local', $instance, true);
 
         // Define data sources
 

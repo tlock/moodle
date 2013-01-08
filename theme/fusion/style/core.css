@@ -189,6 +189,10 @@ h6{
     padding: 2px 5px 0 0;
 }
 
+#course-header, #course-footer {
+    margin:5px 20px 0 0;
+}
+
 /* Navbar
 ----------------------------*/
 
@@ -389,4 +393,9 @@ h2.headingblock {
 #page-mod-assignment-submissions #attempts td,
 #page-mod-assignment-submissions #attempts th.header {
     font-size: 80%;
+}
+
+.course-content ul.topics,
+.course-content ul.weeks {
+    clear: both;
 }

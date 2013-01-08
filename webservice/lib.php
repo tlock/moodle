@@ -564,7 +564,7 @@ class webservice {
             //detect the missing capabilities
             foreach ($servicecaps as $functioname => $functioncaps) {
                 foreach ($functioncaps as $functioncap) {
-                    if (!key_exists($functioncap, $usercaps)) {
+                    if (!array_key_exists($functioncap, $usercaps)) {
                         if (!isset($usersmissingcaps[$user->id])
                                 or array_search($functioncap, $usersmissingcaps[$user->id]) === false) {
                             $usersmissingcaps[$user->id][] = $functioncap;
@@ -949,7 +949,7 @@ abstract class webservice_server implements webservice_server_interface {
                     . ' is not supported - check this allowed user');
         }
 
-        $this->restricted_context = get_context_instance_by_id($token->contextid);
+        $this->restricted_context = context::instance_by_id($token->contextid);
         $this->restricted_serviceid = $token->externalserviceid;
 
         $user = $DB->get_record('user', array('id'=>$token->userid), '*', MUST_EXIST);

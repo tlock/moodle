@@ -15,6 +15,16 @@ $showsidepost = $hassidepost && !$PAGE->blocks->region_completely_docked('side-p
 $custommenu = $OUTPUT->custom_menu();
 $hascustommenu = (empty($PAGE->layout_options['nocustommenu']) && !empty($custommenu));
 
+$courseheader = $coursecontentheader = $coursecontentfooter = $coursefooter = '';
+if (empty($PAGE->layout_options['nocourseheaderfooter'])) {
+    $courseheader = $OUTPUT->course_header();
+    $coursecontentheader = $OUTPUT->course_content_header();
+    if (empty($PAGE->layout_options['nocoursefooter'])) {
+        $coursecontentfooter = $OUTPUT->course_content_footer();
+        $coursefooter = $OUTPUT->course_footer();
+    }
+}
+
 $bodyclasses = array();
 if ($showsidepre && !$showsidepost) {
     $bodyclasses[] = 'side-pre-only';
@@ -31,6 +41,9 @@ if ($hascustommenu) {
 /************************************************************************************************/
 if (!empty($PAGE->theme->settings->customlogourl)) {
     $logourl = $PAGE->theme->settings->customlogourl;
+    if (strtolower(substr($logourl, 0, 4)) != 'http') {
+        $logourl = $CFG->wwwroot.'/'.$logourl;
+    }
 } else {
     $logourl = $OUTPUT->pix_url('logo_small', 'theme');
 }
@@ -65,13 +78,6 @@ echo $OUTPUT->doctype() ?>
 <!-- begin of page-header -->
                             <?php if ($hasheading) { ?>
                             <div id="page-header">
-                            <?php if ($displaylogo) { ?>
-                                <div id="headerlogo">
-                                    <img src="<?php echo $logourl ?>" alt="Custom logo here" />
-                                </div>
-                            <?php } else { ?>
-                                <h1 class="headerheading"><?php echo $PAGE->heading ?></h1>
-                            <?php } ?>
 
                                 <div class="headermenu">
                                     <?php
@@ -82,9 +88,24 @@ echo $OUTPUT->doctype() ?>
                                     echo $PAGE->headingmenu;
                                 ?>
                                 </div>
+
+                                <?php if ($displaylogo) { ?>
+                                    <div id="headerlogo">
+                                        <img src="<?php echo $logourl ?>" alt="Custom logo here" />
+                                    </div>
+                                <?php } else { ?>
+                                    <h1 class="headerheading"><?php echo $PAGE->heading ?></h1>
+                                <?php } ?>
+
                             </div>
                             <?php } ?>
 <!-- end of page-header -->
+
+<!-- begin of course header -->
+                            <?php if (!empty($courseheader)) { ?>
+                            <div id="course-header"><?php echo $courseheader; ?></div>
+                            <?php } ?>
+<!-- end of course header -->
 
 <!-- begin of custom menu -->
                             <?php if ($hascustommenu) { ?>
@@ -110,7 +131,9 @@ echo $OUTPUT->doctype() ?>
                                         <div id="region-main-wrap">
                                             <div id="region-main">
                                                 <div class="region-content">
+                                                    <?php echo $coursecontentheader; ?>
                                                     <?php echo $OUTPUT->main_content() ?>
+                                                    <?php echo $coursecontentfooter; ?>
                                                 </div>
                                             </div>
                                         </div>
@@ -141,6 +164,11 @@ echo $OUTPUT->doctype() ?>
                             </div>
 <!-- end of moodle content -->
 
+<!-- begin of course footer -->
+                            <?php if (!empty($coursefooter)) { ?>
+                            <div id="course-footer"><?php echo $coursefooter; ?></div>
+                            <?php } ?>
+<!-- end of course footer -->
                             <div class="clearfix"></div>
 
 <?php if ($hasframe) { ?>

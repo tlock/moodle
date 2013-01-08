@@ -32,6 +32,9 @@ class csvclass_testcase extends advanced_testcase {
 
     var $testdata = array();
     var $teststring = '';
+    var $teststring2 = '';
+    var $teststring3 = '';
+    var $teststring4 = '';
 
     protected function setUp(){
 
@@ -58,9 +61,25 @@ class csvclass_testcase extends advanced_testcase {
 <p>Multiple lines</p>
 <p>and also contains ""double quotes""</p>",Yebisu
 ';
+
+    $this->teststring2 = 'fullname,"description of things",beer
+"Fred Flint","<p>Find the stone inside the box</p>",Asahi,"A fourth column"
+"Sarah Smith","<p>How are the people next door?</p>,Yebisu,"Forget the next"
+';
+
+    $this->teststring4 = 'fullname,"description of things",beer
+"Douglas Dirk","<p>I am fine, thankyou.</p>",Becks
+
+"Addelyn Francis","<p>Thanks for the cake</p>",Becks
+"Josh Frankson","<p>Everything is fine</p>",Asahi
+
+
+"Heath Forscyth","<p>We are going to make you lose your mind</p>",Fosters
+';
     }
 
     public function test_csv_functions() {
+        global $CFG;
         $csvexport = new csv_export_writer();
         $csvexport->set_filename('unittest');
         foreach ($this->testdata as $data) {
@@ -71,5 +90,59 @@ class csvclass_testcase extends advanced_testcase {
 
         $test_data = csv_export_writer::print_array($this->testdata, 'comma', '"', true);
         $this->assertEquals($test_data, $this->teststring);
+
+        // Testing that the content is imported correctly.
+        $iid = csv_import_reader::get_new_iid('lib');
+        $csvimport = new csv_import_reader($iid, 'lib');
+        $contentcount = $csvimport->load_csv_content($this->teststring, 'utf-8', 'comma');
+        $csvimport->init();
+        $dataset = array();
+        $dataset[] = $csvimport->get_columns();
+        while ($record = $csvimport->next()) {
+            $dataset[] = $record;
+        }
+        $csvimport->cleanup();
+        $csvimport->close();
+        $this->assertEquals($dataset, $this->testdata);
+
+        // Testing for the wrong count of columns.
+        $errortext = get_string('csvweirdcolumns', 'error');
+        $iid = csv_import_reader::get_new_iid('lib');
+        $csvimport = new csv_import_reader($iid, 'lib');
+        $contentcount = $csvimport->load_csv_content($this->teststring2, 'utf-8', 'comma');
+        $importerror = $csvimport->get_error();
+        $csvimport->cleanup();
+        $csvimport->close();
+        $this->assertEquals($importerror, $errortext);
+
+        // Testing for empty content
+        $errortext = get_string('csvemptyfile', 'error');
+
+        $iid = csv_import_reader::get_new_iid('lib');
+        $csvimport = new csv_import_reader($iid, 'lib');
+        $contentcount = $csvimport->load_csv_content($this->teststring3, 'utf-8', 'comma');
+        $importerror = $csvimport->get_error();
+        $csvimport->cleanup();
+        $csvimport->close();
+        $this->assertEquals($importerror, $errortext);
+
+        // Testing for a tab separated file.
+        // The tab separated file has a trailing tab and extra blank lines at the end of the file.
+        $filename = $CFG->dirroot . '/lib/tests/fixtures/tabfile.csv';
+        $fp = fopen($filename, 'r');
+        $tabdata = fread($fp, filesize($filename));
+        fclose($fp);
+        $iid = csv_import_reader::get_new_iid('tab');
+        $csvimport = new csv_import_reader($iid, 'tab');
+        $contentcount = $csvimport->load_csv_content($tabdata, 'utf-8', 'tab');
+        // This should import four rows including the headings.
+        $this->assertEquals($contentcount, 4);
+
+        // Testing for empty lines.
+        $iid = csv_import_reader::get_new_iid('blanklines');
+        $csvimport = new csv_import_reader($iid, 'blanklines');
+        $contentcount = $csvimport->load_csv_content($this->teststring4, 'utf-8', 'comma');
+        // Five lines including the headings should be imported.
+        $this->assertEquals($contentcount, 5);
     }
 }

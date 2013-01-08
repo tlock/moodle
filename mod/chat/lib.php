@@ -1203,7 +1203,7 @@ function chat_supports($feature) {
 }
 
 function chat_extend_navigation($navigation, $course, $module, $cm) {
-    global $CFG, $USER, $PAGE, $OUTPUT;
+    global $CFG;
 
     $currentgroup = groups_get_activity_group($cm, true);
 
@@ -1219,19 +1219,16 @@ function chat_extend_navigation($navigation, $course, $module, $cm) {
 
         $links = array();
 
-        // If user is using screenreader, display gui_basic gui link only
-        if (empty($USER->screenreader)) {
-            $url = new moodle_url($target.'gui_'.$CFG->chat_method.'/index.php', $params);
-            $action = new popup_action('click', $url, 'chat'.$course->id.$cm->instance.$currentgroup, array('height' => 500, 'width' => 700));
-            $links[] = new action_link($url, $strenterchat, $action);
-        }
+        $url = new moodle_url($target.'gui_'.$CFG->chat_method.'/index.php', $params);
+        $action = new popup_action('click', $url, 'chat'.$course->id.$cm->instance.$currentgroup, array('height' => 500, 'width' => 700));
+        $links[] = new action_link($url, $strenterchat, $action);
 
         $url = new moodle_url($target.'gui_basic/index.php', $params);
         $action = new popup_action('click', $url, 'chat'.$course->id.$cm->instance.$currentgroup, array('height' => 500, 'width' => 700));
         $links[] = new action_link($url, get_string('noframesjs', 'message'), $action);
 
         foreach ($links as $link) {
-            $navigation->add($link->text, $link, navigation_node::TYPE_SETTING, null ,null, new pix_icon('c/group' , ''));
+            $navigation->add($link->text, $link, navigation_node::TYPE_SETTING, null ,null, new pix_icon('i/group' , ''));
         }
     }
 
@@ -1240,7 +1237,7 @@ function chat_extend_navigation($navigation, $course, $module, $cm) {
         $users = $navigation->add(get_string('currentusers', 'chat'));
         foreach ($chatusers as $chatuser) {
             $userlink = new moodle_url('/user/view.php', array('id'=>$chatuser->id,'course'=>$course->id));
-            $users->add(fullname($chatuser).' '.format_time(time() - $chatuser->lastmessageping), $userlink, navigation_node::TYPE_USER, null, null, new pix_icon('c/user', ''));
+            $users->add(fullname($chatuser).' '.format_time(time() - $chatuser->lastmessageping), $userlink, navigation_node::TYPE_USER, null, null, new pix_icon('i/user', ''));
         }
     }
 }

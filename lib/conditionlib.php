@@ -767,7 +767,7 @@ abstract class condition_info_base {
                 $course = $COURSE;
             } else {
                 $course = $DB->get_record('course', array('id' => $this->item->course),
-                        'id, enablecompletion, modinfo', MUST_EXIST);
+                        'id, enablecompletion, modinfo, sectioncache', MUST_EXIST);
             }
             foreach ($this->item->conditionscompletion as $cmid => $expectedcompletion) {
                 if (!$modinfo) {
@@ -929,7 +929,7 @@ abstract class condition_info_base {
                 $course = $COURSE;
             } else {
                 $course = $DB->get_record('course', array('id' => $this->item->course),
-                        'id, enablecompletion, modinfo', MUST_EXIST);
+                        'id, enablecompletion, modinfo, sectioncache', MUST_EXIST);
             }
 
             $completion = new completion_info($course);
@@ -942,7 +942,7 @@ abstract class condition_info_base {
                 if (empty($modinfo->cms[$cmid])) {
                     global $PAGE;
                     if (isset($PAGE) && strpos($PAGE->pagetype, 'course-view-')===0) {
-                        debugging("Warning: activity {$this->cm->id} '{$this->cm->name}' has condition " .
+                        debugging("Warning: activity {$this->item->id} '{$this->item->name}' has condition " .
                                 "on deleted activity $cmid (to get rid of this message, edit the named activity)");
                     }
                     continue;

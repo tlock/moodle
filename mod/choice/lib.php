@@ -499,8 +499,11 @@ function prepare_choice_show_results($choice, $course, $cm, $allresponses, $forc
                 echo '<a href="javascript:deselect_all_in(\'DIV\',null,\'tablecontainer\');">'.get_string('deselectall').'</a> ';
                 echo '&nbsp;&nbsp;';
                 echo html_writer::label(get_string('withselected', 'choice'), 'menuaction');
-                echo html_writer::select(array('delete' => get_string('delete')), 'action', '', array(''=>get_string('withselectedusers')), array('id'=>'menuaction'));
-                $PAGE->requires->js_init_call('M.util.init_select_autosubmit', array('attemptsform', 'menuaction', ''));
+                echo html_writer::select(array('delete' => get_string('delete')), 'action', '', array(''=>get_string('withselectedusers')), array('id'=>'menuaction', 'class' => 'autosubmit'));
+                $PAGE->requires->yui_module('moodle-core-formautosubmit',
+                    'M.core.init_formautosubmit',
+                    array(array('selectid' => 'menuaction'))
+                );
                 echo '<noscript id="noscriptmenuaction" style="display:inline">';
                 echo '<div>';
                 echo '<input type="submit" value="'.get_string('go').'" /></div></noscript>';
@@ -720,7 +723,7 @@ function choice_get_response_data($choice, $cm, $groupmode) {
 
 /// First get all the users who have access here
 /// To start with we assume they are all "unanswered" then move them later
-    $allresponses[0] = get_enrolled_users($context, 'mod/choice:choose', $currentgroup, user_picture::fields('u', array('idnumber')), 'u.lastname ASC,u.firstname ASC');
+    $allresponses[0] = get_enrolled_users($context, 'mod/choice:choose', $currentgroup, user_picture::fields('u', array('idnumber')));
 
 /// Get all the recorded responses for this choice
     $rawresponses = $DB->get_records('choice_answers', array('choiceid' => $choice->id));

@@ -91,7 +91,7 @@ if (count($queued) > 0) {
         $iconstr = $OUTPUT->action_icon(new moodle_url($baseurl, array('cancel'=>1)), new pix_icon('t/stop', get_string('cancel')));
 
         if (!$e->get('queued') && $e->get('expirytime') > $now) {
-            $iconstr .= '&nbsp;' . $OUTPUT->action_icon($baseurl, new pix_icon('t/go', get_string('continue')));
+            $iconstr .= $OUTPUT->action_icon($baseurl, new pix_icon('t/go', get_string('continue')));
         }
         $table->data[] = array(
             $e->get('caller')->display_name(),
@@ -117,7 +117,13 @@ if ($logcount > 0) {
     );
     $logs = $DB->get_records('portfolio_log', array('userid' => $USER->id), 'time DESC', '*', ($page * $perpage), $perpage);
     foreach ($logs as $log) {
-        require_once($CFG->dirroot . $log->caller_file);
+        if (!empty($log->caller_file)) {
+            portfolio_include_callback_file($log->caller_file);
+        } else if (!empty($log->caller_component)) {
+            portfolio_include_callback_file($log->caller_component);
+        } else { // Errrmahgerrrd - this should never happen. Skipping.
+            continue;
+        }
         $class = $log->caller_class;
         $pluginname = '';
         try {

@@ -105,13 +105,12 @@ class core_course_external extends external_api {
 
             //retrieve sections
             $modinfo = get_fast_modinfo($course);
-            $sections = get_all_sections($course->id);
+            $sections = $modinfo->get_section_info_all();
 
             //for each sections (first displayed to last displayed)
             foreach ($sections as $key => $section) {
 
-                $showsection = (has_capability('moodle/course:viewhiddensections', $context) or $section->visible or !$course->hiddensections);
-                if (!$showsection) {
+                if (!$section->uservisible) {
                     continue;
                 }
 
@@ -212,7 +211,7 @@ class core_course_external extends external_api {
                                 array(
                                     'id' => new external_value(PARAM_INT, 'activity id'),
                                     'url' => new external_value(PARAM_URL, 'activity url', VALUE_OPTIONAL),
-                                    'name' => new external_value(PARAM_TEXT, 'activity module name'),
+                                    'name' => new external_value(PARAM_RAW, 'activity module name'),
                                     'description' => new external_value(PARAM_RAW, 'activity description', VALUE_OPTIONAL),
                                     'visible' => new external_value(PARAM_INT, 'is the module visible', VALUE_OPTIONAL),
                                     'modicon' => new external_value(PARAM_URL, 'activity icon url'),
@@ -285,7 +284,7 @@ class core_course_external extends external_api {
                         array('options' => $options));
 
         //retrieve courses
-        if (!key_exists('ids', $params['options'])
+        if (!array_key_exists('ids', $params['options'])
                 or empty($params['options']['ids'])) {
             $courses = $DB->get_records('course');
         } else {
@@ -298,6 +297,7 @@ class core_course_external extends external_api {
 
             // now security checks
             $context = context_course::instance($course->id, IGNORE_MISSING);
+            $courseformatoptions = course_get_format($course)->get_format_options();
             try {
                 self::validate_context($context);
             } catch (Exception $e) {
@@ -317,7 +317,10 @@ class core_course_external extends external_api {
                 external_format_text($course->summary, $course->summaryformat, $context->id, 'course', 'summary', 0);
             $courseinfo['format'] = $course->format;
             $courseinfo['startdate'] = $course->startdate;
-            $courseinfo['numsections'] = $course->numsections;
+            if (array_key_exists('numsections', $courseformatoptions)) {
+                // For backward-compartibility
+                $courseinfo['numsections'] = $courseformatoptions['numsections'];
+            }
 
             //some field should be returned only if the user has update permission
             $courseadmin = has_capability('moodle/course:update', $context);
@@ -329,7 +332,10 @@ class core_course_external extends external_api {
                 $courseinfo['newsitems'] = $course->newsitems;
                 $courseinfo['visible'] = $course->visible;
                 $courseinfo['maxbytes'] = $course->maxbytes;
-                $courseinfo['hiddensections'] = $course->hiddensections;
+                if (array_key_exists('hiddensections', $courseformatoptions)) {
+                    // For backward-compartibility
+                    $courseinfo['hiddensections'] = $courseformatoptions['hiddensections'];
+                }
                 $courseinfo['groupmode'] = $course->groupmode;
                 $courseinfo['groupmodeforce'] = $course->groupmodeforce;
                 $courseinfo['defaultgroupingid'] = $course->defaultgroupingid;
@@ -340,6 +346,13 @@ class core_course_external extends external_api {
                 $courseinfo['enablecompletion'] = $course->enablecompletion;
                 $courseinfo['completionstartonenrol'] = $course->completionstartonenrol;
                 $courseinfo['completionnotify'] = $course->completionnotify;
+                $courseinfo['courseformatoptions'] = array();
+                foreach ($courseformatoptions as $key => $value) {
+                    $courseinfo['courseformatoptions'][] = array(
+                        'name' => $key,
+                        'value' => $value
+                    );
+                }
             }
 
             if ($courseadmin or $course->visible
@@ -378,7 +391,9 @@ class core_course_external extends external_api {
                                     'number of recent items appearing on the course page', VALUE_OPTIONAL),
                             'startdate' => new external_value(PARAM_INT,
                                     'timestamp when the course start'),
-                            'numsections' => new external_value(PARAM_INT, 'number of weeks/topics'),
+                            'numsections' => new external_value(PARAM_INT,
+                                    '(deprecated, use courseformatoptions) number of weeks/topics',
+                                    VALUE_OPTIONAL),
                             'maxbytes' => new external_value(PARAM_INT,
                                     'largest size of file that can be uploaded into the course',
                                     VALUE_OPTIONAL),
@@ -387,7 +402,7 @@ class core_course_external extends external_api {
                             'visible' => new external_value(PARAM_INT,
                                     '1: available to student, 0:not available', VALUE_OPTIONAL),
                             'hiddensections' => new external_value(PARAM_INT,
-                                    'How the hidden sections in the course are displayed to students',
+                                    '(deprecated, use courseformatoptions) How the hidden sections in the course are displayed to students',
                                     VALUE_OPTIONAL),
                             'groupmode' => new external_value(PARAM_INT, 'no group, separate, visible',
                                     VALUE_OPTIONAL),
@@ -413,6 +428,13 @@ class core_course_external extends external_api {
                                     'forced course language', VALUE_OPTIONAL),
                             'forcetheme' => new external_value(PARAM_PLUGIN,
                                     'name of the force theme', VALUE_OPTIONAL),
+                            'courseformatoptions' => new external_multiple_structure(
+                                new external_single_structure(
+                                    array('name' => new external_value(PARAM_ALPHANUMEXT, 'course format option name'),
+                                        'value' => new external_value(PARAM_RAW, 'course format option value')
+                                )),
+                                    'additional options for particular course format', VALUE_OPTIONAL
+                             ),
                         ), 'course'
                 )
         );
@@ -448,8 +470,9 @@ class core_course_external extends external_api {
                                     VALUE_DEFAULT, $courseconfig->newsitems),
                             'startdate' => new external_value(PARAM_INT,
                                     'timestamp when the course start', VALUE_OPTIONAL),
-                            'numsections' => new external_value(PARAM_INT, 'number of weeks/topics',
-                                    VALUE_DEFAULT, $courseconfig->numsections),
+                            'numsections' => new external_value(PARAM_INT,
+                                    '(deprecated, use courseformatoptions) number of weeks/topics',
+                                    VALUE_OPTIONAL),
                             'maxbytes' => new external_value(PARAM_INT,
                                     'largest size of file that can be uploaded into the course',
                                     VALUE_DEFAULT, $courseconfig->maxbytes),
@@ -459,8 +482,8 @@ class core_course_external extends external_api {
                             'visible' => new external_value(PARAM_INT,
                                     '1: available to student, 0:not available', VALUE_OPTIONAL),
                             'hiddensections' => new external_value(PARAM_INT,
-                                    'How the hidden sections in the course are displayed to students',
-                                    VALUE_DEFAULT, $courseconfig->hiddensections),
+                                    '(deprecated, use courseformatoptions) How the hidden sections in the course are displayed to students',
+                                    VALUE_OPTIONAL),
                             'groupmode' => new external_value(PARAM_INT, 'no group, separate, visible',
                                     VALUE_DEFAULT, $courseconfig->groupmode),
                             'groupmodeforce' => new external_value(PARAM_INT, '1: yes, 0: no',
@@ -481,6 +504,12 @@ class core_course_external extends external_api {
                                     'forced course language', VALUE_OPTIONAL),
                             'forcetheme' => new external_value(PARAM_PLUGIN,
                                     'name of the force theme', VALUE_OPTIONAL),
+                            'courseformatoptions' => new external_multiple_structure(
+                                new external_single_structure(
+                                    array('name' => new external_value(PARAM_ALPHANUMEXT, 'course format option name'),
+                                        'value' => new external_value(PARAM_RAW, 'course format option value')
+                                )),
+                                    'additional options for particular course format', VALUE_OPTIONAL),
                         )
                     ), 'courses to create'
                 )
@@ -523,12 +552,12 @@ class core_course_external extends external_api {
             require_capability('moodle/course:create', $context);
 
             // Make sure lang is valid
-            if (key_exists('lang', $course) and empty($availablelangs[$course['lang']])) {
+            if (array_key_exists('lang', $course) and empty($availablelangs[$course['lang']])) {
                 throw new moodle_exception('errorinvalidparam', 'webservice', '', 'lang');
             }
 
             // Make sure theme is valid
-            if (key_exists('forcetheme', $course)) {
+            if (array_key_exists('forcetheme', $course)) {
                 if (!empty($CFG->allowcoursethemes)) {
                     if (empty($availablethemes[$course['forcetheme']])) {
                         throw new moodle_exception('errorinvalidparam', 'webservice', '', 'forcetheme');
@@ -547,10 +576,10 @@ class core_course_external extends external_api {
             //set default value for completion
             $courseconfig = get_config('moodlecourse');
             if (completion_info::is_enabled_for_site()) {
-                if (!key_exists('enablecompletion', $course)) {
+                if (!array_key_exists('enablecompletion', $course)) {
                     $course['enablecompletion'] = $courseconfig->enablecompletion;
                 }
-                if (!key_exists('completionstartonenrol', $course)) {
+                if (!array_key_exists('completionstartonenrol', $course)) {
                     $course['completionstartonenrol'] = $courseconfig->completionstartonenrol;
                 }
             } else {
@@ -562,6 +591,12 @@ class core_course_external extends external_api {
 
             // Summary format.
             $course['summaryformat'] = external_validate_format($course['summaryformat']);
+
+            if (!empty($course['courseformatoptions'])) {
+                foreach ($course['courseformatoptions'] as $option) {
+                    $course[$option['name']] = $option['value'];
+                }
+            }
 
             //Note: create_course() core function check shortname, idnumber, category
             $course['id'] = create_course((object) $course)->id;

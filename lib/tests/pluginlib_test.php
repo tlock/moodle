@@ -103,7 +103,7 @@ class available_update_checker_test extends advanced_testcase {
      */
     public function test_cron_has_fresh_fetch() {
         $provider = testable_available_update_checker::instance();
-        $provider->fakerecentfetch = time() - 59 * MINSECS; // fetched an hour ago
+        $provider->fakerecentfetch = time() - 23 * HOURSECS; // fetched 23 hours ago
         $provider->fakecurrenttimestamp = -1;
         $provider->cron();
         $this->assertTrue(true); // we should get here with no exception thrown
@@ -127,23 +127,52 @@ class available_update_checker_test extends advanced_testcase {
      */
     public function test_cron_offset_execution_not_yet() {
         $provider = testable_available_update_checker::instance();
-        $provider->fakerecentfetch = time() - 24 * HOURSECS;
-        $provider->fakecurrenttimestamp = mktime(1, 40, 02); // 01:40:02 AM
+        $provider->fakecurrenttimestamp = mktime(1, 40, 02); // 01:40:02 AM today
+        $provider->fakerecentfetch = $provider->fakecurrenttimestamp - 24 * HOURSECS;
         $provider->cron();
         $this->assertTrue(true); // we should get here with no exception thrown
     }
 
     /**
-     * The first cron after 01:42 AM today should fetch the data
+     * The first cron after 01:42 AM today should fetch the data and then
+     * it is supposed to wait next 24 hours.
      *
      * @see testable_available_update_checker::cron_execution_offset()
      */
     public function test_cron_offset_execution() {
         $provider = testable_available_update_checker::instance();
-        $provider->fakerecentfetch = time() - 24 * HOURSECS;
-        $provider->fakecurrenttimestamp = mktime(1, 45, 02); // 01:45:02 AM
-        $this->setExpectedException('testable_available_update_checker_cron_executed');
-        $provider->cron();
+
+        // the cron at 01:45 should fetch the data
+        $provider->fakecurrenttimestamp = mktime(1, 45, 02); // 01:45:02 AM today
+        $provider->fakerecentfetch = $provider->fakecurrenttimestamp - 24 * HOURSECS - 1;
+        $executed = false;
+        try {
+            $provider->cron();
+        } catch (testable_available_update_checker_cron_executed $e) {
+            $executed = true;
+        }
+        $this->assertTrue($executed, 'Cron should be executed at 01:45:02 but it was not.');
+
+        // another cron at 06:45 should still consider data as fresh enough
+        $provider->fakerecentfetch = $provider->fakecurrenttimestamp;
+        $provider->fakecurrenttimestamp = mktime(6, 45, 03); // 06:45:03 AM
+        $executed = false;
+        try {
+            $provider->cron();
+        } catch (testable_available_update_checker_cron_executed $e) {
+            $executed = true;
+        }
+        $this->assertFalse($executed, 'Cron should not be executed at 06:45:03 but it was.');
+
+        // the next scheduled execution should happen the next day
+        $provider->fakecurrenttimestamp = $provider->fakerecentfetch + 24 * HOURSECS + 1;
+        $executed = false;
+        try {
+            $provider->cron();
+        } catch (testable_available_update_checker_cron_executed $e) {
+            $executed = true;
+        }
+        $this->assertTrue($executed, 'Cron should be executed the next night but it was not.');
     }
 
     public function test_compare_responses_both_empty() {
@@ -503,7 +532,7 @@ class testable_available_update_checker extends available_update_checker {
     }
 
     protected function cron_execute() {
-        throw new testable_available_update_checker_cron_executed('Cron executed but it should not!');
+        throw new testable_available_update_checker_cron_executed('Cron executed!');
     }
 }
 
@@ -513,4 +542,40 @@ class testable_available_update_checker extends available_update_checker {
  */
 class testable_available_update_checker_cron_executed extends Exception {
 
+}
+
+
+/**
+ * Modified {@link available_update_deployer} suitable for testing purposes
+ */
+class testable_available_update_deployer extends available_update_deployer {
+
+}
+
+
+/**
+ * Test cases for {@link available_update_deployer} class
+ */
+class available_update_deployer_test extends advanced_testcase {
+
+    public function test_magic_setters() {
+        $deployer = testable_available_update_deployer::instance();
+        $value = new moodle_url('/');
+        $deployer->set_returnurl($value);
+        $this->assertSame($deployer->get_returnurl(), $value);
+    }
+
+    public function test_prepare_authorization() {
+        global $CFG;
+
+        $deployer = testable_available_update_deployer::instance();
+        list($passfile, $password) = $deployer->prepare_authorization();
+        $filename = $CFG->phpunit_dataroot.'/mdeploy/auth/'.$passfile;
+        $this->assertFileExists($filename);
+        $stored = file($filename, FILE_IGNORE_NEW_LINES);
+        $this->assertEquals(count($stored), 2);
+        $this->assertGreaterThan(23, strlen($stored[0]));
+        $this->assertSame($stored[0], $password);
+        $this->assertTrue(time() - (int)$stored[1] < 60);
+    }
 }

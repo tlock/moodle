@@ -91,17 +91,12 @@ switch($requestmethod) {
                         require_capability('moodle/course:movesections', $coursecontext);
                         move_section_to($course, $id, $value);
                         // See if format wants to do something about it
-                        $libfile = $CFG->dirroot.'/course/format/'.$course->format.'/lib.php';
-                        $functionname = 'callback_'.$course->format.'_ajax_section_move';
-                        if (!function_exists($functionname) && file_exists($libfile)) {
-                            require_once $libfile;
-                        }
-                        if (function_exists($functionname)) {
-                            echo json_encode($functionname($course));
+                        $response = course_get_format($course)->ajax_section_move();
+                        if ($response !== null) {
+                            echo json_encode($response);
                         }
                         break;
                 }
-                rebuild_course_cache($course->id);
                 break;
 
             case 'resource':
@@ -121,6 +116,7 @@ switch($requestmethod) {
                         $cm->indent = $value;
                         if ($cm->indent >= 0) {
                             $DB->update_record('course_modules', $cm);
+                            rebuild_course_cache($cm->course);
                         }
                         break;
 
@@ -150,6 +146,7 @@ switch($requestmethod) {
                         break;
                     case 'updatetitle':
                         require_capability('moodle/course:manageactivities', $modcontext);
+                        require_once($CFG->libdir . '/gradelib.php');
                         $cm = get_coursemodule_from_id('', $id, 0, false, MUST_EXIST);
                         $module = new stdClass();
                         $module->id = $cm->instance;
@@ -163,17 +160,23 @@ switch($requestmethod) {
 
                         if (!empty($module->name)) {
                             $DB->update_record($cm->modname, $module);
+                            rebuild_course_cache($cm->course);
                         } else {
                             $module->name = $cm->name;
                         }
 
+                        // Attempt to update the grade item if relevant
+                        $grademodule = $DB->get_record($cm->modname, array('id' => $cm->instance));
+                        $grademodule->cmidnumber = $cm->idnumber;
+                        $grademodule->modname = $cm->modname;
+                        grade_update_mod_grades($grademodule);
+
                         // We need to return strings after they've been through filters for multilang
                         $stringoptions = new stdClass;
                         $stringoptions->context = $coursecontext;
-                        echo json_encode(array('instancename' => format_string($module->name, true,  $stringoptions)));
+                        echo json_encode(array('instancename' => html_entity_decode(format_string($module->name, true,  $stringoptions))));
                         break;
                 }
-                rebuild_course_cache($course->id);
                 break;
 
             case 'course':
@@ -225,8 +228,6 @@ switch($requestmethod) {
                 $eventdata->courseid   = $course->id;
                 $eventdata->userid     = $USER->id;
                 events_trigger('mod_deleted', $eventdata);
-
-                rebuild_course_cache($course->id);
 
                 add_to_log($courseid, "course", "delete mod",
                            "view.php?id=$courseid",

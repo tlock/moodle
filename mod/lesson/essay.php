@@ -160,12 +160,10 @@ switch ($mode) {
                 SELECT u.*
                   FROM {user} u
                   JOIN (
-                    SELECT DISTINCT u.id
-                      FROM {user} u,
-                           {lesson_attempts} a
-                     WHERE a.lessonid = :lessonid and
-                           u.id = a.userid) ui ON (u.id = ui.id)
-                  ORDER BY u.lastname", $params)) {
+                           SELECT DISTINCT userid
+                             FROM {lesson_attempts}
+                            WHERE lessonid = :lessonid
+                       ) ui ON u.id = ui.id", $params)) {
                 print_error('cannotfinduser', 'lesson');
             }
         }
@@ -268,22 +266,24 @@ switch ($mode) {
             if ($essayattempts = $DB->get_records_select('lesson_attempts', 'pageid '.$usql, $parameters)) {
                 // Get all the users who have taken this lesson, order by their last name
                 $ufields = user_picture::fields('u');
+                list($sort, $sortparams) = users_order_by_sql('u');
+                $params = array_merge($params, $sortparams);
                 if (!empty($cm->groupingid)) {
-                    $params["groupinid"] = $cm->groupingid;
+                    $params["groupingid"] = $cm->groupingid;
                     $sql = "SELECT DISTINCT $ufields
                             FROM {lesson_attempts} a
                                 INNER JOIN {user} u ON u.id = a.userid
                                 INNER JOIN {groups_members} gm ON gm.userid = u.id
-                                INNER JOIN {groupings_groups} gg ON gm.groupid = :groupinid
+                                INNER JOIN {groupings_groups} gg ON gm.groupid = gg.groupid AND gg.groupingid = :groupingid
                             WHERE a.lessonid = :lessonid
-                            ORDER BY u.lastname";
+                            ORDER BY $sort";
                 } else {
                     $sql = "SELECT DISTINCT $ufields
                             FROM {user} u,
                                  {lesson_attempts} a
                             WHERE a.lessonid = :lessonid and
                                   u.id = a.userid
-                            ORDER BY u.lastname";
+                            ORDER BY $sort";
                 }
                 if (!$users = $DB->get_records_sql($sql, $params)) {
                     $mode = 'none'; // not displaying anything
@@ -303,7 +303,7 @@ switch ($mode) {
 add_to_log($course->id, 'lesson', 'view grade', "essay.php?id=$cm->id", get_string('manualgrading', 'lesson'), $cm->id);
 
 $lessonoutput = $PAGE->get_renderer('mod_lesson');
-echo $lessonoutput->header($lesson, $cm, 'essay');
+echo $lessonoutput->header($lesson, $cm, 'essay', false, null, get_string('manualgrading', 'lesson'));
 
 switch ($mode) {
     case 'display':
@@ -387,12 +387,14 @@ switch ($mode) {
         // Grading form
         // Expects the following to be set: $attemptid, $answer, $user, $page, $attempt
         $essayinfo = unserialize($attempt->useranswer);
+        $currentpage = $lesson->load_page($attempt->pageid);
 
         $mform = new essay_grading_form(null, array('scoreoptions'=>$scoreoptions, 'user'=>$user));
         $data = new stdClass;
         $data->id = $cm->id;
         $data->attemptid = $attemptid;
         $data->score = $essayinfo->score;
+        $data->question = format_string($currentpage->contents, $currentpage->contentsformat);
         $data->studentanswer = format_string($essayinfo->answer, $essayinfo->answerformat);
         $data->response = $essayinfo->response;
         $mform->set_data($data);

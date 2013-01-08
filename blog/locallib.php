@@ -292,11 +292,10 @@ class blog_entry implements renderable {
      * @return void
      */
     public function delete() {
-        global $DB, $USER;
-
-        $returnurl = '';
+        global $DB;
 
         $this->delete_attachments();
+        $this->remove_associations();
 
         $DB->delete_records('post', array('id' => $this->id));
         tag_set('post', $this->id, array());
@@ -664,27 +663,42 @@ class blog_listing {
             $userid = optional_param('userid', null, PARAM_INT);
 
             if (empty($userid) || (!empty($userid) && $userid == $USER->id)) {
-                $addurl = new moodle_url("$CFG->wwwroot/blog/edit.php");
-                $urlparams = array('action' => 'add',
-                                   'userid' => $userid,
-                                   'courseid' => optional_param('courseid', null, PARAM_INT),
-                                   'groupid' => optional_param('groupid', null, PARAM_INT),
-                                   'modid' => optional_param('modid', null, PARAM_INT),
-                                   'tagid' => optional_param('tagid', null, PARAM_INT),
-                                   'tag' => optional_param('tag', null, PARAM_INT),
-                                   'search' => optional_param('search', null, PARAM_INT));
 
-                foreach ($urlparams as $var => $val) {
-                    if (empty($val)) {
-                        unset($urlparams[$var]);
+                $canaddentries = true;
+                $courseid = optional_param('courseid', null, PARAM_INT);
+                if ($modid = optional_param('modid', null, PARAM_INT)) {
+                    if (!has_capability('moodle/blog:associatemodule', context_module::instance($modid))) {
+                        $canaddentries = false;
+                    }
+                } else if ($courseid) {
+                    if (!has_capability('moodle/blog:associatecourse', context_course::instance($courseid))) {
+                        $canaddentries = false;
                     }
                 }
-                $addurl->params($urlparams);
 
-                $addlink = '<div class="addbloglink">';
-                $addlink .= '<a href="'.$addurl->out().'">'. $blogheaders['stradd'].'</a>';
-                $addlink .= '</div>';
-                echo $addlink;
+                if ($canaddentries) {
+                    $addurl = new moodle_url("$CFG->wwwroot/blog/edit.php");
+                    $urlparams = array('action' => 'add',
+                                       'userid' => $userid,
+                                       'courseid' => $courseid,
+                                       'groupid' => optional_param('groupid', null, PARAM_INT),
+                                       'modid' => $modid,
+                                       'tagid' => optional_param('tagid', null, PARAM_INT),
+                                       'tag' => optional_param('tag', null, PARAM_INT),
+                                       'search' => optional_param('search', null, PARAM_INT));
+
+                    foreach ($urlparams as $var => $val) {
+                        if (empty($val)) {
+                            unset($urlparams[$var]);
+                        }
+                    }
+                    $addurl->params($urlparams);
+
+                    $addlink = '<div class="addbloglink">';
+                    $addlink .= '<a href="'.$addurl->out().'">'. $blogheaders['stradd'].'</a>';
+                    $addlink .= '</div>';
+                    echo $addlink;
+                }
             }
         }
 

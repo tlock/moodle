@@ -24,13 +24,18 @@ defined('MOODLE_INTERNAL') || die();
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class tinymce_dragmath extends editor_tinymce_plugin {
+    /** @var array list of buttons defined by this plugin */
+    protected $buttons = array('dragmath');
+
     protected function update_init_params(array &$params, context $context,
             array $options = null) {
 
-        // If TeX filter is disabled, do not add button.
-        $filters = filter_get_active_in_context($context);
-        if (!array_key_exists('filter/tex', $filters)) {
-            return;
+        if ($this->get_config('requiretex', 1)) {
+            // If TeX filter is disabled, do not add button.
+            $filters = filter_get_active_in_context($context);
+            if (!array_key_exists('filter/tex', $filters)) {
+                return;
+            }
         }
 
         // Add button before 'nonbreaking' in advancedbuttons3.

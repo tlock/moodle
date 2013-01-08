@@ -59,14 +59,6 @@
         rss_add_http_header($modcontext, 'mod_forum', $forum, $rsstitle);
     }
 
-    if ($forum->type == 'news') {
-        if (!($USER->id == $discussion->userid || (($discussion->timestart == 0
-            || $discussion->timestart <= time())
-            && ($discussion->timeend == 0 || $discussion->timeend > time())))) {
-            print_error('invaliddiscussionid', 'forum', "$CFG->wwwroot/mod/forum/view.php?f=$forum->id");
-        }
-    }
-
 /// move discussion if requested
     if ($move > 0 and confirm_sesskey()) {
         $return = $CFG->wwwroot.'/mod/forum/discuss.php?d='.$discussion->id;
@@ -135,9 +127,8 @@
         print_error("notexists", 'forum', "$CFG->wwwroot/mod/forum/view.php?f=$forum->id");
     }
 
-
-    if (!forum_user_can_view_post($post, $course, $cm, $forum, $discussion)) {
-        print_error('nopermissiontoview', 'forum', "$CFG->wwwroot/mod/forum/view.php?id=$forum->id");
+    if (!forum_user_can_see_post($forum, $discussion, $post, null, $cm)) {
+        print_error('noviewdiscussionspermission', 'forum', "$CFG->wwwroot/mod/forum/view.php?id=$forum->id");
     }
 
     if ($mark == 'read' or $mark == 'unread') {
@@ -192,7 +183,7 @@
     if (!empty($CFG->enableportfolios) && has_capability('mod/forum:exportdiscussion', $modcontext)) {
         require_once($CFG->libdir.'/portfoliolib.php');
         $button = new portfolio_add_button();
-        $button->set_callback_options('forum_portfolio_caller', array('discussionid' => $discussion->id), '/mod/forum/locallib.php');
+        $button->set_callback_options('forum_portfolio_caller', array('discussionid' => $discussion->id), 'mod_forum');
         $button = $button->to_html(PORTFOLIO_ADD_FULL_FORM, get_string('exportdiscussion', 'mod_forum'));
         $buttonextraclass = '';
         if (empty($button)) {
@@ -219,7 +210,6 @@
         $modinfo = get_fast_modinfo($course);
         if (isset($modinfo->instances['forum'])) {
             $forummenu = array();
-            $sections = get_all_sections($course->id);
             // Check forum types and eliminate simple discussions.
             $forumcheck = $DB->get_records('forum', array('course' => $course->id),'', 'id, type');
             foreach ($modinfo->instances['forum'] as $forumcm) {
@@ -228,7 +218,7 @@
                     continue;
                 }
                 $section = $forumcm->sectionnum;
-                $sectionname = get_section_name($course, $sections[$section]);
+                $sectionname = get_section_name($course, $section);
                 if (empty($forummenu[$section])) {
                     $forummenu[$section] = array($sectionname => array());
                 }

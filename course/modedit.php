@@ -35,7 +35,7 @@ $add    = optional_param('add', '', PARAM_ALPHA);     // module name
 $update = optional_param('update', 0, PARAM_INT);
 $return = optional_param('return', 0, PARAM_BOOL);    //return to course/view.php if false or mod/modname/view.php if true
 $type   = optional_param('type', '', PARAM_ALPHANUM); //TODO: hopefully will be removed in 2.0
-$sectionreturn = optional_param('sr', 0, PARAM_INT);
+$sectionreturn = optional_param('sr', null, PARAM_INT);
 
 $url = new moodle_url('/course/modedit.php');
 $url->param('sr', $sectionreturn);
@@ -59,7 +59,8 @@ if (!empty($add)) {
     $context = context_course::instance($course->id);
     require_capability('moodle/course:manageactivities', $context);
 
-    $cw = get_course_section($section, $course->id);
+    course_create_sections_if_missing($course, $section);
+    $cw = get_fast_modinfo($course)->get_section_info($section);
 
     if (!course_allowed_module($course, $module->name)) {
         print_error('moduledisable');
@@ -264,7 +265,7 @@ if ($mform->is_cancelled()) {
     if ($return && !empty($cm->id)) {
         redirect("$CFG->wwwroot/mod/$module->name/view.php?id=$cm->id");
     } else {
-        redirect(course_get_url($course, $sectionreturn));
+        redirect(course_get_url($course, $cw->section, array('sr' => $sectionreturn)));
     }
 } else if ($fromform = $mform->get_data()) {
     if (empty($fromform->coursemodule)) {
@@ -474,9 +475,7 @@ if ($mform->is_cancelled()) {
 
         // course_modules and course_sections each contain a reference
         // to each other, so we have to update one of them twice.
-        $sectionid = add_mod_to_section($fromform);
-
-        $DB->set_field('course_modules', 'section', $sectionid, array('id'=>$fromform->coursemodule));
+        $sectionid = course_add_cm_to_section($course, $fromform->coursemodule, $fromform->section);
 
         // make sure visibility is set correctly (in particular in calendar)
         // note: allow them to set it even without moodle/course:activityvisibility
@@ -633,7 +632,7 @@ if ($mform->is_cancelled()) {
             redirect($gradingman->get_management_url($returnurl));
         }
     } else {
-        redirect(course_get_url($course, $sectionreturn));
+        redirect(course_get_url($course, $cw->section, array('sr' => $sectionreturn)));
     }
     exit;
 

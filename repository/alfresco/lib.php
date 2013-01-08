@@ -202,12 +202,7 @@ class repository_alfresco extends repository {
     public function get_file($uuid, $file = '') {
         $node = $this->user_session->getNode($this->store, $uuid);
         $url = $this->get_url($node);
-        $path = $this->prepare_file($file);
-        $fp = fopen($path, 'w');
-        $c = new curl;
-        $c->download(array(array('url'=>$url, 'file'=>$fp)));
-        fclose($fp);
-        return array('path'=>$path, 'url'=>$url);
+        return parent::get_file($url, $file);
     }
 
     /**
@@ -224,7 +219,9 @@ class repository_alfresco extends repository {
 
     public function print_search() {
         $str = parent::print_search();
-        $str .= '<label>Space: </label><br /><select name="space">';
+        $str .= html_writer::label(get_string('space', 'repository_alfresco'), 'space', false, array('class' => 'accesshide'));
+        $str .= html_writer::empty_tag('br');
+        $str .= '<select id="space" name="space">';
         foreach ($this->user_session->stores as $v) {
             $str .= '<option ';
             if ($v->__toString() === 'workspace://SpacesStore') {

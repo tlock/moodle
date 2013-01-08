@@ -1182,7 +1182,7 @@ class grade_structure {
                                 '" alt="'.s($stroutcome).'"/>';
                     } else {
                         $strmanual = get_string('manualitem', 'grades');
-                        return '<img src="'.$OUTPUT->pix_url('t/manual_item') . '" '.
+                        return '<img src="'.$OUTPUT->pix_url('i/manual_item') . '" '.
                                 'class="icon itemicon" title="'.s($strmanual).
                                 '" alt="'.s($strmanual).'"/>';
                     }
@@ -1191,7 +1191,7 @@ class grade_structure {
 
             case 'category':
                 $strcat = get_string('category', 'grades');
-                return '<img src="'.$OUTPUT->pix_url(file_folder_icon()) . '" class="icon itemicon" ' .
+                return '<img src="'.$OUTPUT->pix_url('i/folder') . '" class="icon itemicon" ' .
                         'title="'.s($strcat).'" alt="'.s($strcat).'" />';
         }
 
@@ -1539,7 +1539,7 @@ class grade_structure {
 
             $url->param('action', 'show');
 
-            $hideicon = $OUTPUT->action_icon($url, new pix_icon('t/'.$type, $tooltip, 'moodle', array('alt'=>$strshow, 'class'=>'iconsmall')));
+            $hideicon = $OUTPUT->action_icon($url, new pix_icon('t/'.$type, $tooltip, 'moodle', array('alt'=>$strshow, 'class'=>'smallicon')));
 
         } else {
             $url->param('action', 'hide');
@@ -1573,7 +1573,8 @@ class grade_structure {
             $strparamobj->itemname = $element['object']->grade_item->itemname;
             $strnonunlockable = get_string('nonunlockableverbose', 'grades', $strparamobj);
 
-            $action = $OUTPUT->pix_icon('t/unlock_gray', $strnonunlockable);
+            $action = html_writer::tag('span', $OUTPUT->pix_icon('t/locked', $strnonunlockable),
+                    array('class' => 'action-icon'));
 
         } else if ($element['object']->is_locked()) {
             $type = 'unlock';
@@ -1639,7 +1640,7 @@ class grade_structure {
 
                 $url = new moodle_url('/grade/edit/tree/calculation.php', array('courseid' => $this->courseid, 'id' => $object->id));
                 $url = $gpr->add_url_params($url);
-                return $OUTPUT->action_icon($url, new pix_icon($icon, $streditcalculation)) . "\n";
+                return $OUTPUT->action_icon($url, new pix_icon($icon, $streditcalculation));
             }
         }
 
@@ -2274,7 +2275,7 @@ function grade_button($type, $courseid, $object) {
         $url = new moodle_url('edit.php', array('courseid' => $courseid, 'id' => $object->id));
     }
 
-    return $OUTPUT->action_icon($url, new pix_icon('t/'.$type, ${'str'.$type}));
+    return $OUTPUT->action_icon($url, new pix_icon('t/'.$type, ${'str'.$type}, '', array('class' => 'iconsmall')));
 
 }
 
@@ -2300,14 +2301,14 @@ function grade_extend_settings($plugininfo, $courseid) {
     if ($imports = grade_helper::get_plugins_import($courseid)) {
         $importnode = $gradenode->add($strings['import'], null, navigation_node::TYPE_CONTAINER);
         foreach ($imports as $import) {
-            $importnode->add($import->string, $import->link, navigation_node::TYPE_SETTING, null, $import->id, new pix_icon('i/restore', ''));
+            $importnode->add($import->string, $import->link, navigation_node::TYPE_SETTING, null, $import->id, new pix_icon('i/import', ''));
         }
     }
 
     if ($exports = grade_helper::get_plugins_export($courseid)) {
         $exportnode = $gradenode->add($strings['export'], null, navigation_node::TYPE_CONTAINER);
         foreach ($exports as $export) {
-            $exportnode->add($export->string, $export->link, navigation_node::TYPE_SETTING, null, $export->id, new pix_icon('i/backup', ''));
+            $exportnode->add($export->string, $export->link, navigation_node::TYPE_SETTING, null, $export->id, new pix_icon('i/export', ''));
         }
     }
 
@@ -2610,6 +2611,7 @@ abstract class grade_helper {
      * @return array
      */
     public static function get_info_letters($courseid) {
+        global $SITE;
         if (self::$letterinfo !== null) {
             return self::$letterinfo;
         }
@@ -2617,9 +2619,15 @@ abstract class grade_helper {
         $canmanage = has_capability('moodle/grade:manage', $context);
         $canmanageletters = has_capability('moodle/grade:manageletters', $context);
         if ($canmanage || $canmanageletters) {
+            // Redirect to system context when report is accessed from admin settings MDL-31633
+            if ($context->instanceid == $SITE->id) {
+                $param = array('edit' => 1);
+            } else {
+                $param = array('edit' => 1,'id' => $context->id);
+            }
             self::$letterinfo = array(
                 'view' => new grade_plugin_info('view', new moodle_url('/grade/edit/letter/index.php', array('id'=>$context->id)), get_string('view')),
-                'edit' => new grade_plugin_info('edit', new moodle_url('/grade/edit/letter/index.php', array('edit'=>1,'id'=>$context->id)), get_string('edit'))
+                'edit' => new grade_plugin_info('edit', new moodle_url('/grade/edit/letter/index.php', $param), get_string('edit'))
             );
         } else {
             self::$letterinfo = false;

@@ -147,21 +147,17 @@ class zip_packer_testcase extends advanced_testcase {
 
         $this->assertFalse(file_exists(__DIR__.'/xx/yy/ee.txt'));
         $files = array('xtest.txt'=>__DIR__.'/xx/yy/ee.txt');
-        ob_start();
         $result = $packer->archive_to_pathname($files, $archive);
-        $d = ob_end_clean();
-        $this->assertTrue($d !== '');
         $this->assertFalse($result);
+        $this->assertDebuggingCalled();
 
         $this->assertTrue(file_exists(__DIR__.'/fixtures/test.txt'));
         $files = array();
         $files['""""'] = null; // Invalid directory name.
         $files['test.txt'] = __DIR__.'/fixtures/test.txt';
-        ob_start();
         $result = $packer->archive_to_pathname($files, $archive);
-        $d = ob_end_clean();
-        $this->assertTrue($d !== '');
         $this->assertTrue($result);
+        $this->resetDebugging();
 
         @unlink($archive);
     }
@@ -228,6 +224,46 @@ class zip_packer_testcase extends advanced_testcase {
             $this->assertTrue(file_exists($target.$file));
             $this->assertSame($testcontent, file_get_contents($target.$file));
         }
+    }
+
+    /**
+     * @depends test_archive_to_storage
+     */
+    public function test_extract_to_pathname_onlyfiles() {
+        global $CFG;
+
+        $this->resetAfterTest(false);
+
+        $packer = get_file_packer('application/zip');
+        $fs = get_file_storage();
+        $context = context_system::instance();
+
+        $target = "$CFG->tempdir/onlyfiles/";
+        $testcontent = file_get_contents($this->testfile);
+
+        @mkdir($target, $CFG->directorypermissions);
+        $this->assertTrue(is_dir($target));
+
+        $onlyfiles = array('test', 'test.test', 'Žluťoučký/Koníček.txt', 'Idontexist');
+        $willbeextracted = array_intersect(array_keys($this->files), $onlyfiles);
+        $donotextract = array_diff(array_keys($this->files), $onlyfiles);
+
+        $archive = "$CFG->tempdir/archive.zip";
+        $this->assertTrue(file_exists($archive));
+        $result = $packer->extract_to_pathname($archive, $target, $onlyfiles);
+        $this->assertTrue(is_array($result));
+        $this->assertEquals(count($willbeextracted), count($result));
+
+        foreach($willbeextracted as $file) {
+            $this->assertTrue($result[$file]);
+            $this->assertTrue(file_exists($target.$file));
+            $this->assertSame($testcontent, file_get_contents($target.$file));
+        }
+        foreach($donotextract as $file) {
+            $this->assertFalse(isset($result[$file]));
+            $this->assertFalse(file_exists($target.$file));
+        }
+
     }
 
     /**
