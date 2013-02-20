@@ -76,6 +76,9 @@ class core_course_external_testcase extends externallib_advanced_testcase {
 
         $createdcats = core_course_external::create_categories($categories);
 
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $createdcats = external_api::clean_returnvalue(core_course_external::create_categories_returns(), $createdcats);
+
         // Initially confirm that base data was inserted correctly.
         $this->assertEquals($category1->name, $createdcats[0]['name']);
         $this->assertEquals($category2->name, $createdcats[1]['name']);
@@ -92,6 +95,9 @@ class core_course_external_testcase extends externallib_advanced_testcase {
         );
 
         $createdsubcats = core_course_external::create_categories($subcategories);
+
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $createdsubcats = external_api::clean_returnvalue(core_course_external::create_categories_returns(), $createdsubcats);
 
         // Confirm that sub categories were inserted correctly.
         $this->assertEquals($category3->name, $createdsubcats[0]['name']);
@@ -197,6 +203,9 @@ class core_course_external_testcase extends externallib_advanced_testcase {
             array('key' => 'id', 'value' => $category1->id),
             array('key' => 'visible', 'value' => 1)), 1);
 
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $categories = external_api::clean_returnvalue(core_course_external::get_categories_returns(), $categories);
+
         // Check we retrieve the good total number of categories.
         $this->assertEquals(2, count($categories));
 
@@ -214,6 +223,10 @@ class core_course_external_testcase extends externallib_advanced_testcase {
             array('key' => 'id', 'value' => $category1->id),
             array('key' => 'idnumber', 'value' => $category1->idnumber),
             array('key' => 'visible', 'value' => 1)), 0);
+
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $categories = external_api::clean_returnvalue(core_course_external::get_categories_returns(), $categories);
+
         $this->assertEquals(1, count($categories));
 
         // Retrieve categories from parent.
@@ -223,6 +236,10 @@ class core_course_external_testcase extends externallib_advanced_testcase {
 
         // Retrieve all categories.
         $categories = core_course_external::get_categories();
+
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $categories = external_api::clean_returnvalue(core_course_external::get_categories_returns(), $categories);
+
         $this->assertEquals($DB->count_records('course_categories'), count($categories));
 
         // Call without required capability (it will fail cause of the search on idnumber).
@@ -305,6 +322,9 @@ class core_course_external_testcase extends externallib_advanced_testcase {
 
         $this->resetAfterTest(true);
 
+        // Enable course completion.
+        set_config('enablecompletion', 1);
+
         // Set the required capabilities by the external function
         $contextid = context_system::instance()->id;
         $roleid = $this->assignUserCapability('moodle/course:create', $contextid);
@@ -350,12 +370,15 @@ class core_course_external_testcase extends externallib_advanced_testcase {
         foreach ($course3options as $key => $value) {
             $course3['courseformatoptions'][] = array('name' => $key, 'value' => $value);
         }
-        $courses = array($course1, $course2);
+        $courses = array($course1, $course2, $course3);
 
         $createdcourses = core_course_external::create_courses($courses);
 
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $createdcourses = external_api::clean_returnvalue(core_course_external::create_courses_returns(), $createdcourses);
+
         // Check that right number of courses were created.
-        $this->assertEquals(2, count($createdcourses));
+        $this->assertEquals(3, count($createdcourses));
 
         // Check that the courses were correctly created.
         foreach ($createdcourses as $createdcourse) {
@@ -387,13 +410,9 @@ class core_course_external_testcase extends externallib_advanced_testcase {
                     $this->assertEquals($courseinfo->theme, $course2['forcetheme']);
                 }
 
-                if (completion_info::is_enabled_for_site()) {
-                    $this->assertEquals($courseinfo->enablecompletion, $course2['enabledcompletion']);
-                    $this->assertEquals($courseinfo->completionstartonenrol, $course2['completionstartonenrol']);
-                } else {
-                    $this->assertEquals($courseinfo->enablecompletion, 0);
-                    $this->assertEquals($courseinfo->completionstartonenrol, 0);
-                }
+                // We enabled completion at the beginning of the test.
+                $this->assertEquals($courseinfo->enablecompletion, $course2['enablecompletion']);
+                $this->assertEquals($courseinfo->completionstartonenrol, $course2['completionstartonenrol']);
 
             } else if ($createdcourse['shortname'] == $course1['shortname']) {
                 $courseconfig = get_config('moodlecourse');
@@ -492,6 +511,9 @@ class core_course_external_testcase extends externallib_advanced_testcase {
         $courses = core_course_external::get_courses(array('ids' =>
             array($course1->id, $course2->id)));
 
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $courses = external_api::clean_returnvalue(core_course_external::get_courses_returns(), $courses);
+
         // Check we retrieve the good total number of categories.
         $this->assertEquals(2, count($courses));
 
@@ -532,6 +554,10 @@ class core_course_external_testcase extends externallib_advanced_testcase {
 
         // Get all courses in the DB
         $courses = core_course_external::get_courses(array());
+
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $courses = external_api::clean_returnvalue(core_course_external::get_courses_returns(), $courses);
+
         $this->assertEquals($DB->count_records('course'), count($courses));
     }
 
@@ -558,6 +584,9 @@ class core_course_external_testcase extends externallib_advanced_testcase {
         $this->assignUserCapability('moodle/course:update', $context->id, $roleid);
 
         $courses = core_course_external::get_course_contents($course->id, array());
+
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $courses = external_api::clean_returnvalue(core_course_external::get_course_contents_returns(), $courses);
 
         // Check that the course has the 3 created modules
         $this->assertEquals(3, count($courses[0]['modules']));
@@ -602,7 +631,216 @@ class core_course_external_testcase extends externallib_advanced_testcase {
         $duplicate = core_course_external::duplicate_course($course->id, $newcourse['fullname'],
                 $newcourse['shortname'], $newcourse['categoryid'], $newcourse['visible'], $newcourse['options']);
 
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $duplicate = external_api::clean_returnvalue(core_course_external::duplicate_course_returns(), $duplicate);
+
         // Check that the course has been duplicated.
         $this->assertEquals($newcourse['shortname'], $duplicate['shortname']);
+    }
+
+    /**
+     * Test update_courses
+     */
+    public function test_update_courses() {
+        global $DB, $CFG, $USER;
+
+        $this->resetAfterTest(true);
+
+        // Set the required capabilities by the external function.
+        $contextid = context_system::instance()->id;
+        $roleid = $this->assignUserCapability('moodle/course:update', $contextid);
+        $this->assignUserCapability('moodle/course:changecategory', $contextid, $roleid);
+        $this->assignUserCapability('moodle/course:changefullname', $contextid, $roleid);
+        $this->assignUserCapability('moodle/course:changeshortname', $contextid, $roleid);
+        $this->assignUserCapability('moodle/course:changeidnumber', $contextid, $roleid);
+        $this->assignUserCapability('moodle/course:changesummary', $contextid, $roleid);
+        $this->assignUserCapability('moodle/course:visibility', $contextid, $roleid);
+        $this->assignUserCapability('moodle/course:viewhiddencourses', $contextid, $roleid);
+
+        // Create category and course.
+        $category1  = self::getDataGenerator()->create_category();
+        $category2  = self::getDataGenerator()->create_category();
+        $originalcourse1 = self::getDataGenerator()->create_course();
+        self::getDataGenerator()->enrol_user($USER->id, $originalcourse1->id, $roleid);
+        $originalcourse2 = self::getDataGenerator()->create_course();
+        self::getDataGenerator()->enrol_user($USER->id, $originalcourse2->id, $roleid);
+
+        // Course values to be updated.
+        $course1['id'] = $originalcourse1->id;
+        $course1['fullname'] = 'Updated test course 1';
+        $course1['shortname'] = 'Udestedtestcourse1';
+        $course1['categoryid'] = $category1->id;
+        $course2['id'] = $originalcourse2->id;
+        $course2['fullname'] = 'Updated test course 2';
+        $course2['shortname'] = 'Updestedtestcourse2';
+        $course2['categoryid'] = $category2->id;
+        $course2['idnumber'] = 'Updatedidnumber2';
+        $course2['summary'] = 'Updaated description for course 2';
+        $course2['summaryformat'] = FORMAT_HTML;
+        $course2['format'] = 'topics';
+        $course2['showgrades'] = 1;
+        $course2['newsitems'] = 3;
+        $course2['startdate'] = 1420092000; // 01/01/2015.
+        $course2['numsections'] = 4;
+        $course2['maxbytes'] = 100000;
+        $course2['showreports'] = 1;
+        $course2['visible'] = 0;
+        $course2['hiddensections'] = 0;
+        $course2['groupmode'] = 0;
+        $course2['groupmodeforce'] = 0;
+        $course2['defaultgroupingid'] = 0;
+        $course2['enablecompletion'] = 1;
+        $course2['lang'] = 'en';
+        $course2['forcetheme'] = 'base';
+        $courses = array($course1, $course2);
+
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+
+        // Check that right number of courses were created.
+        $this->assertEquals(0, count($updatedcoursewarnings['warnings']));
+
+        // Check that the courses were correctly created.
+        foreach ($courses as $course) {
+            $courseinfo = course_get_format($course['id'])->get_course();
+            if ($course['id'] == $course2['id']) {
+                $this->assertEquals($course2['fullname'], $courseinfo->fullname);
+                $this->assertEquals($course2['shortname'], $courseinfo->shortname);
+                $this->assertEquals($course2['categoryid'], $courseinfo->category);
+                $this->assertEquals($course2['idnumber'], $courseinfo->idnumber);
+                $this->assertEquals($course2['summary'], $courseinfo->summary);
+                $this->assertEquals($course2['summaryformat'], $courseinfo->summaryformat);
+                $this->assertEquals($course2['format'], $courseinfo->format);
+                $this->assertEquals($course2['showgrades'], $courseinfo->showgrades);
+                $this->assertEquals($course2['newsitems'], $courseinfo->newsitems);
+                $this->assertEquals($course2['startdate'], $courseinfo->startdate);
+                $this->assertEquals($course2['numsections'], $courseinfo->numsections);
+                $this->assertEquals($course2['maxbytes'], $courseinfo->maxbytes);
+                $this->assertEquals($course2['showreports'], $courseinfo->showreports);
+                $this->assertEquals($course2['visible'], $courseinfo->visible);
+                $this->assertEquals($course2['hiddensections'], $courseinfo->hiddensections);
+                $this->assertEquals($course2['groupmode'], $courseinfo->groupmode);
+                $this->assertEquals($course2['groupmodeforce'], $courseinfo->groupmodeforce);
+                $this->assertEquals($course2['defaultgroupingid'], $courseinfo->defaultgroupingid);
+                $this->assertEquals($course2['lang'], $courseinfo->lang);
+
+                if (!empty($CFG->allowcoursethemes)) {
+                    $this->assertEquals($course2['forcetheme'], $courseinfo->theme);
+                }
+
+                if (completion_info::is_enabled_for_site()) {
+                    $this->assertEquals($course2['enabledcompletion'], $courseinfo->enablecompletion);
+                    $this->assertEquals($course2['completionstartonenrol'], $courseinfo->completionstartonenrol);
+                }
+            } else if ($course['id'] == $course1['id']) {
+                $this->assertEquals($course1['fullname'], $courseinfo->fullname);
+                $this->assertEquals($course1['shortname'], $courseinfo->shortname);
+                $this->assertEquals($course1['categoryid'], $courseinfo->category);
+                $this->assertEquals(FORMAT_MOODLE, $courseinfo->summaryformat);
+                $this->assertEquals('topics', $courseinfo->format);
+                $this->assertEquals(5, $courseinfo->numsections);
+                $this->assertEquals(0, $courseinfo->newsitems);
+                $this->assertEquals(FORMAT_MOODLE, $courseinfo->summaryformat);
+            } else {
+                throw moodle_exception('Unexpected shortname');
+            }
+        }
+
+        $courses = array($course1);
+        // Try update course without update capability.
+        $user = self::getDataGenerator()->create_user();
+        $this->setUser($user);
+        $this->unassignUserCapability('moodle/course:update', $contextid, $roleid);
+        self::getDataGenerator()->enrol_user($user->id, $course1['id'], $roleid);
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+        $this->assertEquals(1, count($updatedcoursewarnings['warnings']));
+
+        // Try update course category without capability.
+        $this->assignUserCapability('moodle/course:update', $contextid, $roleid);
+        $this->unassignUserCapability('moodle/course:changecategory', $contextid, $roleid);
+        $user = self::getDataGenerator()->create_user();
+        $this->setUser($user);
+        self::getDataGenerator()->enrol_user($user->id, $course1['id'], $roleid);
+        $course1['categoryid'] = $category2->id;
+        $courses = array($course1);
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+        $this->assertEquals(1, count($updatedcoursewarnings['warnings']));
+
+        // Try update course fullname without capability.
+        $this->assignUserCapability('moodle/course:changecategory', $contextid, $roleid);
+        $this->unassignUserCapability('moodle/course:changefullname', $contextid, $roleid);
+        $user = self::getDataGenerator()->create_user();
+        $this->setUser($user);
+        self::getDataGenerator()->enrol_user($user->id, $course1['id'], $roleid);
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+        $this->assertEquals(0, count($updatedcoursewarnings['warnings']));
+        $course1['fullname'] = 'Testing fullname without permission';
+        $courses = array($course1);
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+        $this->assertEquals(1, count($updatedcoursewarnings['warnings']));
+
+        // Try update course shortname without capability.
+        $this->assignUserCapability('moodle/course:changefullname', $contextid, $roleid);
+        $this->unassignUserCapability('moodle/course:changeshortname', $contextid, $roleid);
+        $user = self::getDataGenerator()->create_user();
+        $this->setUser($user);
+        self::getDataGenerator()->enrol_user($user->id, $course1['id'], $roleid);
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+        $this->assertEquals(0, count($updatedcoursewarnings['warnings']));
+        $course1['shortname'] = 'Testing shortname without permission';
+        $courses = array($course1);
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+        $this->assertEquals(1, count($updatedcoursewarnings['warnings']));
+
+        // Try update course idnumber without capability.
+        $this->assignUserCapability('moodle/course:changeshortname', $contextid, $roleid);
+        $this->unassignUserCapability('moodle/course:changeidnumber', $contextid, $roleid);
+        $user = self::getDataGenerator()->create_user();
+        $this->setUser($user);
+        self::getDataGenerator()->enrol_user($user->id, $course1['id'], $roleid);
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+        $this->assertEquals(0, count($updatedcoursewarnings['warnings']));
+        $course1['idnumber'] = 'NEWIDNUMBER';
+        $courses = array($course1);
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+        $this->assertEquals(1, count($updatedcoursewarnings['warnings']));
+
+        // Try update course summary without capability.
+        $this->assignUserCapability('moodle/course:changeidnumber', $contextid, $roleid);
+        $this->unassignUserCapability('moodle/course:changesummary', $contextid, $roleid);
+        $user = self::getDataGenerator()->create_user();
+        $this->setUser($user);
+        self::getDataGenerator()->enrol_user($user->id, $course1['id'], $roleid);
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+        $this->assertEquals(0, count($updatedcoursewarnings['warnings']));
+        $course1['summary'] = 'New summary';
+        $courses = array($course1);
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+        $this->assertEquals(1, count($updatedcoursewarnings['warnings']));
+
+        // Try update course with invalid summary format.
+        $this->assignUserCapability('moodle/course:changesummary', $contextid, $roleid);
+        $user = self::getDataGenerator()->create_user();
+        $this->setUser($user);
+        self::getDataGenerator()->enrol_user($user->id, $course1['id'], $roleid);
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+        $this->assertEquals(0, count($updatedcoursewarnings['warnings']));
+        $course1['summaryformat'] = 10;
+        $courses = array($course1);
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+        $this->assertEquals(1, count($updatedcoursewarnings['warnings']));
+
+        // Try update course visibility without capability.
+        $this->unassignUserCapability('moodle/course:visibility', $contextid, $roleid);
+        $user = self::getDataGenerator()->create_user();
+        $this->setUser($user);
+        self::getDataGenerator()->enrol_user($user->id, $course1['id'], $roleid);
+        $course1['summaryformat'] = FORMAT_MOODLE;
+        $courses = array($course1);
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+        $this->assertEquals(0, count($updatedcoursewarnings['warnings']));
+        $course1['visible'] = 0;
+        $courses = array($course1);
+        $updatedcoursewarnings = core_course_external::update_courses($courses);
+        $this->assertEquals(1, count($updatedcoursewarnings['warnings']));
     }
 }

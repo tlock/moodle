@@ -281,16 +281,6 @@ function resourcelib_embed_general($fullurl, $title, $clicktoopen, $mimetype) {
   </iframe>
 </div>
 EOT;
-    } else {
-        $code = <<<EOT
-<div class="resourcecontent resourcegeneral">
-  <object id="resourceobject" data="$fullurl" type="$mimetype"  width="800" height="600">
-    $param
-    $clicktoopen
-  </object>
-</div>
-EOT;
-    }
 
     // the size is hardcoded in the boject obove intentionally because it is adjusted by the following function on-the-fly
     $PAGE->requires->js_init_call('M.util.init_maximised_embed', array('resourceobject'), true);

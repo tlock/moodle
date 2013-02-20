@@ -104,7 +104,7 @@ abstract class question_edit_form extends question_wizard_form {
         $this->context = context::instance_by_id($record->contextid);
 
         $this->editoroptions = array('subdirs' => 1, 'maxfiles' => EDITOR_UNLIMITED_FILES,
-                'context' => $this->context);
+                'context' => $this->context, 'collapsed' => 1);
         $this->fileoptions = array('subdirs' => 1, 'maxfiles' => -1, 'maxbytes' => -1);
 
         $this->category = $category;
@@ -186,7 +186,7 @@ abstract class question_edit_form extends question_wizard_form {
         $mform->addRule('name', null, 'required', null, 'client');
 
         $mform->addElement('editor', 'questiontext', get_string('questiontext', 'question'),
-                array('rows' => 15), $this->editoroptions);
+                array('rows' => 15), $this->get_non_collabsible_editor_options());
         $mform->setType('questiontext', PARAM_RAW);
 
         $mform->addElement('text', 'defaultmark', get_string('defaultmark', 'question'),
@@ -196,7 +196,7 @@ abstract class question_edit_form extends question_wizard_form {
         $mform->addRule('defaultmark', null, 'required', null, 'client');
 
         $mform->addElement('editor', 'generalfeedback', get_string('generalfeedback', 'question'),
-                array('rows' => 10), $this->editoroptions);
+                array('rows' => 10), $this->get_non_collabsible_editor_options());
         $mform->setType('generalfeedback', PARAM_RAW);
         $mform->addHelpButton('generalfeedback', 'generalfeedback', 'question');
 
@@ -337,7 +337,14 @@ abstract class question_edit_form extends question_wizard_form {
 
         $this->repeat_elements($repeated, $repeatsatstart, $repeatedoptions,
                 'noanswers', 'addanswers', $addoptions,
-                get_string('addmorechoiceblanks', 'qtype_multichoice'));
+                $this->get_more_choices_string());
+    }
+
+    /**
+     * Language string to use for 'Add {no} more {whatever we call answers}'.
+     */
+    protected function get_more_choices_string() {
+        return get_string('addmorechoiceblanks', 'question');
     }
 
     protected function add_combined_feedback_fields($withshownumpartscorrect = false) {
@@ -348,34 +355,50 @@ abstract class question_edit_form extends question_wizard_form {
 
         $fields = array('correctfeedback', 'partiallycorrectfeedback', 'incorrectfeedback');
         foreach ($fields as $feedbackname) {
-            $mform->addElement('editor', $feedbackname, get_string($feedbackname, 'question'),
+            $element = $mform->addElement('editor', $feedbackname,
+                                get_string($feedbackname, 'question'),
                                 array('rows' => 5), $this->editoroptions);
             $mform->setType($feedbackname, PARAM_RAW);
+            // Using setValue() as setDefault() does not work for the editor class.
+            $element->setValue(array('text'=>get_string($feedbackname.'default', 'question')));
 
             if ($withshownumpartscorrect && $feedbackname == 'partiallycorrectfeedback') {
                 $mform->addElement('advcheckbox', 'shownumcorrect',
                         get_string('options', 'question'),
                         get_string('shownumpartscorrectwhenfinished', 'question'));
+                $mform->setDefault('shownumcorrect', true);
             }
         }
     }
 
+    /**
+     * Create the form elements required by one hint.
+     * @param string $withclearwrong whether this quesiton type uses the 'Clear wrong' option on hints.
+     * @param string $withshownumpartscorrect whether this quesiton type uses the 'Show num parts correct' option on hints.
+     * @return array form field elements for one hint.
+     */
     protected function get_hint_fields($withclearwrong = false, $withshownumpartscorrect = false) {
         $mform = $this->_form;
 
+        $repeatedoptions = array();
         $repeated = array();
-        $repeated[] = $mform->createElement('header', 'hinthdr', get_string('hintn', 'question'));
-        $repeated[] = $mform->createElement('editor', 'hint', get_string('hinttext', 'question'),
+        $repeated[] = $mform->createElement('editor', 'hint', get_string('hintn', 'question'),
                 array('rows' => 5), $this->editoroptions);
         $repeatedoptions['hint']['type'] = PARAM_RAW;
 
+        $optionelements = array();
         if ($withclearwrong) {
-            $repeated[] = $mform->createElement('advcheckbox', 'hintclearwrong',
+            $optionelements[] = $mform->createElement('advcheckbox', 'hintclearwrong',
                     get_string('options', 'question'), get_string('clearwrongparts', 'question'));
         }
         if ($withshownumpartscorrect) {
-            $repeated[] = $mform->createElement('advcheckbox', 'hintshownumcorrect', '',
+            $optionelements[] = $mform->createElement('advcheckbox', 'hintshownumcorrect', '',
                     get_string('shownumpartscorrect', 'question'));
+        }
+
+        if (count($optionelements)) {
+            $repeated[] = $mform->createElement('group', 'hintoptions',
+                 get_string('hintnoptions', 'question'), $optionelements, null, false);
         }
 
         return array($repeated, $repeatedoptions);
@@ -426,7 +449,7 @@ abstract class question_edit_form extends question_wizard_form {
         list($repeated, $repeatedoptions) = $this->get_hint_fields(
                 $withclearwrong, $withshownumpartscorrect);
         $this->repeat_elements($repeated, $repeatsatstart, $repeatedoptions,
-                'numhints', 'addhint', 1, get_string('addanotherhint', 'question'));
+                'numhints', 'addhint', 1, get_string('addanotherhint', 'question'), true);
     }
 
     public function set_data($question) {
@@ -481,7 +504,7 @@ abstract class question_edit_form extends question_wizard_form {
         if (is_array($extraquestionfields) && !empty($question->options)) {
             array_shift($extraquestionfields);
             foreach ($extraquestionfields as $field) {
-                if (isset($question->options->$field)) {
+                if (property_exists($question->options, $field)) {
                     $question->$field = $question->options->$field;
                 }
             }
@@ -663,4 +686,12 @@ abstract class question_edit_form extends question_wizard_form {
      *      in the question type class.
      */
     public abstract function qtype();
+
+    /**
+     * Returns an array of editor options with collapsed options turned off.
+     * @return array
+     */
+    protected function get_non_collabsible_editor_options() {
+        return array_merge($this->editoroptions, array('collapsed' => 0));
+    }
 }

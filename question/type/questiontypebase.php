@@ -342,7 +342,7 @@ class question_type {
         if (empty($form->questiontext['text'])) {
             $question->questiontext = '';
         } else {
-            $question->questiontext = trim($form->questiontext['text']);;
+            $question->questiontext = trim($form->questiontext['text']);
         }
         $question->questiontextformat = !empty($form->questiontext['format']) ?
                 $form->questiontext['format'] : 0;
@@ -454,21 +454,12 @@ class question_type {
                 $options->$questionidcolname = $question->id;
             }
             foreach ($extraquestionfields as $field) {
-                if (!isset($question->$field)) {
-                    $result = new stdClass();
-                    $result->error = "No data for field $field when saving " .
-                            $this->name() . ' question id ' . $question->id;
-                    return $result;
+                if (property_exists($question, $field)) {
+                    $options->$field = $question->$field;
                 }
-                $options->$field = $question->$field;
             }
 
-            if (!$DB->{$function}($question_extension_table, $options)) {
-                $result = new stdClass();
-                $result->error = 'Could not save question options for ' .
-                        $this->name() . ' question id ' . $question->id;
-                return $result;
-            }
+            $DB->{$function}($question_extension_table, $options);
         }
 
         $extraanswerfields = $this->extra_answer_fields();

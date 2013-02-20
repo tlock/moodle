@@ -148,8 +148,6 @@ if ($frm and isset($frm->username)) {                             // Login WITH 
         die;
     }
 
-    update_login_count();
-
     if ($user) {
 
         // language setup
@@ -241,8 +239,6 @@ if ($frm and isset($frm->username)) {                             // Login WITH 
                 exit;
             }
         }
-
-        reset_login_count();
 
         // test the session actually works by redirecting to self
         $SESSION->wantsurl = $urltogo;
@@ -345,7 +341,9 @@ if (isloggedin() and !isguestuser()) {
     echo $OUTPUT->box_end();
 } else {
     include("index_form.html");
-    if (!empty($CFG->loginpageautofocus)) {
+    if ($errormsg) {
+        $PAGE->requires->js_init_call('M.util.focus_login_error', null, true);
+    } else if (!empty($CFG->loginpageautofocus)) {
         //focus username or password
         $PAGE->requires->js_init_call('M.util.focus_login_form', null, true);
     }

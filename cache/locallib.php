@@ -178,6 +178,10 @@ class cache_config_writer extends cache_config {
             $this->configstores[$name]['lock'] = $configuration['lock'];
             unset($this->configstores[$name]['configuration']['lock']);
         }
+        // Call instance_created()
+        $store = new $class($name, $this->configstores[$name]['configuration']);
+        $store->instance_created();
+
         $this->config_save();
         return true;
     }
@@ -304,6 +308,12 @@ class cache_config_writer extends cache_config {
                 throw new cache_exception('You cannot delete a cache store that has definition mappings.');
             }
         }
+
+        // Call instance_deleted()
+        $class = 'cachestore_'.$this->configstores[$name]['plugin'];
+        $store = new $class($name, $this->configstores[$name]['configuration']);
+        $store->instance_deleted();
+
         unset($this->configstores[$name]);
         $this->config_save();
         return true;
@@ -401,8 +411,11 @@ class cache_config_writer extends cache_config {
      * @param bool $coreonly If set to true only core definitions will be updated.
      */
     public static function update_definitions($coreonly = false) {
-        $config = self::instance();
+        $factory = cache_factory::instance();
+        $factory->updating_started();
+        $config = $factory->create_config_instance(true);
         $config->write_definitions_to_cache(self::locate_definitions($coreonly));
+        $factory->updating_finished();
     }
 
     /**
@@ -695,6 +708,10 @@ abstract class cache_administration_helper extends cache_helper {
                 array(
                     'text' => get_string('editmappings', 'cache'),
                     'url' => new moodle_url('/cache/admin.php', array('action' => 'editdefinitionmapping', 'sesskey' => sesskey()))
+                ),
+                array(
+                    'text' => get_string('purge', 'cache'),
+                    'url' => new moodle_url('/cache/admin.php', array('action' => 'purgedefinition', 'sesskey' => sesskey()))
                 )
             );
         }
@@ -724,7 +741,7 @@ abstract class cache_administration_helper extends cache_helper {
             }
             $actions[] = array(
                 'text' => get_string('purge', 'cache'),
-                'url' => new moodle_url($baseurl, array('action' => 'purge'))
+                'url' => new moodle_url($baseurl, array('action' => 'purgestore'))
             );
         }
         return $actions;

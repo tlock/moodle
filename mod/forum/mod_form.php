@@ -72,7 +72,6 @@ class mod_forum_mod_form extends moodleform_mod {
 
         $choices = get_max_upload_sizes($CFG->maxbytes, $COURSE->maxbytes);
         $choices[1] = get_string('uploadnotallowed');
-        $choices[0] = get_string('courseuploadlimit') . ' ('.display_size($COURSE->maxbytes).')';
         $mform->addElement('select', 'maxbytes', get_string('maxattachmentsize', 'forum'), $choices);
         $mform->addHelpButton('maxbytes', 'maxattachmentsize', 'forum');
         $mform->setDefault('maxbytes', $CFG->forum_maxbytes);
@@ -81,6 +80,11 @@ class mod_forum_mod_form extends moodleform_mod {
         $mform->addElement('select', 'maxattachments', get_string('maxattachments', 'forum'), $choices);
         $mform->addHelpButton('maxattachments', 'maxattachments', 'forum');
         $mform->setDefault('maxattachments', $CFG->forum_maxattachments);
+
+        $mform->addElement('selectyesno', 'displaywordcount', get_string('displaywordcount', 'forum'));
+        $mform->addHelpButton('displaywordcount', 'displaywordcount', 'forum');
+        $mform->setDefault('displaywordcount', 0);
+        $mform->setAdvanced('displaywordcount');
 
         if ($CFG->enablerssfeeds && isset($CFG->forum_enablerssfeeds) && $CFG->forum_enablerssfeeds) {
 //-------------------------------------------------------------------------------

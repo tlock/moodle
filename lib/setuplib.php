@@ -137,12 +137,21 @@ class moodle_exception extends Exception {
 
         if (get_string_manager()->string_exists($errorcode, $module)) {
             $message = get_string($errorcode, $module, $a);
+            $haserrorstring = true;
         } else {
             $message = $module . '/' . $errorcode;
+            $haserrorstring = false;
         }
 
         if (defined('PHPUNIT_TEST') and PHPUNIT_TEST and $debuginfo) {
             $message = "$message ($debuginfo)";
+        }
+
+        if (!$haserrorstring and defined('PHPUNIT_TEST') and PHPUNIT_TEST) {
+            // Append the contents of $a to $debuginfo so helpful information isn't lost.
+            // This emulates what {@link get_exception_info()} does. Unfortunately that
+            // function is not used by phpunit.
+            $message .= PHP_EOL.'$a contents: '.print_r($a, true);
         }
 
         parent::__construct($message, 0);
@@ -713,8 +722,8 @@ function initialise_cfg() {
 
     try {
         if ($DB) {
-            $localcfg = $DB->get_records_menu('config', array(), '', 'name,value');
-            foreach ($localcfg as $name=>$value) {
+            $localcfg = get_config('core');
+            foreach ($localcfg as $name => $value) {
                 if (property_exists($CFG, $name)) {
                     // config.php settings always take precedence
                     continue;
@@ -1140,8 +1149,8 @@ function disable_output_buffering() {
  */
 function redirect_if_major_upgrade_required() {
     global $CFG;
-    $lastmajordbchanges = 2012110201;
-    if (empty($CFG->version) or (int)$CFG->version < $lastmajordbchanges or
+    $lastmajordbchanges = 2013021100.01;
+    if (empty($CFG->version) or (float)$CFG->version < $lastmajordbchanges or
             during_initial_install() or !empty($CFG->adminsetuppending)) {
         try {
             @session_get_instance()->terminate_current();
@@ -1596,15 +1605,15 @@ width: 80%; -moz-border-radius: 20px; padding: 15px">
      * @param string $meta meta tag
      * @return string html page
      */
-    protected static function plain_page($title, $content, $meta = '') {
+    public static function plain_page($title, $content, $meta = '') {
         if (function_exists('get_string') && function_exists('get_html_lang')) {
             $htmllang = get_html_lang();
         } else {
             $htmllang = '';
         }
 
-        return '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" ' . $htmllang . '>
+        return '<!DOCTYPE html>
+<html ' . $htmllang . '>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 '.$meta.'

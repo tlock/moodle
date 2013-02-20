@@ -619,8 +619,14 @@ abstract class qbehaviour_walkthrough_test_base extends question_testcase {
     protected $displayoptions;
     /** @var question_usage_by_activity */
     protected $quba;
-    /** @var unknown_type integer */
+    /** @var integer */
+
     protected $slot;
+    /**
+     * @var string after {@link render()} has been called, this contains the
+     * display of the question in its current state.
+     */
+    protected $currentoutput = '';
 
     protected function setUp() {
         parent::setUp();
@@ -671,6 +677,14 @@ abstract class qbehaviour_walkthrough_test_base extends question_testcase {
     }
 
     /**
+     * Generate the HTML rendering of the question in its current state in
+     * $this->currentoutput so that it can be verified.
+     */
+    protected function render() {
+        $this->currentoutput = $this->quba->render_question($this->slot, $this->displayoptions);
+    }
+
+    /**
      * @param $condition one or more Expectations. (users varargs).
      */
     protected function check_current_output() {
@@ -697,11 +711,11 @@ abstract class qbehaviour_walkthrough_test_base extends question_testcase {
     }
 
     protected function get_contains_question_text_expectation($question) {
-        return new question_pattern_expectation('/' . preg_quote($question->questiontext) . '/');
+        return new question_pattern_expectation('/' . preg_quote($question->questiontext, '/') . '/');
     }
 
     protected function get_contains_general_feedback_expectation($question) {
-        return new question_pattern_expectation('/' . preg_quote($question->generalfeedback) . '/');
+        return new question_pattern_expectation('/' . preg_quote($question->generalfeedback, '/') . '/');
     }
 
     protected function get_does_not_contain_correctness_expectation() {
@@ -709,31 +723,31 @@ abstract class qbehaviour_walkthrough_test_base extends question_testcase {
     }
 
     protected function get_contains_correct_expectation() {
-        return new question_pattern_expectation('/' . preg_quote(get_string('correct', 'question')) . '/');
+        return new question_pattern_expectation('/' . preg_quote(get_string('correct', 'question'), '/') . '/');
     }
 
     protected function get_contains_partcorrect_expectation() {
         return new question_pattern_expectation('/' .
-            preg_quote(get_string('partiallycorrect', 'question')) . '/');
+            preg_quote(get_string('partiallycorrect', 'question'), '/') . '/');
     }
 
     protected function get_contains_incorrect_expectation() {
-        return new question_pattern_expectation('/' . preg_quote(get_string('incorrect', 'question')) . '/');
+        return new question_pattern_expectation('/' . preg_quote(get_string('incorrect', 'question'), '/') . '/');
     }
 
     protected function get_contains_standard_correct_combined_feedback_expectation() {
         return new question_pattern_expectation('/' .
-            preg_quote(test_question_maker::STANDARD_OVERALL_CORRECT_FEEDBACK) . '/');
+            preg_quote(test_question_maker::STANDARD_OVERALL_CORRECT_FEEDBACK, '/') . '/');
     }
 
     protected function get_contains_standard_partiallycorrect_combined_feedback_expectation() {
         return new question_pattern_expectation('/' .
-            preg_quote(test_question_maker::STANDARD_OVERALL_PARTIALLYCORRECT_FEEDBACK) . '/');
+            preg_quote(test_question_maker::STANDARD_OVERALL_PARTIALLYCORRECT_FEEDBACK, '/') . '/');
     }
 
     protected function get_contains_standard_incorrect_combined_feedback_expectation() {
         return new question_pattern_expectation('/' .
-            preg_quote(test_question_maker::STANDARD_OVERALL_INCORRECT_FEEDBACK) . '/');
+            preg_quote(test_question_maker::STANDARD_OVERALL_INCORRECT_FEEDBACK, '/') . '/');
     }
 
     protected function get_does_not_contain_feedback_expectation() {
@@ -748,7 +762,7 @@ abstract class qbehaviour_walkthrough_test_base extends question_testcase {
         $a = new stdClass();
         $a->num = $num;
         return new question_pattern_expectation('/<div class="numpartscorrect">' .
-            preg_quote(get_string('yougotnright', 'question', $a)) . '/');
+            preg_quote(get_string('yougotnright', 'question', $a), '/') . '/');
     }
 
     protected function get_does_not_contain_specific_feedback_expectation() {
@@ -769,14 +783,14 @@ abstract class qbehaviour_walkthrough_test_base extends question_testcase {
         $a->max = format_float($this->quba->get_question_max_mark($this->slot),
             $this->displayoptions->markdp);
         return new question_pattern_expectation('/' .
-            preg_quote(get_string('markoutofmax', 'question', $a)) . '/');
+            preg_quote(get_string('markoutofmax', 'question', $a), '/') . '/');
     }
 
     protected function get_contains_marked_out_of_summary() {
         $max = format_float($this->quba->get_question_max_mark($this->slot),
             $this->displayoptions->markdp);
         return new question_pattern_expectation('/' .
-            preg_quote(get_string('markedoutofmax', 'question', $max)) . '/');
+            preg_quote(get_string('markedoutofmax', 'question', $max), '/') . '/');
     }
 
     protected function get_does_not_contain_mark_summary() {
@@ -894,12 +908,12 @@ abstract class qbehaviour_walkthrough_test_base extends question_testcase {
 
     protected function get_tries_remaining_expectation($n) {
         return new question_pattern_expectation('/' .
-            preg_quote(get_string('triesremaining', 'qbehaviour_interactive', $n)) . '/');
+            preg_quote(get_string('triesremaining', 'qbehaviour_interactive', $n), '/') . '/');
     }
 
     protected function get_invalid_answer_expectation() {
         return new question_pattern_expectation('/' .
-            preg_quote(get_string('invalidanswer', 'question')) . '/');
+            preg_quote(get_string('invalidanswer', 'question'), '/') . '/');
     }
 
     protected function get_contains_try_again_button_expectation($enabled = null) {

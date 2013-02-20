@@ -113,8 +113,8 @@ class qtype_multianswer extends question_type {
                                         array('question' => $oldwrappedquestion->id));
                                 break;
                             case 'shortanswer':
-                                $DB->delete_records('question_shortanswer',
-                                        array('question' => $oldwrappedquestion->id));
+                                $DB->delete_records('qtype_shortanswer_options',
+                                        array('questionid' => $oldwrappedquestion->id));
                                 break;
                             case 'numerical':
                                 $DB->delete_records('question_numerical',
@@ -165,7 +165,7 @@ class qtype_multianswer extends question_type {
             }
         }
 
-        $this->save_hints($question);
+        $this->save_hints($question, true);
     }
 
     public function save_question($authorizedquestion, $form) {
@@ -181,6 +181,10 @@ class qtype_multianswer extends question_type {
         $form->options = clone($question->options);
         unset($question->options);
         return parent::save_question($question, $form);
+    }
+
+    protected function make_hint($hint) {
+        return question_hint_with_parts::load_from_record($hint);
     }
 
     public function delete_question($questionid, $contextid) {

@@ -75,4 +75,41 @@ $definitions = array(
         'datasource' => 'question_finder',
         'datasourcefile' => 'question/engine/bank.php',
     ),
+
+    // HTML Purifier cache
+    // This caches the html purifier cleaned text. This is done because the text is usually cleaned once for every user
+    // and context combo. Text caching handles caching for the combonation, this cache is responsible for caching the
+    // cleaned text which is shareable.
+    'htmlpurifier' => array(
+        'mode' => cache_store::MODE_APPLICATION,
+    ),
+
+    // Used to store data from the config + config_plugins table in the database.
+    // The key used is the component:
+    //   - core for all core config settings
+    //   - plugin component for all plugin settings.
+    // Persistence is used because normally several settings within a script.
+    'config' => array(
+        'mode' => cache_store::MODE_APPLICATION,
+        'persistent' => true,
+        'simpledata' => true
+    ),
+
+    // Groupings belonging to a course.
+    // A simple cache designed to replace $GROUPLIB_CACHE->groupings.
+    // Items are organised by course id and are essentially course records.
+    'groupdata' => array(
+        'mode' => cache_store::MODE_APPLICATION,
+        'simplekeys' => true, // The course id the groupings exist for.
+        'simpledata' => true, // Array of stdClass objects containing only strings.
+        'persistent' => true, // Likely there will be a couple of calls to this.
+        'persistmaxsize' => 2, // The original cache used 1, we've increased that to two.
+    ),
+     // Used to cache calendar subscriptions.
+    'calendar_subscriptions' => array(
+        'mode' => cache_store::MODE_APPLICATION,
+        'simplekeys' => true,
+        'simpledata' => true,
+        'persistent' => true,
+    )
 );

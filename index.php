@@ -142,20 +142,15 @@
                      " class=\"iconsmall\" alt=\"$streditsummary\" /></a><br /><br />";
             }
 
-            print_section($SITE, $section, $mods, $modnamesused, true);
+            $courserenderer = $PAGE->get_renderer('core', 'course');
+            echo $courserenderer->course_section_cm_list($SITE, $section);
 
-            if ($editing) {
-                print_section_add_menus($SITE, $section->section, $modnames);
-            }
+            echo $courserenderer->course_section_add_cm_control($SITE, $section->section);
             echo $OUTPUT->box_end();
         }
     }
     // Include course AJAX
-    if (include_course_ajax($SITE, $modnamesused)) {
-        // Add the module chooser
-        $renderer = $PAGE->get_renderer('core', 'course');
-        echo $renderer->course_modchooser(get_module_metadata($SITE, $modnames), $SITE);
-    }
+    include_course_ajax($SITE, $modnamesused);
 
     if (isloggedin() and !isguestuser() and isset($CFG->frontpageloggedin)) {
         $frontpagelayout = $CFG->frontpageloggedin;
@@ -180,6 +175,9 @@
                     $forumname = format_string($newsforum->name, true, array('context' => $newsforumcontext));
                     echo html_writer::tag('a', get_string('skipa', 'access', textlib::strtolower(strip_tags($forumname))), array('href'=>'#skipsitenews', 'class'=>'skip-block'));
 
+                    // wraps site news forum in div container.
+                    echo html_writer::start_tag('div', array('id'=>'site-news-forum'));
+
                     if (isloggedin()) {
                         $SESSION->fromdiscussion = $CFG->wwwroot;
                         $subtext = '';
@@ -198,6 +196,10 @@
                     }
 
                     forum_print_latest_discussions($SITE, $newsforum, $SITE->newsitems, 'plain', 'p.modified DESC');
+
+                    //end site news forum div container
+                    echo html_writer::end_tag('div');
+
                     echo html_writer::tag('span', '', array('class'=>'skip-block-to', 'id'=>'skipsitenews'));
                 }
             break;
@@ -206,14 +208,30 @@
                 $ncourses = $DB->count_records('course');
                 if (isloggedin() and !$hassiteconfig and !isguestuser() and empty($CFG->disablemycourses)) {
                     echo html_writer::tag('a', get_string('skipa', 'access', textlib::strtolower(get_string('mycourses'))), array('href'=>'#skipmycourses', 'class'=>'skip-block'));
+
+                    //wrap frontpage course list in div container
+                    echo html_writer::start_tag('div', array('id'=>'frontpage-course-list'));
+
                     echo $OUTPUT->heading(get_string('mycourses'), 2, 'headingblock header');
                     print_my_moodle();
+
+                    //end frontpage course list div container
+                    echo html_writer::end_tag('div');
+
                     echo html_writer::tag('span', '', array('class'=>'skip-block-to', 'id'=>'skipmycourses'));
                 } else if ((!$hassiteconfig and !isguestuser()) or ($ncourses <= FRONTPAGECOURSELIMIT)) {
                     // admin should not see list of courses when there are too many of them
                     echo html_writer::tag('a', get_string('skipa', 'access', textlib::strtolower(get_string('availablecourses'))), array('href'=>'#skipavailablecourses', 'class'=>'skip-block'));
+
+                    //wrap frontpage course list in div container
+                    echo html_writer::start_tag('div', array('id'=>'frontpage-course-list'));
+
                     echo $OUTPUT->heading(get_string('availablecourses'), 2, 'headingblock header');
                     print_courses(0);
+
+                    //end frontpage course list div container
+                    echo html_writer::end_tag('div');
+
                     echo html_writer::tag('span', '', array('class'=>'skip-block-to', 'id'=>'skipavailablecourses'));
                 } else {
                     echo html_writer::tag('div', get_string('therearecourses', '', $ncourses), array('class' => 'notifyproblem'));
@@ -223,19 +241,31 @@
 
             case FRONTPAGECATEGORYNAMES:
                 echo html_writer::tag('a', get_string('skipa', 'access', textlib::strtolower(get_string('categories'))), array('href'=>'#skipcategories', 'class'=>'skip-block'));
+
+                //wrap frontpage category names in div container
+                echo html_writer::start_tag('div', array('id'=>'frontpage-category-names'));
+
                 echo $OUTPUT->heading(get_string('categories'), 2, 'headingblock header');
                 echo $OUTPUT->box_start('generalbox categorybox');
                 print_whole_category_list(NULL, NULL, NULL, -1, false);
                 echo $OUTPUT->box_end();
                 print_course_search('', false, 'short');
+
+                //end frontpage category names div container
+                echo html_writer::end_tag('div');
+
                 echo html_writer::tag('span', '', array('class'=>'skip-block-to', 'id'=>'skipcategories'));
             break;
 
             case FRONTPAGECATEGORYCOMBO:
                 echo html_writer::tag('a', get_string('skipa', 'access', textlib::strtolower(get_string('courses'))), array('href'=>'#skipcourses', 'class'=>'skip-block'));
+
+                //wrap frontpage category combo in div container
+                echo html_writer::start_tag('div', array('id'=>'frontpage-category-combo'));
+
                 echo $OUTPUT->heading(get_string('courses'), 2, 'headingblock header');
                 $renderer = $PAGE->get_renderer('core','course');
-                // if there are too many courses, budiling course category tree could be slow,
+                // if there are too many courses, building course category tree could be slow,
                 // users should go to course index page to see the whole list.
                 $coursecount = $DB->count_records('course');
                 if (empty($CFG->numcoursesincombo)) {
@@ -249,6 +279,10 @@
                     echo $renderer->course_category_tree(get_course_category_tree());
                 }
                 print_course_search('', false, 'short');
+
+                //end frontpage category combo div container
+                echo html_writer::end_tag('div');
+
                 echo html_writer::tag('span', '', array('class'=>'skip-block-to', 'id'=>'skipcourses'));
             break;
 

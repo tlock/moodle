@@ -1,6 +1,29 @@
 This files describes API changes in core lbraries and APIs,
 information provided here is intended especially for developers.
 
+=== 2.5 ===
+
+* Function get_max_file_sizes now returns an option for (for example) "Course limit (500MB)" or
+  "Site limit (200MB)" when appropriate with the option set to 0. This function no longer returns
+  an option for 0 bytes. Existing code that was replacing the 0 option in the return
+  from this function with a more sensible message, can now use the return from this function directly.
+* Functions responsible for output in course/lib.php are deprecated, the code is moved to
+  appropriate renderers: print_section_add_menus()
+  See functions' phpdocs in lib/deprecatedlib.php
+* Function get_print_section_cm_text() is deprecated, replaced with methods in cm_info
+* zip_packer may create empty zip archives, there is a new option to ignore
+  problematic files when creating archive
+* The function delete_course_module was deprecated and has been replaced with
+  course_delete_module. The reason for this was because the function delete_course_module
+  only partially deletes data, so wherever it was called extra code was needed to
+  perform the whole deletion process. The function course_delete_module now takes care
+  of the whole process.
+
+YUI changes:
+* M.util.help_icon has been deprecated. Code should be updated to use moodle-core-popuphelp
+  instead. To do so, remove any existing JS calls to M.util.help_icon from your PHP and ensure
+  that your help link is placed in a span which has the class 'helplink'.
+
 === 2.4 ===
 
 * Pagelib: Numerous deprecated functions were removed as classes page_base, page_course

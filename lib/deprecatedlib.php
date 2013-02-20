@@ -31,6 +31,25 @@
 defined('MOODLE_INTERNAL') || die();
 
 /**
+ * Not used any more, the account lockout handling is now
+ * part of authenticate_user_login().
+ * @deprecated
+ */
+function update_login_count() {
+    // TODO: delete function in Moodle 2.6
+    debugging('update_login_count() is deprecated, all calls need to be removed');
+}
+
+/**
+ * Not used any more, replaced by proper account lockout.
+ * @deprecated
+ */
+function reset_login_count() {
+    // TODO: delete function in Moodle 2.6
+    debugging('reset_login_count() is deprecated, all calls need to be removed');
+}
+
+/**
  * Unsupported session id rewriting.
  * @deprecated
  * @param string $buffer
@@ -332,6 +351,7 @@ function is_course_participant($userid, $courseid) {
  *
  * used to print recent activity
  *
+ * @todo MDL-36993 this function is still used in block_recent_activity, deprecate properly
  * @global object
  * @uses CONTEXT_COURSE
  * @param int $courseid The course in question.
@@ -3064,4 +3084,443 @@ function format_weeks_get_section_dates($section, $course) {
         return course_get_format($course)->get_section_dates($section);
     }
     return null;
+}
+
+/**
+ * Obtains shared data that is used in print_section when displaying a
+ * course-module entry.
+ *
+ * Deprecated. Instead of:
+ * list($content, $name) = get_print_section_cm_text($cm, $course);
+ * use:
+ * $content = $cm->get_formatted_content(array('overflowdiv' => true, 'noclean' => true));
+ * $name = $cm->get_formatted_name();
+ *
+ * @deprecated since 2.5
+ * @see cm_info::get_formatted_content()
+ * @see cm_info::get_formatted_name()
+ *
+ * This data is also used in other areas of the code.
+ * @param cm_info $cm Course-module data (must come from get_fast_modinfo)
+ * @param object $course (argument not used)
+ * @return array An array with the following values in this order:
+ *   $content (optional extra content for after link),
+ *   $instancename (text of link)
+ */
+function get_print_section_cm_text(cm_info $cm, $course) {
+    debugging('Function get_print_section_cm_text() is deprecated. Please use '.
+            'cm_info::get_formatted_content() and cm_info::get_formatted_name()',
+            DEBUG_DEVELOPER);
+    return array($cm->get_formatted_content(array('overflowdiv' => true, 'noclean' => true)),
+        $cm->get_formatted_name());
+}
+
+/**
+ * Prints the menus to add activities and resources.
+ *
+ * Deprecated. Please use:
+ * $courserenderer = $PAGE->get_renderer('core', 'course');
+ * $output = $courserenderer->course_section_add_cm_control($course, $section, $sectionreturn,
+ *    array('inblock' => $vertical));
+ * echo $output; // if $return argument in print_section_add_menus() set to false
+ *
+ * @deprecated since 2.5
+ * @see core_course_renderer::course_section_add_cm_control()
+ *
+ * @param stdClass $course course object, must be the same as set on the page
+ * @param int $section relative section number (field course_sections.section)
+ * @param null|array $modnames (argument ignored) get_module_types_names() is used instead of argument
+ * @param bool $vertical Vertical orientation
+ * @param bool $return Return the menus or send them to output
+ * @param int $sectionreturn The section to link back to
+ * @return void|string depending on $return
+ */
+function print_section_add_menus($course, $section, $modnames = null, $vertical=false, $return=false, $sectionreturn=null) {
+    global $PAGE;
+    debugging('Function print_section_add_menus() is deprecated. Please use course renderer '.
+            'function course_section_add_cm_control()', DEBUG_DEVELOPER);
+    $output = '';
+    $courserenderer = $PAGE->get_renderer('core', 'course');
+    $output = $courserenderer->course_section_add_cm_control($course, $section, $sectionreturn,
+            array('inblock' => $vertical));
+    if ($return) {
+        return $output;
+    } else {
+        echo $output;
+        return !empty($output);
+    }
+}
+
+/**
+ * Produces the editing buttons for a module
+ *
+ * Deprecated. Please use:
+ * $courserenderer = $PAGE->get_renderer('core', 'course');
+ * $actions = course_get_cm_edit_actions($mod, $indent, $section);
+ * return ' ' . $courserenderer->course_section_cm_edit_actions($actions);
+ *
+ * @deprecated since 2.5
+ * @see course_get_cm_edit_actions()
+ * @see core_course_renderer->course_section_cm_edit_actions()
+ *
+ * @param stdClass $mod The module to produce editing buttons for
+ * @param bool $absolute_ignored (argument ignored) - all links are absolute
+ * @param bool $moveselect (argument ignored)
+ * @param int $indent The current indenting
+ * @param int $section The section to link back to
+ * @return string XHTML for the editing buttons
+ */
+function make_editing_buttons(stdClass $mod, $absolute_ignored = true, $moveselect = true, $indent=-1, $section=null) {
+    global $PAGE;
+    debugging('Function make_editing_buttons() is deprecated, please see PHPdocs in '.
+            'lib/deprecatedlib.php on how to replace it', DEBUG_DEVELOPER);
+    if (!($mod instanceof cm_info)) {
+        $modinfo = get_fast_modinfo($mod->course);
+        $mod = $modinfo->get_cm($mod->id);
+    }
+    $actions = course_get_cm_edit_actions($mod, $indent, $section);
+
+    $courserenderer = $PAGE->get_renderer('core', 'course');
+    // The space added before the <span> is a ugly hack but required to set the CSS property white-space: nowrap
+    // and having it to work without attaching the preceding text along with it. Hopefully the refactoring of
+    // the course page HTML will allow this to be removed.
+    return ' ' . $courserenderer->course_section_cm_edit_actions($actions);
+}
+
+/**
+ * Prints a section full of activity modules
+ *
+ * Deprecated. Please use:
+ * $courserenderer = $PAGE->get_renderer('core', 'course');
+ * echo $courserenderer->course_section_cm_list($course, $section, $sectionreturn,
+ *     array('hidecompletion' => $hidecompletion));
+ *
+ * @deprecated since 2.5
+ * @see core_course_renderer::course_section_cm_list()
+ *
+ * @param stdClass $course The course
+ * @param stdClass|section_info $section The section object containing properties id and section
+ * @param array $mods (argument not used)
+ * @param array $modnamesused (argument not used)
+ * @param bool $absolute (argument not used)
+ * @param string $width (argument not used)
+ * @param bool $hidecompletion Hide completion status
+ * @param int $sectionreturn The section to return to
+ * @return void
+ */
+function print_section($course, $section, $mods, $modnamesused, $absolute=false, $width="100%", $hidecompletion=false, $sectionreturn=null) {
+    global $PAGE;
+    debugging('Function print_section() is deprecated. Please use course renderer function '.
+            'course_section_cm_list() instead.', DEBUG_DEVELOPER);
+    $displayoptions = array('hidecompletion' => $hidecompletion);
+    $courserenderer = $PAGE->get_renderer('core', 'course');
+    echo $courserenderer->course_section_cm_list($course, $section, $sectionreturn, $displayoptions);
+}
+
+/**
+ * Displays the list of courses with user notes
+ *
+ * This function is not used in core. It was replaced by block course_overview
+ *
+ * @deprecated since 2.5
+ *
+ * @param array $courses
+ * @param array $remote_courses
+ */
+function print_overview($courses, array $remote_courses=array()) {
+    global $CFG, $USER, $DB, $OUTPUT;
+    debugging('Function print_overview() is deprecated. Use block course_overview to display this information', DEBUG_DEVELOPER);
+
+    $htmlarray = array();
+    if ($modules = $DB->get_records('modules')) {
+        foreach ($modules as $mod) {
+            if (file_exists(dirname(dirname(__FILE__)).'/mod/'.$mod->name.'/lib.php')) {
+                include_once(dirname(dirname(__FILE__)).'/mod/'.$mod->name.'/lib.php');
+                $fname = $mod->name.'_print_overview';
+                if (function_exists($fname)) {
+                    $fname($courses,$htmlarray);
+                }
+            }
+        }
+    }
+    foreach ($courses as $course) {
+        $fullname = format_string($course->fullname, true, array('context' => context_course::instance($course->id)));
+        echo $OUTPUT->box_start('coursebox');
+        $attributes = array('title' => s($fullname));
+        if (empty($course->visible)) {
+            $attributes['class'] = 'dimmed';
+        }
+        echo $OUTPUT->heading(html_writer::link(
+            new moodle_url('/course/view.php', array('id' => $course->id)), $fullname, $attributes), 3);
+        if (array_key_exists($course->id,$htmlarray)) {
+            foreach ($htmlarray[$course->id] as $modname => $html) {
+                echo $html;
+            }
+        }
+        echo $OUTPUT->box_end();
+    }
+
+    if (!empty($remote_courses)) {
+        echo $OUTPUT->heading(get_string('remotecourses', 'mnet'));
+    }
+    foreach ($remote_courses as $course) {
+        echo $OUTPUT->box_start('coursebox');
+        $attributes = array('title' => s($course->fullname));
+        echo $OUTPUT->heading(html_writer::link(
+            new moodle_url('/auth/mnet/jump.php', array('hostid' => $course->hostid, 'wantsurl' => '/course/view.php?id='.$course->remoteid)),
+            format_string($course->shortname),
+            $attributes) . ' (' . format_string($course->hostname) . ')', 3);
+        echo $OUTPUT->box_end();
+    }
+}
+
+/**
+ * This function trawls through the logs looking for
+ * anything new since the user's last login
+ *
+ * This function was only used to print the content of block recent_activity
+ * All functionality is moved into class {@link block_recent_activity}
+ * and renderer {@link block_recent_activity_renderer}
+ *
+ * @deprecated since 2.5
+ * @param stdClass $course
+ */
+function print_recent_activity($course) {
+    // $course is an object
+    global $CFG, $USER, $SESSION, $DB, $OUTPUT;
+    debugging('Function print_recent_activity() is deprecated. It is not recommended to'.
+            ' use it outside of block_recent_activity', DEBUG_DEVELOPER);
+
+    $context = context_course::instance($course->id);
+
+    $viewfullnames = has_capability('moodle/site:viewfullnames', $context);
+
+    $timestart = round(time() - COURSE_MAX_RECENT_PERIOD, -2); // better db caching for guests - 100 seconds
+
+    if (!isguestuser()) {
+        if (!empty($USER->lastcourseaccess[$course->id])) {
+            if ($USER->lastcourseaccess[$course->id] > $timestart) {
+                $timestart = $USER->lastcourseaccess[$course->id];
+            }
+        }
+    }
+
+    echo '<div class="activitydate">';
+    echo get_string('activitysince', '', userdate($timestart));
+    echo '</div>';
+    echo '<div class="activityhead">';
+
+    echo '<a href="'.$CFG->wwwroot.'/course/recent.php?id='.$course->id.'">'.get_string('recentactivityreport').'</a>';
+
+    echo "</div>\n";
+
+    $content = false;
+
+/// Firstly, have there been any new enrolments?
+
+    $users = get_recent_enrolments($course->id, $timestart);
+
+    //Accessibility: new users now appear in an <OL> list.
+    if ($users) {
+        echo '<div class="newusers">';
+        echo $OUTPUT->heading(get_string("newusers").':', 3);
+        $content = true;
+        echo "<ol class=\"list\">\n";
+        foreach ($users as $user) {
+            $fullname = fullname($user, $viewfullnames);
+            echo '<li class="name"><a href="'."$CFG->wwwroot/user/view.php?id=$user->id&amp;course=$course->id\">$fullname</a></li>\n";
+        }
+        echo "</ol>\n</div>\n";
+    }
+
+/// Next, have there been any modifications to the course structure?
+
+    $modinfo = get_fast_modinfo($course);
+
+    $changelist = array();
+
+    $logs = $DB->get_records_select('log', "time > ? AND course = ? AND
+                                            module = 'course' AND
+                                            (action = 'add mod' OR action = 'update mod' OR action = 'delete mod')",
+                                    array($timestart, $course->id), "id ASC");
+
+    if ($logs) {
+        $actions  = array('add mod', 'update mod', 'delete mod');
+        $newgones = array(); // added and later deleted items
+        foreach ($logs as $key => $log) {
+            if (!in_array($log->action, $actions)) {
+                continue;
+            }
+            $info = explode(' ', $log->info);
+
+            // note: in most cases I replaced hardcoding of label with use of
+            // $cm->has_view() but it was not possible to do this here because
+            // we don't necessarily have the $cm for it
+            if ($info[0] == 'label') {     // Labels are ignored in recent activity
+                continue;
+            }
+
+            if (count($info) != 2) {
+                debugging("Incorrect log entry info: id = ".$log->id, DEBUG_DEVELOPER);
+                continue;
+            }
+
+            $modname    = $info[0];
+            $instanceid = $info[1];
+
+            if ($log->action == 'delete mod') {
+                // unfortunately we do not know if the mod was visible
+                if (!array_key_exists($log->info, $newgones)) {
+                    $strdeleted = get_string('deletedactivity', 'moodle', get_string('modulename', $modname));
+                    $changelist[$log->info] = array ('operation' => 'delete', 'text' => $strdeleted);
+                }
+            } else {
+                if (!isset($modinfo->instances[$modname][$instanceid])) {
+                    if ($log->action == 'add mod') {
+                        // do not display added and later deleted activities
+                        $newgones[$log->info] = true;
+                    }
+                    continue;
+                }
+                $cm = $modinfo->instances[$modname][$instanceid];
+                if (!$cm->uservisible) {
+                    continue;
+                }
+
+                if ($log->action == 'add mod') {
+                    $stradded = get_string('added', 'moodle', get_string('modulename', $modname));
+                    $changelist[$log->info] = array('operation' => 'add', 'text' => "$stradded:<br /><a href=\"$CFG->wwwroot/mod/$cm->modname/view.php?id={$cm->id}\">".format_string($cm->name, true)."</a>");
+
+                } else if ($log->action == 'update mod' and empty($changelist[$log->info])) {
+                    $strupdated = get_string('updated', 'moodle', get_string('modulename', $modname));
+                    $changelist[$log->info] = array('operation' => 'update', 'text' => "$strupdated:<br /><a href=\"$CFG->wwwroot/mod/$cm->modname/view.php?id={$cm->id}\">".format_string($cm->name, true)."</a>");
+                }
+            }
+        }
+    }
+
+    if (!empty($changelist)) {
+        echo $OUTPUT->heading(get_string("courseupdates").':', 3);
+        $content = true;
+        foreach ($changelist as $changeinfo => $change) {
+            echo '<p class="activity">'.$change['text'].'</p>';
+        }
+    }
+
+/// Now display new things from each module
+
+    $usedmodules = array();
+    foreach($modinfo->cms as $cm) {
+        if (isset($usedmodules[$cm->modname])) {
+            continue;
+        }
+        if (!$cm->uservisible) {
+            continue;
+        }
+        $usedmodules[$cm->modname] = $cm->modname;
+    }
+
+    foreach ($usedmodules as $modname) {      // Each module gets it's own logs and prints them
+        if (file_exists($CFG->dirroot.'/mod/'.$modname.'/lib.php')) {
+            include_once($CFG->dirroot.'/mod/'.$modname.'/lib.php');
+            $print_recent_activity = $modname.'_print_recent_activity';
+            if (function_exists($print_recent_activity)) {
+                // NOTE: original $isteacher (second parameter below) was replaced with $viewfullnames!
+                $content = $print_recent_activity($course, $viewfullnames, $timestart) || $content;
+            }
+        } else {
+            debugging("Missing lib.php in lib/{$modname} - please reinstall files or uninstall the module");
+        }
+    }
+
+    if (! $content) {
+        echo '<p class="message">'.get_string('nothingnew').'</p>';
+    }
+}
+
+/**
+ * Delete a course module and any associated data at the course level (events)
+ * Until 1.5 this function simply marked a deleted flag ... now it
+ * deletes it completely.
+ *
+ * @deprecated since 2.5
+ *
+ * @param int $id the course module id
+ * @return boolean true on success, false on failure
+ */
+function delete_course_module($id) {
+    debugging('Function delete_course_module() is deprecated. Please use course_delete_module() instead.', DEBUG_DEVELOPER);
+
+    global $CFG, $DB;
+
+    require_once($CFG->libdir.'/gradelib.php');
+    require_once($CFG->dirroot.'/blog/lib.php');
+
+    if (!$cm = $DB->get_record('course_modules', array('id'=>$id))) {
+        return true;
+    }
+    $modulename = $DB->get_field('modules', 'name', array('id'=>$cm->module));
+    //delete events from calendar
+    if ($events = $DB->get_records('event', array('instance'=>$cm->instance, 'modulename'=>$modulename))) {
+        foreach($events as $event) {
+            delete_event($event->id);
+        }
+    }
+    //delete grade items, outcome items and grades attached to modules
+    if ($grade_items = grade_item::fetch_all(array('itemtype'=>'mod', 'itemmodule'=>$modulename,
+                                                   'iteminstance'=>$cm->instance, 'courseid'=>$cm->course))) {
+        foreach ($grade_items as $grade_item) {
+            $grade_item->delete('moddelete');
+        }
+    }
+    // Delete completion and availability data; it is better to do this even if the
+    // features are not turned on, in case they were turned on previously (these will be
+    // very quick on an empty table)
+    $DB->delete_records('course_modules_completion', array('coursemoduleid' => $cm->id));
+    $DB->delete_records('course_modules_availability', array('coursemoduleid'=> $cm->id));
+    $DB->delete_records('course_completion_criteria', array('moduleinstance' => $cm->id,
+                                                            'criteriatype' => COMPLETION_CRITERIA_TYPE_ACTIVITY));
+
+    delete_context(CONTEXT_MODULE, $cm->id);
+    return $DB->delete_records('course_modules', array('id'=>$cm->id));
+}
+
+/**
+ * Prints the turn editing on/off button on course/index.php or course/category.php.
+ *
+ * @deprecated since 2.5
+ *
+ * @param integer $categoryid The id of the category we are showing, or 0 for system context.
+ * @return string HTML of the editing button, or empty string, if this user is not allowed
+ *      to see it.
+ */
+function update_category_button($categoryid = 0) {
+    global $CFG, $PAGE, $OUTPUT;
+    debugging('Function update_category_button() is deprecated. Pages to view '.
+            'and edit courses are now separate and no longer depend on editing mode.',
+            DEBUG_DEVELOPER);
+
+    // Check permissions.
+    if (!can_edit_in_category($categoryid)) {
+        return '';
+    }
+
+    // Work out the appropriate action.
+    if ($PAGE->user_is_editing()) {
+        $label = get_string('turneditingoff');
+        $edit = 'off';
+    } else {
+        $label = get_string('turneditingon');
+        $edit = 'on';
+    }
+
+    // Generate the button HTML.
+    $options = array('categoryedit' => $edit, 'sesskey' => sesskey());
+    if ($categoryid) {
+        $options['id'] = $categoryid;
+        $page = 'category.php';
+    } else {
+        $page = 'index.php';
+    }
+    return $OUTPUT->single_button(new moodle_url('/course/' . $page, $options), $label, 'get');
 }

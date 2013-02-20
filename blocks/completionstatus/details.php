@@ -46,25 +46,9 @@ if ($userid) {
 
 
 // Check permissions
-require_login($course);
+require_login();
 
-$coursecontext   = context_course::instance($course->id);
-$personalcontext = context_user::instance($user->id);
-
-$can_view = false;
-
-// Can view own report
-if ($USER->id == $user->id) {
-    $can_view = true;
-} else if (has_capability('moodle/user:viewuseractivitiesreport', $personalcontext)) {
-    $can_view = true;
-} else if (has_capability('report/completion:view', $coursecontext)) {
-    $can_view = true;
-} else if (has_capability('report/completion:view', $personalcontext)) {
-    $can_view = true;
-}
-
-if (!$can_view) {
+if (!completion_can_view_data($user->id, $course)) {
     print_error('cannotviewreport');
 }
 
@@ -107,7 +91,7 @@ echo $OUTPUT->header();
 
 
 // Display completion status
-echo '<table class="generalbox boxaligncenter"><tbody>';
+echo '<table class="generaltable boxaligncenter"><tbody>';
 
 // If not display logged in user, show user name
 if ($USER->id != $user->id) {
@@ -164,7 +148,7 @@ if (empty($completions)) {
     echo '</td></tr></tbody></table>';
 
     // Generate markup for criteria statuses
-    echo '<table class="generalbox logtable boxaligncenter" id="criteriastatus" width="100%"><tbody>';
+    echo '<table class="generaltable logtable boxaligncenter" id="criteriastatus" width="100%"><tbody>';
     echo '<tr class="ccheader">';
     echo '<th class="c0 header" scope="col">'.get_string('criteriagroup', 'block_completionstatus').'</th>';
     echo '<th class="c1 header" scope="col">'.get_string('criteria', 'completion').'</th>';

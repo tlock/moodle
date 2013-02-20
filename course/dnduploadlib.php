@@ -555,6 +555,15 @@ class dndupload_ajax_processor {
         $this->cm->groupmode = $this->course->groupmode;
         $this->cm->groupingid = $this->course->defaultgroupingid;
 
+        // Set the correct default for completion tracking.
+        $this->cm->completion = COMPLETION_TRACKING_NONE;
+        $completion = new completion_info($this->course);
+        if ($completion->is_enabled()) {
+            if (plugin_supports('mod', $this->cm->modulename, FEATURE_MODEDIT_DEFAULT_COMPLETION, true)) {
+                $this->cm->completion = COMPLETION_TRACKING_MANUAL;
+            }
+        }
+
         if (!$this->cm->id = add_course_module($this->cm)) {
             throw new coding_exception("Unable to create the course module");
         }
@@ -607,9 +616,12 @@ class dndupload_ajax_processor {
 
         if (!$instanceid) {
             // Something has gone wrong - undo everything we can.
-            delete_course_module($this->cm->id);
+            course_delete_module($this->cm->id);
             throw new moodle_exception('errorcreatingactivity', 'moodle', '', $this->module->name);
         }
+
+        // Note the section visibility
+        $visible = get_fast_modinfo($this->course)->get_section_info($this->section)->visible;
 
         $DB->set_field('course_modules', 'instance', $instanceid, array('id' => $this->cm->id));
         // Rebuild the course cache after update action
@@ -618,16 +630,19 @@ class dndupload_ajax_processor {
 
         $sectionid = course_add_cm_to_section($this->course, $this->cm->id, $this->section);
 
-        set_coursemodule_visible($this->cm->id, true);
+        set_coursemodule_visible($this->cm->id, $visible);
+        if (!$visible) {
+            $DB->set_field('course_modules', 'visibleold', 1, array('id' => $this->cm->id));
+        }
 
         // retrieve the final info about this module.
         $info = get_fast_modinfo($this->course);
         if (!isset($info->cms[$this->cm->id])) {
             // The course module has not been properly created in the course - undo everything.
-            delete_course_module($this->cm->id);
+            course_delete_module($this->cm->id);
             throw new moodle_exception('errorcreatingactivity', 'moodle', '', $this->module->name);
         }
-        $mod = $info->cms[$this->cm->id];
+        $mod = $info->get_cm($this->cm->id);
         $mod->groupmodelink = $this->cm->groupmodelink;
         $mod->groupmode = $this->cm->groupmode;
 
@@ -656,16 +671,24 @@ class dndupload_ajax_processor {
      * @param cm_info $mod details of the mod just created
      */
     protected function send_response($mod) {
-        global $OUTPUT;
+        global $OUTPUT, $PAGE;
+        $courserenderer = $PAGE->get_renderer('core', 'course');
 
         $resp = new stdClass();
         $resp->error = self::ERROR_OK;
         $resp->icon = $mod->get_icon_url()->out();
         $resp->name = $mod->name;
-        $resp->link = $mod->get_url()->out();
+        if ($mod->has_view()) {
+            $resp->link = $mod->get_url()->out();
+        } else {
+            $resp->link = null;
+        }
+        $resp->content = $mod->get_content();
         $resp->elementid = 'module-'.$mod->id;
-        $resp->commands = make_editing_buttons($mod, true, true, 0, $mod->sectionnum);
+        $actions = course_get_cm_edit_actions($mod, 0, $mod->sectionnum);
+        $resp->commands = ' '. $courserenderer->course_section_cm_edit_actions($actions);
         $resp->onclick = $mod->get_on_click();
+        $resp->visible = $mod->visible;
 
         // if using groupings, then display grouping name
         if (!empty($mod->groupingid) && has_capability('moodle/course:managegroups', $this->context)) {

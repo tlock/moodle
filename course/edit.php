@@ -90,6 +90,12 @@ if ($editform->is_cancelled()) {
             case 'category':
                 $url = new moodle_url($CFG->wwwroot.'/course/category.php', array('id'=>$categoryid));
                 break;
+            case 'catmanage':
+                $url = new moodle_url($CFG->wwwroot.'/course/manage.php', array('id'=>$categoryid));
+                break;
+            case 'topcatmanage':
+                $url = new moodle_url($CFG->wwwroot.'/course/manage.php');
+                break;
             case 'topcat':
                 $url = new moodle_url($CFG->wwwroot.'/course/');
                 break;
@@ -135,16 +141,8 @@ if ($editform->is_cancelled()) {
         update_course($data, $editoroptions);
     }
 
-    switch ($returnto) {
-        case 'category':
-        case 'topcat': //redirecting to where the new course was created by default.
-            $url = new moodle_url($CFG->wwwroot.'/course/category.php', array('id'=>$categoryid));
-            break;
-        default:
-            $url = new moodle_url($CFG->wwwroot.'/course/view.php', array('id'=>$course->id));
-            break;
-    }
-    redirect($url);
+    // Redirect user to newly created/updated course.
+    redirect(new moodle_url('/course/view.php', array('id' => $course->id)));
 }
 
 

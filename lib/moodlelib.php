@@ -116,7 +116,11 @@ define('PARAM_BOOL',     'bool');
 define('PARAM_CAPABILITY',   'capability');
 
 /**
- * PARAM_CLEANHTML - cleans submitted HTML code. use only for text in HTML format. This cleaning may fix xhtml strictness too.
+ * PARAM_CLEANHTML - cleans submitted HTML code. Note that you almost never want
+ * to use this. The normal mode of operation is to use PARAM_RAW when recieving
+ * the input (required/optional_param or formslib) and then sanitse the HTML
+ * using format_text on output. This is for the rare cases when you want to
+ * sanitise the HTML on input. This cleaning may also fix xhtml strictness.
  */
 define('PARAM_CLEANHTML', 'cleanhtml');
 
@@ -492,6 +496,11 @@ define('USER_CAN_IGNORE_FILE_SIZE_LIMITS', -1);
  */
 define('COURSE_DISPLAY_SINGLEPAGE', 0); // display all sections on one page
 define('COURSE_DISPLAY_MULTIPAGE', 1); // split pages into a page per section
+
+/**
+ * Authentication constants.
+ */
+define('AUTH_PASSWORD_NOT_CACHED', 'not cached'); // String used in password field when password is not stored.
 
 /// PARAMETER HANDLING ////////////////////////////////////////////////////
 
@@ -920,8 +929,7 @@ function clean_param($param, $type) {
         case PARAM_FILE:         // Strip all suspicious characters from filename
             $param = fix_utf8($param);
             $param = preg_replace('~[[:cntrl:]]|[&<>"`\|\':\\\\/]~u', '', $param);
-            $param = preg_replace('~\.\.+~', '', $param);
-            if ($param === '.') {
+            if ($param === '.' || $param === '..') {
                 $param = '';
             }
             return $param;
@@ -929,10 +937,23 @@ function clean_param($param, $type) {
         case PARAM_PATH:         // Strip all suspicious characters from file path
             $param = fix_utf8($param);
             $param = str_replace('\\', '/', $param);
-            $param = preg_replace('~[[:cntrl:]]|[&<>"`\|\':]~u', '', $param);
-            $param = preg_replace('~\.\.+~', '', $param);
+
+            // Explode the path and clean each element using the PARAM_FILE rules.
+            $breadcrumb = explode('/', $param);
+            foreach ($breadcrumb as $key => $crumb) {
+                if ($crumb === '.' && $key === 0) {
+                    // Special condition to allow for relative current path such as ./currentdirfile.txt.
+                } else {
+                    $crumb = clean_param($crumb, PARAM_FILE);
+                }
+                $breadcrumb[$key] = $crumb;
+            }
+            $param = implode('/', $breadcrumb);
+
+            // Remove multiple current path (./././) and multiple slashes (///).
             $param = preg_replace('~//+~', '/', $param);
-            return preg_replace('~/(\./)+~', '/', $param);
+            $param = preg_replace('~/(\./)+~', '/', $param);
+            return $param;
 
         case PARAM_HOST:         // allow FQDN or IPv4 dotted quad
             $param = preg_replace('/[^\.\d\w-]/','', $param ); // only allowed chars
@@ -1306,7 +1327,7 @@ function set_config($name, $value, $plugin=NULL) {
                 $DB->insert_record('config', $config, false);
             }
         }
-
+        cache_helper::invalidate_by_definition('core', 'config', array(), 'core');
     } else { // plugin scope
         if ($id = $DB->get_field('config_plugins', 'id', array('name'=>$name, 'plugin'=>$plugin))) {
             if ($value===null) {
@@ -1323,6 +1344,7 @@ function set_config($name, $value, $plugin=NULL) {
                 $DB->insert_record('config_plugins', $config, false);
             }
         }
+        cache_helper::invalidate_by_definition('core', 'config', array(), $plugin);
     }
 
     return true;
@@ -1345,63 +1367,55 @@ function set_config($name, $value, $plugin=NULL) {
 function get_config($plugin, $name = NULL) {
     global $CFG, $DB;
 
-    // normalise component name
-    if ($plugin === 'moodle' or $plugin === 'core') {
-        $plugin = NULL;
-    }
-
-    if (!empty($name)) { // the user is asking for a specific value
-        if (!empty($plugin)) {
-            if (isset($CFG->forced_plugin_settings[$plugin]) and array_key_exists($name, $CFG->forced_plugin_settings[$plugin])) {
-                // setting forced in config file
-                return $CFG->forced_plugin_settings[$plugin][$name];
-            } else {
-                return $DB->get_field('config_plugins', 'value', array('plugin'=>$plugin, 'name'=>$name));
-            }
-        } else {
-            if (array_key_exists($name, $CFG->config_php_settings)) {
-                // setting force in config file
-                return $CFG->config_php_settings[$name];
-            } else {
-                return $DB->get_field('config', 'value', array('name'=>$name));
-            }
-        }
-    }
-
-    // the user is after a recordset
-    if ($plugin) {
-        $localcfg = $DB->get_records_menu('config_plugins', array('plugin'=>$plugin), '', 'name,value');
-        if (isset($CFG->forced_plugin_settings[$plugin])) {
-            foreach($CFG->forced_plugin_settings[$plugin] as $n=>$v) {
-                if (is_null($v) or is_array($v) or is_object($v)) {
-                    // we do not want any extra mess here, just real settings that could be saved in db
-                    unset($localcfg[$n]);
-                } else {
-                    //convert to string as if it went through the DB
-                    $localcfg[$n] = (string)$v;
-                }
-            }
-        }
-        if ($localcfg) {
-            return (object)$localcfg;
-        } else {
-            return new stdClass();
-        }
-
+    if ($plugin === 'moodle' || $plugin === 'core' || empty($plugin)) {
+        $forced =& $CFG->config_php_settings;
+        $iscore = true;
+        $plugin = 'core';
     } else {
-        // this part is not really used any more, but anyway...
-        $localcfg = $DB->get_records_menu('config', array(), '', 'name,value');
-        foreach($CFG->config_php_settings as $n=>$v) {
-            if (is_null($v) or is_array($v) or is_object($v)) {
-                // we do not want any extra mess here, just real settings that could be saved in db
-                unset($localcfg[$n]);
-            } else {
-                //convert to string as if it went through the DB
-                $localcfg[$n] = (string)$v;
-            }
+        if (array_key_exists($plugin, $CFG->forced_plugin_settings)) {
+            $forced =& $CFG->forced_plugin_settings[$plugin];
+        } else {
+            $forced = array();
         }
-        return (object)$localcfg;
+        $iscore = false;
     }
+
+    if (!empty($name) && array_key_exists($name, $forced)) {
+        return (string)$forced[$name];
+    }
+
+    $cache = cache::make('core', 'config');
+    $result = $cache->get($plugin);
+    if (!$result) {
+        // the user is after a recordset
+        $result = new stdClass;
+        if (!$iscore) {
+            $result = $DB->get_records_menu('config_plugins', array('plugin'=>$plugin), '', 'name,value');
+        } else {
+            // this part is not really used any more, but anyway...
+            $result = $DB->get_records_menu('config', array(), '', 'name,value');;
+        }
+        $cache->set($plugin, $result);
+    }
+
+    if (!empty($name)) {
+        if (array_key_exists($name, $result)) {
+            return $result[$name];
+        }
+        return false;
+    }
+
+    foreach ($forced as $key => $value) {
+        if (is_null($value) or is_array($value) or is_object($value)) {
+            // we do not want any extra mess here, just real settings that could be saved in db
+            unset($result[$key]);
+        } else {
+            //convert to string as if it went through the DB
+            $result[$key] = (string)$value;
+        }
+    }
+
+    return (object)$result;
 }
 
 /**
@@ -1418,8 +1432,10 @@ function unset_config($name, $plugin=NULL) {
     if (empty($plugin)) {
         unset($CFG->$name);
         $DB->delete_records('config', array('name'=>$name));
+        cache_helper::invalidate_by_definition('core', 'config', array(), 'core');
     } else {
         $DB->delete_records('config_plugins', array('name'=>$name, 'plugin'=>$plugin));
+        cache_helper::invalidate_by_definition('core', 'config', array(), $plugin);
     }
 
     return true;
@@ -1433,10 +1449,15 @@ function unset_config($name, $plugin=NULL) {
  */
 function unset_all_config_for_plugin($plugin) {
     global $DB;
+    // Delete from the obvious config_plugins first
     $DB->delete_records('config_plugins', array('plugin' => $plugin));
+    // Next delete any suspect settings from config
     $like = $DB->sql_like('name', '?', true, true, false, '|');
     $params = array($DB->sql_like_escape($plugin.'_', '|') . '%');
     $DB->delete_records_select('config', $like, $params);
+    // Finally clear both the plugin cache and the core cache (suspect settings now removed from core).
+    cache_helper::invalidate_by_definition('core', 'config', array(), array('core', $plugin));
+
     return true;
 }
 
@@ -2128,8 +2149,7 @@ function userdate($date, $format = '', $timezone = 99, $fixday = true, $fixhour 
 function date_format_string($date, $format, $tz = 99) {
     global $CFG;
     if (abs($tz) > 13) {
-        if ($CFG->ostype == 'WINDOWS') {
-            $localewincharset = get_string('localewincharset', 'langconfig');
+        if ($CFG->ostype == 'WINDOWS' and $localewincharset = get_string('localewincharset', 'langconfig')) {
             $format = textlib::convert($format, 'utf-8', $localewincharset);
             $datestring = strftime($format, $date);
             $datestring = textlib::convert($datestring, $localewincharset, 'utf-8');
@@ -2137,8 +2157,7 @@ function date_format_string($date, $format, $tz = 99) {
             $datestring = strftime($format, $date);
         }
     } else {
-        if ($CFG->ostype == 'WINDOWS') {
-            $localewincharset = get_string('localewincharset', 'langconfig');
+        if ($CFG->ostype == 'WINDOWS' and $localewincharset = get_string('localewincharset', 'langconfig')) {
             $format = textlib::convert($format, 'utf-8', $localewincharset);
             $datestring = gmstrftime($format, $date);
             $datestring = textlib::convert($datestring, $localewincharset, 'utf-8');
@@ -3082,7 +3101,12 @@ function require_login($courseorid = NULL, $autologinguest = true, $cm = NULL, $
         if ($preventredirect) {
             throw new require_login_exception('Activity is hidden');
         }
-        redirect($CFG->wwwroot, get_string('activityiscurrentlyhidden'));
+        if ($course->id != SITEID) {
+            $url = new moodle_url('/course/view.php', array('id'=>$course->id));
+        } else {
+            $url = new moodle_url('/');
+        }
+        redirect($url, get_string('activityiscurrentlyhidden'));
     }
 
     // Finally access granted, update lastaccess times
@@ -3469,39 +3493,6 @@ function set_bounce_count($user,$reset=false) {
 }
 
 /**
- * Keeps track of login attempts
- *
- * @global object
- */
-function update_login_count() {
-    global $SESSION;
-
-    $max_logins = 10;
-
-    if (empty($SESSION->logincount)) {
-        $SESSION->logincount = 1;
-    } else {
-        $SESSION->logincount++;
-    }
-
-    if ($SESSION->logincount > $max_logins) {
-        unset($SESSION->wantsurl);
-        print_error('errortoomanylogins');
-    }
-}
-
-/**
- * Resets login attempts
- *
- * @global object
- */
-function reset_login_count() {
-    global $SESSION;
-
-    $SESSION->logincount = 0;
-}
-
-/**
  * Determines if the currently logged in user is in editing mode.
  * Note: originally this function had $userid parameter - it was not usable anyway
  *
@@ -3863,6 +3854,7 @@ function create_user_record($username, $password, $auth = 'manual') {
     if (!empty($CFG->{'auth_'.$newuser->auth.'_forcechangepassword'})){
         set_user_preference('auth_forcepasswordchange', 1, $user);
     }
+    // Set the password.
     update_internal_user_password($user, $password);
 
     // fetch full user record for the event, the complete user data contains too much info
@@ -4134,10 +4126,13 @@ function guest_user() {
  *
  * @param string $username  User's username
  * @param string $password  User's password
- * @return user|flase A {@link $USER} object or false if error
+ * @param bool $ignorelockout useful when guessing is prevented by other mechanism such as captcha or SSO
+ * @param int $failurereason login failure reason, can be used in renderers (it may disclose if account exists)
+ * @return stdClass|false A {@link $USER} object or false if error
  */
-function authenticate_user_login($username, $password) {
+function authenticate_user_login($username, $password, $ignorelockout=false, &$failurereason=null) {
     global $CFG, $DB;
+    require_once("$CFG->libdir/authlib.php");
 
     $authsenabled = get_enabled_auth_plugins();
 
@@ -4146,11 +4141,13 @@ function authenticate_user_login($username, $password) {
         if (!empty($user->suspended)) {
             add_to_log(SITEID, 'login', 'error', 'index.php', $username);
             error_log('[client '.getremoteaddr()."]  $CFG->wwwroot  Suspended Login:  $username  ".$_SERVER['HTTP_USER_AGENT']);
+            $failurereason = AUTH_LOGIN_SUSPENDED;
             return false;
         }
         if ($auth=='nologin' or !is_enabled_auth($auth)) {
             add_to_log(SITEID, 'login', 'error', 'index.php', $username);
             error_log('[client '.getremoteaddr()."]  $CFG->wwwroot  Disabled Login:  $username  ".$_SERVER['HTTP_USER_AGENT']);
+            $failurereason = AUTH_LOGIN_SUSPENDED; // Legacy way to suspend user.
             return false;
         }
         $auths = array($auth);
@@ -4159,6 +4156,7 @@ function authenticate_user_login($username, $password) {
         // Check if there's a deleted record (cheaply), this should not happen because we mangle usernames in delete_user().
         if ($DB->get_field('user', 'id', array('username'=>$username, 'mnethostid'=>$CFG->mnet_localhost_id,  'deleted'=>1))) {
             error_log('[client '.getremoteaddr()."]  $CFG->wwwroot  Deleted Login:  $username  ".$_SERVER['HTTP_USER_AGENT']);
+            $failurereason = AUTH_LOGIN_NOUSER;
             return false;
         }
 
@@ -4166,6 +4164,7 @@ function authenticate_user_login($username, $password) {
         if (!empty($CFG->authpreventaccountcreation)) {
             add_to_log(SITEID, 'login', 'error', 'index.php', $username);
             error_log('[client '.getremoteaddr()."]  $CFG->wwwroot  Unknown user, can not create new accounts:  $username  ".$_SERVER['HTTP_USER_AGENT']);
+            $failurereason = AUTH_LOGIN_NOUSER;
             return false;
         }
 
@@ -4173,6 +4172,24 @@ function authenticate_user_login($username, $password) {
         $auths = $authsenabled;
         $user = new stdClass();
         $user->id = 0;
+    }
+
+    if ($ignorelockout) {
+        // Some other mechanism protects against brute force password guessing,
+        // for example login form might include reCAPTCHA or this function
+        // is called from a SSO script.
+
+    } else if ($user->id) {
+        // Verify login lockout after other ways that may prevent user login.
+        if (login_is_lockedout($user)) {
+            add_to_log(SITEID, 'login', 'error', 'index.php', $username);
+            error_log('[client '.getremoteaddr()."]  $CFG->wwwroot  Login lockout:  $username  ".$_SERVER['HTTP_USER_AGENT']);
+            $failurereason = AUTH_LOGIN_LOCKOUT;
+            return false;
+        }
+
+    } else {
+        // We can not lockout non-existing accounts.
     }
 
     foreach ($auths as $auth) {
@@ -4190,7 +4207,10 @@ function authenticate_user_login($username, $password) {
                 $user->auth = $auth;
             }
 
-            update_internal_user_password($user, $password); // just in case salt or encoding were changed (magic quotes too one day)
+            // If the existing hash is using an out-of-date algorithm (or the
+            // legacy md5 algorithm), then we should update to the current
+            // hash algorithm while we have access to the user's password.
+            update_internal_user_password($user, $password);
 
             if ($authplugin->is_synchronised_with_external()) { // update user record from external DB
                 $user = update_user_record($username);
@@ -4208,6 +4228,7 @@ function authenticate_user_login($username, $password) {
         }
 
         if (empty($user->id)) {
+            $failurereason = AUTH_LOGIN_NOUSER;
             return false;
         }
 
@@ -4215,9 +4236,12 @@ function authenticate_user_login($username, $password) {
             // just in case some auth plugin suspended account
             add_to_log(SITEID, 'login', 'error', 'index.php', $username);
             error_log('[client '.getremoteaddr()."]  $CFG->wwwroot  Suspended Login:  $username  ".$_SERVER['HTTP_USER_AGENT']);
+            $failurereason = AUTH_LOGIN_SUSPENDED;
             return false;
         }
 
+        login_attempt_valid($user);
+        $failurereason = AUTH_LOGIN_OK;
         return $user;
     }
 
@@ -4226,6 +4250,14 @@ function authenticate_user_login($username, $password) {
     if (debugging('', DEBUG_ALL)) {
         error_log('[client '.getremoteaddr()."]  $CFG->wwwroot  Failed Login:  $username  ".$_SERVER['HTTP_USER_AGENT']);
     }
+
+    if ($user->id) {
+        login_attempt_failed($user);
+        $failurereason = AUTH_LOGIN_FAILED;
+    } else {
+        $failurereason = AUTH_LOGIN_NOUSER;
+    }
+
     return false;
 }
 
@@ -4288,28 +4320,81 @@ function complete_user_login($user) {
 }
 
 /**
- * Compare password against hash stored in internal user table.
- * If necessary it also updates the stored hash to new format.
+ * Check a password hash to see if it was hashed using the
+ * legacy hash algorithm (md5).
  *
- * @param stdClass $user (password property may be updated)
- * @param string $password plain text password
- * @return bool is password valid?
+ * @param string $password String to check.
+ * @return boolean True if the $password matches the format of an md5 sum.
+ */
+function password_is_legacy_hash($password) {
+    return (bool) preg_match('/^[0-9a-f]{32}$/', $password);
+}
+
+/**
+ * Checks whether the password compatibility library will work with the current
+ * version of PHP. This cannot be done using PHP version numbers since the fix
+ * has been backported to earlier versions in some distributions.
+ *
+ * See https://github.com/ircmaxell/password_compat/issues/10 for
+ * more details.
+ *
+ * @return bool True if the library is NOT supported.
+ */
+function password_compat_not_supported() {
+
+    $hash = '$2y$04$usesomesillystringfore7hnbRJHxXVLeakoG8K30oukPsA.ztMG';
+
+    // Create a one off application cache to store bcrypt support status as
+    // the support status doesn't change and crypt() is slow.
+    $cache = cache::make_from_params(cache_store::MODE_APPLICATION, 'core', 'password_compat');
+
+    if (!$bcryptsupport = $cache->get('bcryptsupport')) {
+        $test = crypt('password', $hash);
+        // Cache string instead of boolean to avoid MDL-37472.
+        if ($test == $hash) {
+            $bcryptsupport = 'supported';
+        } else {
+            $bcryptsupport = 'not supported';
+        }
+        $cache->set('bcryptsupport', $bcryptsupport);
+    }
+
+    // Return true if bcrypt *not* supported.
+    return ($bcryptsupport !== 'supported');
+}
+
+/**
+ * Compare password against hash stored in user object to determine if it is valid.
+ *
+ * If necessary it also updates the stored hash to the current format.
+ *
+ * @param stdClass $user (Password property may be updated).
+ * @param string $password Plain text password.
+ * @return bool True if password is valid.
  */
 function validate_internal_user_password($user, $password) {
     global $CFG;
+    require_once($CFG->libdir.'/password_compat/lib/password.php');
 
-    if (!isset($CFG->passwordsaltmain)) {
-        $CFG->passwordsaltmain = '';
+    if ($user->password === AUTH_PASSWORD_NOT_CACHED) {
+        // Internal password is not used at all, it can not validate.
+        return false;
     }
 
+    // If hash isn't a legacy (md5) hash, validate using the library function.
+    if (!password_is_legacy_hash($user->password)) {
+        return password_verify($password, $user->password);
+    }
+
+    // Otherwise we need to check for a legacy (md5) hash instead. If the hash
+    // is valid we can then update it to the new algorithm.
+
+    $sitesalt = isset($CFG->passwordsaltmain) ? $CFG->passwordsaltmain : '';
     $validated = false;
 
-    if ($user->password === 'not cached') {
-        // internal password is not used at all, it can not validate
-
-    } else if ($user->password === md5($password.$CFG->passwordsaltmain)
+    if ($user->password === md5($password.$sitesalt)
             or $user->password === md5($password)
-            or $user->password === md5(addslashes($password).$CFG->passwordsaltmain)
+            or $user->password === md5(addslashes($password).$sitesalt)
             or $user->password === md5(addslashes($password))) {
         // note: we are intentionally using the addslashes() here because we
         //       need to accept old password hashes of passwords with magic quotes
@@ -4328,7 +4413,8 @@ function validate_internal_user_password($user, $password) {
     }
 
     if ($validated) {
-        // force update of password hash using latest main password salt and encoding if needed
+        // If the password matches the existing md5 hash, update to the
+        // current hash algorithm while we have access to the user's password.
         update_internal_user_password($user, $password);
     }
 
@@ -4336,39 +4422,85 @@ function validate_internal_user_password($user, $password) {
 }
 
 /**
- * Calculate hashed value from password using current hash mechanism.
+ * Calculate hash for a plain text password.
  *
- * @param string $password
- * @return string password hash
+ * @param string $password Plain text password to be hashed.
+ * @param bool $fasthash If true, use a low cost factor when generating the hash
+ *                       This is much faster to generate but makes the hash
+ *                       less secure. It is used when lots of hashes need to
+ *                       be generated quickly.
+ * @return string The hashed password.
+ *
+ * @throws moodle_exception If a problem occurs while generating the hash.
  */
-function hash_internal_user_password($password) {
+function hash_internal_user_password($password, $fasthash = false) {
     global $CFG;
+    require_once($CFG->libdir.'/password_compat/lib/password.php');
 
-    if (isset($CFG->passwordsaltmain)) {
-        return md5($password.$CFG->passwordsaltmain);
-    } else {
-        return md5($password);
+    // Use the legacy hashing algorithm (md5) if PHP is not new enough
+    // to support bcrypt properly
+    if (password_compat_not_supported()) {
+        if (isset($CFG->passwordsaltmain)) {
+            return md5($password.$CFG->passwordsaltmain);
+        } else {
+            return md5($password);
+        }
     }
+
+    // Set the cost factor to 4 for fast hashing, otherwise use default cost.
+    $options = ($fasthash) ? array('cost' => 4) : array();
+
+    $generatedhash = password_hash($password, PASSWORD_DEFAULT, $options);
+
+    if ($generatedhash === false) {
+        throw new moodle_exception('Failed to generate password hash.');
+    }
+
+    return $generatedhash;
 }
 
 /**
- * Update password hash in user object.
+ * Update password hash in user object (if necessary).
  *
- * @param stdClass $user (password property may be updated)
- * @param string $password plain text password
- * @return bool always returns true
+ * The password is updated if:
+ * 1. The password has changed (the hash of $user->password is different
+ *    to the hash of $password).
+ * 2. The existing hash is using an out-of-date algorithm (or the legacy
+ *    md5 algorithm).
+ *
+ * Updating the password will modify the $user object and the database
+ * record to use the current hashing algorithm.
+ *
+ * @param stdClass $user User object (password property may be updated).
+ * @param string $password Plain text password.
+ * @return bool Always returns true.
  */
 function update_internal_user_password($user, $password) {
-    global $DB;
+    global $CFG, $DB;
+    require_once($CFG->libdir.'/password_compat/lib/password.php');
 
+    // Use the legacy hashing algorithm (md5) if PHP doesn't support
+    // bcrypt properly.
+    $legacyhash = password_compat_not_supported();
+
+    // Figure out what the hashed password should be.
     $authplugin = get_auth_plugin($user->auth);
     if ($authplugin->prevent_local_passwords()) {
-        $hashedpassword = 'not cached';
+        $hashedpassword = AUTH_PASSWORD_NOT_CACHED;
     } else {
         $hashedpassword = hash_internal_user_password($password);
     }
 
-    if ($user->password !== $hashedpassword) {
+    if ($legacyhash) {
+        $passwordchanged = ($user->password !== $hashedpassword);
+        $algorithmchanged = false;
+    } else {
+        // If verification fails then it means the password has changed.
+        $passwordchanged = !password_verify($password, $user->password);
+        $algorithmchanged = password_needs_rehash($user->password, PASSWORD_DEFAULT);
+    }
+
+    if ($passwordchanged || $algorithmchanged) {
         $DB->set_field('user', 'password',  $hashedpassword, array('id'=>$user->id));
         $user->password = $hashedpassword;
     }
@@ -5161,9 +5293,8 @@ function moodle_process_email($modargs,$body) {
 /**
  * Get mailer instance, enable buffering, flush buffer or disable buffering.
  *
- * @global object
  * @param string $action 'get', 'buffer', 'close' or 'flush'
- * @return object|null mailer instance if 'get' used or nothing
+ * @return moodle_phpmailer|null mailer instance if 'get' used or nothing
  */
 function get_mailer($action='get') {
     global $CFG;
@@ -5502,7 +5633,6 @@ function email_to_user($user, $from, $subject, $messagetext, $messagehtml='', $a
 
     if ($mail->Send()) {
         set_send_count($user);
-        $mail->IsSMTP();                               // use SMTP directly
         if (!empty($mail->SMTPDebug)) {
             echo '</pre>';
         }
@@ -5571,9 +5701,10 @@ function generate_email_supportuser() {
  * @global object
  * @global object
  * @param user $user A {@link $USER} object
+ * @param boolean $fasthash If true, use a low cost factor when generating the hash for speed.
  * @return boolean|string Returns "true" if mail was sent OK and "false" if there was an error
  */
-function setnew_password_and_mail($user) {
+function setnew_password_and_mail($user, $fasthash = false) {
     global $CFG, $DB;
 
     // we try to send the mail in language the user understands,
@@ -5587,7 +5718,8 @@ function setnew_password_and_mail($user) {
 
     $newpassword = generate_password();
 
-    $DB->set_field('user', 'password', hash_internal_user_password($newpassword), array('id'=>$user->id));
+    $hashedpassword = hash_internal_user_password($newpassword, $fasthash);
+    $DB->set_field('user', 'password', $hashedpassword, array('id'=>$user->id));
 
     $a = new stdClass();
     $a->firstname   = fullname($user, true);
@@ -5879,7 +6011,7 @@ function get_file_browser() {
 function get_file_packer($mimetype='application/zip') {
     global $CFG;
 
-    static $fp = array();;
+    static $fp = array();
 
     if (isset($fp[$mimetype])) {
         return $fp[$mimetype];
@@ -6005,7 +6137,10 @@ function get_user_max_upload_file_size($context, $sitebytes=0, $coursebytes=0, $
  * array of possible sizes in an array, translated to the
  * local language.
  *
- * @todo Finish documenting this function
+ * The list of options will go up to the minimum of $sitebytes, $coursebytes or $modulebytes.
+ *
+ * If $coursebytes or $sitebytes is not 0, an option will be included for "Course/Site upload limit (X)"
+ * with the value set to 0. This option will be the first in the list.
  *
  * @global object
  * @uses SORT_NUMERIC
@@ -6024,7 +6159,7 @@ function get_max_upload_sizes($sitebytes = 0, $coursebytes = 0, $modulebytes = 0
     }
 
     $filesize = array();
-    $filesize[intval($maxsize)] = display_size($maxsize);
+    $filesize[(string)intval($maxsize)] = display_size($maxsize);
 
     $sizelist = array(10240, 51200, 102400, 512000, 1048576, 2097152,
                       5242880, 10485760, 20971520, 52428800, 104857600);
@@ -6046,12 +6181,31 @@ function get_max_upload_sizes($sitebytes = 0, $coursebytes = 0, $modulebytes = 0
     }
 
     foreach ($sizelist as $sizebytes) {
-       if ($sizebytes < $maxsize) {
-           $filesize[intval($sizebytes)] = display_size($sizebytes);
+       if ($sizebytes < $maxsize && $sizebytes > 0) {
+           $filesize[(string)intval($sizebytes)] = display_size($sizebytes);
        }
     }
 
     krsort($filesize, SORT_NUMERIC);
+    $limitlevel = '';
+    $displaysize = '';
+    if ($modulebytes &&
+        (($modulebytes < $coursebytes || $coursebytes == 0) &&
+         ($modulebytes < $sitebytes || $sitebytes == 0))) {
+        $limitlevel = get_string('activity', 'core');
+        $displaysize = display_size($modulebytes);
+    } else if ($coursebytes && ($coursebytes < $sitebytes || $sitebytes == 0)) {
+        $limitlevel = get_string('course', 'core');
+        $displaysize = display_size($coursebytes);
+    } else if ($sitebytes) {
+        $limitlevel = get_string('site', 'core');
+        $displaysize = display_size($sitebytes);
+    }
+
+    if ($limitlevel) {
+        $params = (object) array('contextname'=>$limitlevel, 'displaysize'=>$displaysize);
+        $filesize  = array('0'=>get_string('uploadlimitwithsize', 'core', $params)) + $filesize;
+    }
 
     return $filesize;
 }
@@ -6458,10 +6612,6 @@ class core_string_manager implements string_manager {
     protected $cache;
     /** @var int get_string() counter */
     protected $countgetstring = 0;
-    /** @var int in-memory cache hits counter */
-    protected $countmemcache = 0;
-    /** @var int on-disk cache hits counter */
-    protected $countdiskcache = 0;
     /** @var bool use disk cache */
     protected $usecache;
     /** @var array limit list of translations */
@@ -6547,7 +6697,6 @@ class core_string_manager implements string_manager {
         if (!$disablecache and !$disablelocal) {
             $string = $this->cache->get($cachekey);
             if ($string) {
-                $this->countdiskcache++;
                 return $string;
             }
         }
@@ -6773,12 +6922,8 @@ class core_string_manager implements string_manager {
     public function get_performance_summary() {
         return array(array(
             'langcountgetstring' => $this->countgetstring,
-            'langcountmemcache' => $this->countmemcache,
-            'langcountdiskcache' => $this->countdiskcache,
         ), array(
             'langcountgetstring' => 'get_string calls',
-            'langcountmemcache' => 'strings mem cache hits',
-            'langcountdiskcache' => 'strings disk cache hits',
         ));
     }
 
@@ -10385,6 +10530,11 @@ function get_performance_info() {
     $info['includecount'] = count($inc);
     $info['html'] .= '<span class="included">Included '.$info['includecount'].' files</span> ';
     $info['txt']  .= 'includecount: '.$info['includecount'].' ';
+
+    if (!empty($CFG->early_install_lang)) {
+        // We can not track more performance before installation, sorry.
+        return $info;
+    }
 
     $filtermanager = filter_manager::instance();
     if (method_exists($filtermanager, 'get_performance_summary')) {

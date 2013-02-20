@@ -747,12 +747,18 @@ class moodle_url {
         global $CFG;
 
         $url = $this->out($escaped, $overrideparams);
+        $httpswwwroot = str_replace("http://", "https://", $CFG->wwwroot);
 
-        if (strpos($url, $CFG->wwwroot) !== 0) {
+        // $url should be equal to wwwroot or httpswwwroot. If not then throw exception.
+        if (($url === $CFG->wwwroot) || (strpos($url, $CFG->wwwroot.'/') === 0)) {
+            $localurl = substr($url, strlen($CFG->wwwroot));
+            return !empty($localurl) ? $localurl : '';
+        } else if (($url === $httpswwwroot) || (strpos($url, $httpswwwroot.'/') === 0)) {
+            $localurl = substr($url, strlen($httpswwwroot));
+            return !empty($localurl) ? $localurl : '';
+        } else {
             throw new coding_exception('out_as_local_url called on a non-local URL');
         }
-
-        return str_replace($CFG->wwwroot, '', $url);
     }
 
     /**
@@ -1384,7 +1390,7 @@ function format_text_email($text, $format) {
         case FORMAT_WIKI:
             // there should not be any of these any more!
             $text = wikify_links($text);
-            return strtr(strip_tags($text), array_flip(get_html_translation_table(HTML_ENTITIES)));
+            return textlib::entities_to_utf8(strip_tags($text), true);
             break;
 
         case FORMAT_HTML:
@@ -1395,7 +1401,7 @@ function format_text_email($text, $format) {
         case FORMAT_MARKDOWN:
         default:
             $text = wikify_links($text);
-            return strtr(strip_tags($text), array_flip(get_html_translation_table(HTML_ENTITIES)));
+            return textlib::entities_to_utf8(strip_tags($text), true);
             break;
     }
 }
@@ -1578,8 +1584,21 @@ function is_purify_html_necessary($text) {
 function purify_html($text, $options = array()) {
     global $CFG;
 
-    $type = !empty($options['allowid']) ? 'allowid' : 'normal';
     static $purifiers = array();
+    static $caches = array();
+
+    $type = !empty($options['allowid']) ? 'allowid' : 'normal';
+
+    if (!array_key_exists($type, $caches)) {
+        $caches[$type] = cache::make('core', 'htmlpurifier', array('type' => $type));
+    }
+    $cache = $caches[$type];
+
+    $filteredtext = $cache->get($text);
+    if ($filteredtext !== false) {
+        return $filteredtext;
+    }
+
     if (empty($purifiers[$type])) {
 
         // make sure the serializer dir exists, it should be fine if it disappears later during cache reset
@@ -1627,15 +1646,17 @@ function purify_html($text, $options = array()) {
 
     $multilang = (strpos($text, 'class="multilang"') !== false);
 
+    $filteredtext = $text;
     if ($multilang) {
-        $text = preg_replace('/<span(\s+lang="([a-zA-Z0-9_-]+)"|\s+class="multilang"){2}\s*>/', '<span xxxlang="${2}">', $text);
+        $filteredtext = preg_replace('/<span(\s+lang="([a-zA-Z0-9_-]+)"|\s+class="multilang"){2}\s*>/', '<span xxxlang="${2}">', $filteredtext);
     }
-    $text = $purifier->purify($text);
+    $filteredtext = $purifier->purify($filteredtext);
     if ($multilang) {
-        $text = preg_replace('/<span xxxlang="([a-zA-Z0-9_-]+)">/', '<span lang="${1}" class="multilang">', $text);
+        $filteredtext = preg_replace('/<span xxxlang="([a-zA-Z0-9_-]+)">/', '<span lang="${1}" class="multilang">', $filteredtext);
     }
+    $cache->set($text, $filteredtext);
 
-    return $text;
+    return $filteredtext;
 }
 
 /**
@@ -3144,7 +3165,8 @@ EOT;
  */
 abstract class progress_trace {
     /**
-     * Ouput an progress message in whatever format.
+     * Output an progress message in whatever format.
+     *
      * @param string $message the message to output.
      * @param integer $depth indent depth for this message.
      */
@@ -3183,7 +3205,7 @@ class null_progress_trace extends progress_trace {
  */
 class text_progress_trace extends progress_trace {
     /**
-     * Output the trace message
+     * Output the trace message.
      *
      * @param string $message
      * @param int $depth
@@ -3203,7 +3225,7 @@ class text_progress_trace extends progress_trace {
  */
 class html_progress_trace extends progress_trace {
     /**
-     * Output the trace message
+     * Output the trace message.
      *
      * @param string $message
      * @param int $depth
@@ -3261,6 +3283,150 @@ class html_list_progress_trace extends progress_trace {
         while ($this->currentdepth >= 0) {
             echo "</li>\n</ul>\n";
             $this->currentdepth -= 1;
+        }
+    }
+}
+
+/**
+ * This subclass of progress_trace outputs to error log.
+ *
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package moodlecore
+ */
+class error_log_progress_trace extends progress_trace {
+    /** @var string log prefix */
+    protected $prefix;
+
+    /**
+     * Constructor.
+     * @param string $prefix optional log prefix
+     */
+    public function __construct($prefix = '') {
+        $this->prefix = $prefix;
+    }
+
+    /**
+     * Output the trace message.
+     *
+     * @param string $message
+     * @param int $depth
+     * @return void Output is sent to error log.
+     */
+    public function output($message, $depth = 0) {
+        error_log($this->prefix . str_repeat('  ', $depth) . $message);
+    }
+}
+
+/**
+ * Special type of trace that can be used for catching of
+ * output of other traces.
+ *
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package moodlecore
+ */
+class progress_trace_buffer extends progress_trace {
+    /** @var progres_trace */
+    protected $trace;
+    /** @var bool do we pass output out */
+    protected $passthrough;
+    /** @var string output buffer */
+    protected $buffer;
+
+    /**
+     * Constructor.
+     *
+     * @param progress_trace $trace
+     * @param bool $passthrough true means output and buffer, false means just buffer and no output
+     */
+    public function __construct(progress_trace $trace, $passthrough = true) {
+        $this->trace       = $trace;
+        $this->passthrough = $passthrough;
+        $this->buffer      = '';
+    }
+
+    /**
+     * Output the trace message.
+     *
+     * @param string $message the message to output.
+     * @param int $depth indent depth for this message.
+     * @return void output stored in buffer
+     */
+    public function output($message, $depth = 0) {
+        ob_start();
+        $this->trace->output($message, $depth);
+        $this->buffer .= ob_get_contents();
+        if ($this->passthrough) {
+            ob_end_flush();
+        } else {
+            ob_end_clean();
+        }
+    }
+
+    /**
+     * Called when the processing is finished.
+     */
+    public function finished() {
+        ob_start();
+        $this->trace->finished();
+        $this->buffer .= ob_get_contents();
+        if ($this->passthrough) {
+            ob_end_flush();
+        } else {
+            ob_end_clean();
+        }
+    }
+
+    /**
+     * Reset internal text buffer.
+     */
+    public function reset_buffer() {
+        $this->buffer = '';
+    }
+
+    /**
+     * Return internal text buffer.
+     * @return string buffered plain text
+     */
+    public function get_buffer() {
+        return $this->buffer;
+    }
+}
+
+/**
+ * Special type of trace that can be used for redirecting to multiple
+ * other traces.
+ *
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package moodlecore
+ */
+class combined_progress_trace extends progress_trace {
+    protected $traces;
+
+    /**
+     * @param array $traces multiple traces
+     */
+    public function __construct(array $traces) {
+        $this->traces = $traces;
+    }
+
+    /**
+     * Output an progress message in whatever format.
+     *
+     * @param string $message the message to output.
+     * @param integer $depth indent depth for this message.
+     */
+    public function output($message, $depth = 0) {
+        foreach($this->traces as $trace) {
+            $trace->output($message, $depth);
+        }
+    }
+
+    /**
+     * Called when the processing is finished.
+     */
+    public function finished() {
+        foreach($this->traces as $trace) {
+            $trace->finished();
         }
     }
 }
