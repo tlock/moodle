@@ -98,6 +98,23 @@ class plugin_defective_exception extends moodle_exception {
 }
 
 /**
+ * @package    core
+ * @subpackage upgrade
+ * @copyright  2009 Petr Skoda {@link http://skodak.org}
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class plugin_misplaced_exception extends moodle_exception {
+    function __construct($component, $expected, $current) {
+        global $CFG;
+        $a = new stdClass();
+        $a->component = $component;
+        $a->expected  = $expected;
+        $a->current   = $current;
+        parent::__construct('detectedmisplacedplugin', 'core_plugin', "$CFG->wwwroot/$CFG->admin/index.php", $a);
+    }
+}
+
+/**
  * Sets maximum expected time needed for upgrade task.
  * Please always make sure that upgrade will not run longer!
  *
@@ -381,12 +398,19 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
         }
 
         $plugin = new stdClass();
+        $module = new stdClass(); // Prevent some notices when plugin placed in wrong directory.
         require($fullplug.'/version.php');  // defines $plugin with version etc
+
+        if (!isset($plugin->version) and isset($module->version)) {
+            $plugin = $module;
+        }
 
         // if plugin tells us it's full name we may check the location
         if (isset($plugin->component)) {
             if ($plugin->component !== $component) {
-                throw new plugin_defective_exception($component, 'Plugin installed in wrong folder.');
+                $current = str_replace($CFG->dirroot, '$CFG->dirroot', $fullplug);
+                $expected = str_replace($CFG->dirroot, '$CFG->dirroot', get_component_directory($plugin->component));
+                throw new plugin_misplaced_exception($component, $expected, $current);
             }
         }
 
@@ -532,12 +556,19 @@ function upgrade_plugins_modules($startcallback, $endcallback, $verbose) {
         }
 
         $module = new stdClass();
+        $plugin = new stdClass(); // Prevent some notices when plugin placed in wrong directory.
         require($fullmod .'/version.php');  // defines $module with version etc
+
+        if (!isset($module->version) and isset($plugin->version)) {
+            $module = $plugin;
+        }
 
         // if plugin tells us it's full name we may check the location
         if (isset($module->component)) {
             if ($module->component !== $component) {
-                throw new plugin_defective_exception($component, 'Plugin installed in wrong folder.');
+                $current = str_replace($CFG->dirroot, '$CFG->dirroot', $fullmod);
+                $expected = str_replace($CFG->dirroot, '$CFG->dirroot', get_component_directory($module->component));
+                throw new plugin_misplaced_exception($component, $expected, $current);
             }
         }
 
@@ -703,15 +734,21 @@ function upgrade_plugins_blocks($startcallback, $endcallback, $verbose) {
             throw new plugin_defective_exception('block/'.$blockname, 'Missing version.php file.');
         }
         $plugin = new stdClass();
+        $module = new stdClass(); // Prevent some notices when module placed in wrong directory.
         $plugin->version = NULL;
         $plugin->cron    = 0;
         include($fullblock.'/version.php');
+        if (!isset($plugin->version) and isset($module->version)) {
+            $plugin = $module;
+        }
         $block = $plugin;
 
         // if plugin tells us it's full name we may check the location
         if (isset($block->component)) {
             if ($block->component !== $component) {
-                throw new plugin_defective_exception($component, 'Plugin installed in wrong folder.');
+                $current = str_replace($CFG->dirroot, '$CFG->dirroot', $fullblock);
+                $expected = str_replace($CFG->dirroot, '$CFG->dirroot', get_component_directory($block->component));
+                throw new plugin_misplaced_exception($component, $expected, $current);
             }
         }
 
@@ -1448,8 +1485,9 @@ function install_core($version, $verbose) {
 
         print_upgrade_part_end(null, true, $verbose);
 
-        // Reset the cache, this returns it to a normal operation state.
-        cache_factory::reset();
+        // Purge all caches. They're disabled but this ensures that we don't have any persistent data just in case something
+        // during installation didn't use APIs.
+        cache_helper::purge_all();
     } catch (exception $ex) {
         upgrade_handle_exception($ex);
     }
@@ -1480,15 +1518,13 @@ function upgrade_core($version, $verbose) {
 
         print_upgrade_part_start('moodle', false, $verbose);
 
-        // one time special local migration pre 2.0 upgrade script
-        if ($CFG->version < 2007101600) {
-            $pre20upgradefile = "$CFG->dirroot/local/upgrade_pre20.php";
-            if (file_exists($pre20upgradefile)) {
-                set_time_limit(0);
-                require($pre20upgradefile);
-                // reset upgrade timeout to default
-                upgrade_set_timeout();
-            }
+        // Pre-upgrade scripts for local hack workarounds.
+        $preupgradefile = "$CFG->dirroot/local/preupgrade.php";
+        if (file_exists($preupgradefile)) {
+            set_time_limit(0);
+            require($preupgradefile);
+            // Reset upgrade timeout to default.
+            upgrade_set_timeout();
         }
 
         $result = xmldb_main_upgrade($CFG->version);
@@ -1536,8 +1572,8 @@ function upgrade_noncore($verbose) {
 
     // upgrade all plugins types
     try {
-        // Disable the use of cache stores here. We will reset the factory after we've performed the installation.
-        // This ensures that we don't permanently cache anything during installation.
+        // Disable the use of cache stores here.
+        // We don't reset this, the site can live without proper caching for life of this request.
         cache_factory::disable_stores();
 
         $plugintypes = get_plugin_types();
@@ -1546,8 +1582,6 @@ function upgrade_noncore($verbose) {
         }
         // Update cache definitions. Involves scanning each plugin for any changes.
         cache_helper::update_definitions();
-        // Reset the cache system to a normal state.
-        cache_factory::reset();
     } catch (Exception $ex) {
         upgrade_handle_exception($ex);
     }

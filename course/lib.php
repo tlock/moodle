@@ -1920,14 +1920,14 @@ function print_course_search($value="", $return=false, $format="plain") {
         $output  = '<form id="'.$id.'" action="'.$CFG->wwwroot.'/course/search.php" method="get">';
         $output .= '<fieldset class="coursesearchbox invisiblefieldset">';
         $output .= '<label for="shortsearchbox">'.$strsearchcourses.': </label>';
-        $output .= '<input type="text" id="shortsearchbox" size="12" name="search" alt="'.s($strsearchcourses).'" value="'.s($value).'" />';
+        $output .= '<input type="text" id="shortsearchbox" size="12" name="search" value="'.s($value).'" />';
         $output .= '<input type="submit" value="'.get_string('go').'" />';
         $output .= '</fieldset></form>';
     } else if ($format == 'navbar') {
         $output  = '<form id="coursesearchnavbar" action="'.$CFG->wwwroot.'/course/search.php" method="get">';
         $output .= '<fieldset class="coursesearchbox invisiblefieldset">';
         $output .= '<label for="navsearchbox">'.$strsearchcourses.': </label>';
-        $output .= '<input type="text" id="navsearchbox" size="20" name="search" alt="'.s($strsearchcourses).'" value="'.s($value).'" />';
+        $output .= '<input type="text" id="navsearchbox" size="20" name="search" value="'.s($value).'" />';
         $output .= '<input type="submit" value="'.get_string('go').'" />';
         $output .= '</fieldset></form>';
     }
@@ -2531,7 +2531,7 @@ function course_get_cm_edit_actions(cm_info $mod, $indent = -1, $sr = null) {
     $actions = array();
 
     // AJAX edit title
-    if ($mod->modname !== 'label' && $hasmanageactivities &&
+    if ($mod->has_view() && $hasmanageactivities &&
                 (($mod->course == $COURSE->id && course_ajax_enabled($COURSE)) ||
                  ($mod->course == SITEID && course_ajax_enabled($SITE)))) {
         // we will not display link if we are on some other-course page (where we should not see this module anyway)
@@ -3684,16 +3684,18 @@ class course_request {
  * @param stdClass $currentcontext Current context of block
  */
 function course_page_type_list($pagetype, $parentcontext, $currentcontext) {
-    // if above course context ,display all course fomats
-    list($currentcontext, $course, $cm) = get_context_info_array($currentcontext->id);
-    if ($course->id == SITEID) {
-        return array('*'=>get_string('page-x', 'pagetype'));
-    } else {
-        return array('*'=>get_string('page-x', 'pagetype'),
-            'course-*'=>get_string('page-course-x', 'pagetype'),
-            'course-view-*'=>get_string('page-course-view-x', 'pagetype')
-        );
+    // $currentcontext could be null, get_context_info_array() will throw an error if this is the case.
+    if (isset($currentcontext)) {
+        // if above course context ,display all course fomats
+        list($currentcontext, $course, $cm) = get_context_info_array($currentcontext->id);
+        if ($course->id == SITEID) {
+            return array('*'=>get_string('page-x', 'pagetype'));
+        }
     }
+    return array('*'=>get_string('page-x', 'pagetype'),
+        'course-*'=>get_string('page-course-x', 'pagetype'),
+        'course-view-*'=>get_string('page-course-view-x', 'pagetype')
+    );
 }
 
 /**
@@ -3889,4 +3891,84 @@ function get_sorted_course_formats($enabledonly = false) {
  */
 function course_get_url($courseorid, $section = null, $options = array()) {
     return course_get_format($courseorid)->get_view_url($section, $options);
+}
+
+/**
+ * Create a module.
+ *
+ * It includes:
+ *      - capability checks and other checks
+ *      - create the module from the module info
+ *
+ * @param object $module
+ * @return object the created module info
+ */
+function create_module($moduleinfo) {
+    global $DB, $CFG;
+
+    require_once($CFG->dirroot . '/course/modlib.php');
+
+    // Check manadatory attributs.
+    $mandatoryfields = array('modulename', 'course', 'section', 'visible');
+    if (plugin_supports('mod', $moduleinfo->modulename, FEATURE_MOD_INTRO, true)) {
+        $mandatoryfields[] = 'introeditor';
+    }
+    foreach($mandatoryfields as $mandatoryfield) {
+        if (!isset($moduleinfo->{$mandatoryfield})) {
+            throw new moodle_exception('createmodulemissingattribut', '', '', $mandatoryfield);
+        }
+    }
+
+    // Some additional checks (capability / existing instances).
+    $course = $DB->get_record('course', array('id'=>$moduleinfo->course), '*', MUST_EXIST);
+    list($module, $context, $cw) = can_add_moduleinfo($course, $moduleinfo->modulename, $moduleinfo->section);
+
+    // Load module library.
+    include_modulelib($module->name);
+
+    // Add the module.
+    $moduleinfo->module = $module->id;
+    $moduleinfo = add_moduleinfo($moduleinfo, $course, null);
+
+    return $moduleinfo;
+}
+
+/**
+ * Update a module.
+ *
+ * It includes:
+ *      - capability and other checks
+ *      - update the module
+ *
+ * @param object $module
+ * @return object the updated module info
+ */
+function update_module($moduleinfo) {
+    global $DB, $CFG;
+
+    require_once($CFG->dirroot . '/course/modlib.php');
+
+    // Check the course module exists.
+    $cm = get_coursemodule_from_id('', $moduleinfo->coursemodule, 0, false, MUST_EXIST);
+
+    // Check the course exists.
+    $course = $DB->get_record('course', array('id'=>$cm->course), '*', MUST_EXIST);
+
+    // Some checks (capaibility / existing instances).
+    list($cm, $context, $module, $data, $cw) = can_update_moduleinfo($cm);
+
+    // Load module library.
+    include_modulelib($module->name);
+
+    // Retrieve few information needed by update_moduleinfo.
+    $moduleinfo->modulename = $cm->modname;
+    if (!isset($moduleinfo->scale)) {
+        $moduleinfo->scale = 0;
+    }
+    $moduleinfo->type = 'mod';
+
+    // Update the module.
+    list($cm, $moduleinfo) = update_moduleinfo($cm, $moduleinfo, $course, null);
+
+    return $moduleinfo;
 }

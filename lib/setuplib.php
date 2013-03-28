@@ -526,6 +526,22 @@ function get_exception_info($ex) {
         $debuginfo .= PHP_EOL.'$a contents: '.print_r($a, true);
     }
 
+    // Remove some absolute paths from message and debugging info.
+    $searches = array();
+    $replaces = array();
+    $cfgnames = array('tempdir', 'cachedir', 'themedir',
+        'langmenucachefile', 'langcacheroot', 'dataroot', 'dirroot');
+    foreach ($cfgnames as $cfgname) {
+        if (property_exists($CFG, $cfgname)) {
+            $searches[] = $CFG->$cfgname;
+            $replaces[] = "[$cfgname]";
+        }
+    }
+    if (!empty($searches)) {
+        $message   = str_replace($searches, $replaces, $message);
+        $debuginfo = str_replace($searches, $replaces, $debuginfo);
+    }
+
     // Be careful, no guarantee weblib.php is loaded.
     if (function_exists('clean_text')) {
         $message = clean_text($message);
@@ -1149,7 +1165,7 @@ function disable_output_buffering() {
  */
 function redirect_if_major_upgrade_required() {
     global $CFG;
-    $lastmajordbchanges = 2013021100.01;
+    $lastmajordbchanges = 2013022500.01;
     if (empty($CFG->version) or (float)$CFG->version < $lastmajordbchanges or
             during_initial_install() or !empty($CFG->adminsetuppending)) {
         try {

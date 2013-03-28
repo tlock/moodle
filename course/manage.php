@@ -120,7 +120,7 @@ if (!empty($deletecat) and confirm_sesskey()) {
                 echo $OUTPUT->notification(get_string('coursedeleted', '', $course->shortname), 'notifysuccess');
             }
             $cattodeletename = format_string($cattodelete->name, true, array('context' => $context));
-            echo $OUTPUT->notification(get_string('coursecategorydeleted', '', $catetodeletename), 'notifysuccess');
+            echo $OUTPUT->notification(get_string('coursecategorydeleted', '', $cattodeletename), 'notifysuccess');
 
         } else {
             category_delete_move($cattodelete, $data->newparent, true);
@@ -339,8 +339,8 @@ if (!isset($category)) {
     $table->head = array(
         get_string('categories'),
         get_string('courses'),
-        get_string('movecategoryto'),
         get_string('edit'),
+        get_string('movecategoryto'),
     );
     $table->colclasses = array(
         'leftalign name',
@@ -373,7 +373,12 @@ if ($canmanage) {
 
     // Print button for creating new categories.
     $url = new moodle_url('/course/editcategory.php', array('parent' => $id));
-    echo $OUTPUT->single_button($url, get_string('addsubcategory'), 'get');
+    if ($id) {
+        $title = get_string('addsubcategory');
+    } else {
+        $title = get_string('addnewcategory');
+    }
+    echo $OUTPUT->single_button($url, $title, 'get');
     echo $OUTPUT->container_end();
 }
 

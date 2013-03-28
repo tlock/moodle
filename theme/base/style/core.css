@@ -72,7 +72,7 @@ a.dimmed_text:visited,
 .notifysuccess {color:#006600;}
 .reportlink {text-align:right;}
 a.autolink.glossary:hover {cursor: help;}
-/* Block which is hidden if javascript enabled, prevents fickering visible when JS from footer used! */
+/* Block which is hidden if javascript enabled, prevents flickering, visible when JS from footer used! */
 .collapsibleregioncaption {white-space: nowrap;}
 .collapsibleregioncaption img {vertical-align: middle;}
 .jsenabled .hiddenifjs {display: none;}
@@ -205,11 +205,16 @@ a.skip:active {position: static;display: block;}
 #page-footer .validators ul {margin:0px;padding:0px;list-style-type:none;}
 #page-footer .validators ul li {display:inline;margin-right:10px;margin-left:10px;}
 
-.performanceinfo .cachesused {margin-top:1em;}
-.performanceinfo .cachesused .cache-stats-heading {font-weight: bold;text-decoration: underline;font-size:110%;}
-.performanceinfo .cachesused .cache-definition-stats {font-weight:bold;margin-top:0.3em;}
-.performanceinfo .cachesused .cache-store-stats {text-indent: 1em;}
-.performanceinfo .cachesused .cache-total-stats {font-weight:bold;margin-top:0.3em;}
+#page-footer .performanceinfo .cachesused {margin-top:1em;}
+#page-footer .performanceinfo .cachesused .cache-stats-heading {font-weight:bold;display:block;}
+#page-footer .performanceinfo .cachesused .cache-definition-stats {margin:0.3em;padding:0px;border:1px solid #999;display:inline-block;vertical-align:top;min-height:4em;color:#000;background-color:#eee;}
+#page-footer .performanceinfo .cachesused .cache-definition-stats span {padding-left:0.5em;padding-right:0.5em;display:block;}
+#page-footer .performanceinfo .cachesused .cache-definition-stats .cache-definition-stats-heading {background-color:#eee;}
+#page-footer .performanceinfo .cachesused .cache-store-stats {text-indent: 1em;}
+#page-footer .performanceinfo .cachesused .cache-store-stats.nohits {background-color:#ffd3d9;}
+#page-footer .performanceinfo .cachesused .cache-store-stats.lowhits {background-color:#f3f2aa;}
+#page-footer .performanceinfo .cachesused .cache-store-stats.hihits {background-color:#e7f1c3;}
+#page-footer .performanceinfo .cachesused .cache-total-stats {display:block;font-weight:bold;margin-top:0.3em;}
 
 #course-footer {clear:both;}
 
@@ -226,7 +231,7 @@ a.skip:active {position: static;display: block;}
  * Mforms
  */
 .mform fieldset {border:1px solid;}
-.mform fieldset fieldset {border-width:0px;}
+.mform fieldset fieldset {border-width:0;}
 .mform fieldset legend {font-weight:bold;margin-left:0.5em;}
 .mform fieldset div {margin:10px;margin-top:0;}
 .mform fieldset div div {margin:0;}
@@ -234,16 +239,16 @@ a.skip:active {position: static;display: block;}
 .mform fieldset.hidden {border-width:0;}
 .mform fieldset.group {margin-bottom: 0}
 .mform fieldset.error {border: 1px solid #A00;}
-.mform fieldset.collapsible legend a.fheader {padding: 0 5px 0 20px; background: url([[pix:t/expanded]]) 2px center no-repeat;}
-.mform fieldset.collapsed legend a.fheader {background: url([[pix:t/collapsed]]) 2px center no-repeat;}
-.mform fieldset.collapsed.jsprocessed {border-width: 1px 0 0 0; padding: 0;}
-.mform fieldset.collapsed.jsprocessed div.fcontainer {display: none;}
+.mform fieldset legend {padding: 0 0.35em;}
+.mform fieldset.collapsible legend a.fheader {padding-left: 18px; background: url([[pix:t/expanded]]) left center no-repeat;}
+.mform fieldset.collapsed legend a.fheader {background-image: url([[pix:t/collapsed]]);}
+.jsenabled .mform fieldset.collapsed {border-width: 1px 0 0 1px; padding: 0; border-color: transparent;}
+.jsenabled .mform fieldset.collapsed div.fcontainer {display: none;}
 .mform .fitem {width:100%;overflow:hidden;margin-top:5px;margin-bottom:1px;clear:right;}
 .mform .fitem .fitemtitle {width:15%;text-align:right;float:left;}
 .mform .fitem .fitemtitle div {display: inline;}
 .mform .fitem .felement {border-width: 0;width:80%;margin-left:16%;}
 .mform .fitem fieldset.felement {margin-left:15%;padding-left:1%;margin-bottom:0}
-.dir-rtl .mform .fitem fieldset.felement {padding-right: 1%;margin-right: 15%;}
 .mform .error,
 .mform .required {color:#A00;}
 .mform .required .fgroup span label {color:#000;}
@@ -264,8 +269,16 @@ a.skip:active {position: static;display: block;}
 .dir-rtl .mform .helplink img { margin: 0 .45em 0 0; padding: 0;}
 .mform legend .helplink img { margin-right: .2em; }
 .dir-rtl .mform legend .helplink img { margin: 0 .45em 0 .2em; }
+.urlselect label,
 .singleselect label { margin-right: .3em; }
+.dir-rtl .urlselect label,
 .dir-rtl .singleselect label { margin-left: .3em; margin-right: 0; }
+
+.dir-rtl .mform fieldset legend {margin-right:0.5em; margin-left: 0;}
+.dir-rtl .mform fieldset.collapsible legend a.fheader {background-position: right center; padding-right: 18px; padding-left: 0;}
+.dir-rtl .mform fieldset.collapsed legend a.fheader {background-image: url([[pix:t/collapsed_rtl]]); }
+.dir-rtl.jsenabled .mform fieldset.collapsed {border-width: 1px 1px 0 0; }
+.dir-rtl .mform .fitem fieldset.felement {padding-right: 1%;margin-right: 15%;}
 
 input#id_externalurl {direction:ltr;}
 
@@ -857,7 +870,7 @@ sup {vertical-align: super;}
     background: none;
     border: none;
     /* Override the z-index set incorrectly by the YUI dialogue */
-    z-index: 600!important;
+    z-index: 600;
 }
 
 
@@ -1013,7 +1026,9 @@ sup {vertical-align: super;}
 .moodle-dialogue .tooltiptext {
     max-height: 300px;
 }
-
+.moodle-dialogue-base .moodle-dialogue.moodle-dialogue-tooltip {
+    z-index: 3001;
+}
 
 /* Question Bank - Question Chooser "Close" button */
 #page-question-edit.dir-rtl a.container-close {right:auto;left:6px;}

@@ -273,6 +273,15 @@ $functions = array(
         'capabilities'=> 'moodle/user:create',
     ),
 
+    'core_user_get_users' => array(
+        'classname'   => 'core_user_external',
+        'methodname'  => 'get_users',
+        'classpath'   => 'user/externallib.php',
+        'description' => 'search for users matching the parameters',
+        'type'        => 'read',
+        'capabilities'=> 'moodle/user:viewdetails, moodle/user:viewhiddendetails, moodle/course:useremail, moodle/user:update',
+    ),
+
     'moodle_user_get_users_by_id' => array(
         'classname'   => 'core_user_external',
         'methodname'  => 'get_users_by_id',
@@ -505,6 +514,15 @@ $functions = array(
         'capabilities'=> 'moodle/course:delete',
     ),
 
+    'core_course_delete_modules' => array(
+        'classname' => 'core_course_external',
+        'methodname' => 'delete_modules',
+        'classpath' => 'course/externallib.php',
+        'description' => 'Deletes all specified module instances',
+        'type' => 'write',
+        'capabilities' => 'moodle/course:manageactivities'
+    ),
+
     'core_course_duplicate_course' => array(
         'classname'   => 'core_course_external',
         'methodname'  => 'duplicate_course',
@@ -660,6 +678,33 @@ $functions = array(
         'methodname'  => 'create_notes',
         'classpath'   => 'notes/externallib.php',
         'description' => 'Create notes',
+        'type'        => 'write',
+        'capabilities'=> 'moodle/notes:manage',
+    ),
+
+    'core_notes_delete_notes' => array(
+        'classname'   => 'core_notes_external',
+        'methodname'  => 'delete_notes',
+        'classpath'   => 'notes/externallib.php',
+        'description' => 'Delete notes',
+        'type'        => 'write',
+        'capabilities'=> 'moodle/notes:manage',
+    ),
+
+    'core_notes_get_notes' => array(
+        'classname'   => 'core_notes_external',
+        'methodname'  => 'get_notes',
+        'classpath'   => 'notes/externallib.php',
+        'description' => 'Get notes',
+        'type'        => 'read',
+        'capabilities'=> 'moodle/notes:view',
+    ),
+
+    'core_notes_update_notes' => array(
+        'classname'   => 'core_notes_external',
+        'methodname'  => 'update_notes',
+        'classpath'   => 'notes/externallib.php',
+        'description' => 'Update notes',
         'type'        => 'write',
         'capabilities'=> 'moodle/notes:manage',
     ),

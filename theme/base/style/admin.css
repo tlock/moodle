@@ -67,20 +67,19 @@
 
 .path-admin .incompatibleblockstable td.c0 {font-weight: bold;}
 
-#page-admin-course-category .addcategory {padding: 10px;}
-#page-admin-course-index .buttons,
-#page-admin-course-category .buttons {margin-bottom: 15px;}
-#page-admin-course-index .editcourse {margin:20px auto;}
-#page-admin-course-index .editcourse th,
-#page-admin-course-index .editcourse td {padding-left:10px;padding-right:10px;}
-#page-admin-course-index .editcourse .count {text-align:right;}
-#page-admin-course-index.dir-rtl .editcourse td[align="left"] {text-align: right;}
-#page-admin-course-index.dir-rtl .editcourse td[align="right"] {text-align: left;}
+#page-admin-course-manage .addcategory {padding: 10px;}
+#page-admin-course-manage .buttons {margin-bottom: 15px;}
+#page-admin-course-manage .editcourse {margin:20px auto;}
+#page-admin-course-manage .editcourse th,
+#page-admin-course-manage .editcourse td {padding-left:10px;padding-right:10px;}
+#page-admin-course-manage .editcourse .count {text-align:right;}
+#page-admin-course-manage.dir-rtl .editcourse td[align="left"] {text-align: right;}
+#page-admin-course-manage.dir-rtl .editcourse td[align="right"] {text-align: left;}
 
 #page-admin-report-security-index .timewarninghidden {display:none;}
-#page-admin-report-security-index .statuswarning {background-color: #f0e000;}
-#page-admin-report-security-index .statusserious {background-color: #f07000;}
-#page-admin-report-security-index .statuscritical {background-color: #f00000;}
+#page-admin-report-security-index .statuswarning, #page-admin-report-performance-index .statuswarning {background-color: #f0e000;}
+#page-admin-report-security-index .statusserious, #page-admin-report-performance-index .statusserious {background-color: #f07000;}
+#page-admin-report-security-index .statuscritical, #page-admin-report-performance-index .statuscritical {background-color: #f00000;}
 #page-admin-report-capability-index .rolecaps th {text-align: left;}
 #page-admin-report-capability-index #settingsform #capabilitysearch {width: 30em;}
 
@@ -112,8 +111,7 @@
 #page-admin-qtypes #qtypes img { padding-right: .45em; vertical-align: text-bottom; }
 
 .path-admin-roles .buttons .singlebutton,
-#page-admin-course-index .buttons .singlebutton,
-#page-admin-course-category .buttons .singlebutton {display: inline;padding: 5px;}
+#page-admin-course-manage {display: inline;padding: 5px;}
 
 .path-admin-roles .capabilitysearchui {text-align: left;margin-left: auto;margin-right: auto;}
 #page-admin-roles-define .topfields {margin: 1em 0 2em;}
@@ -237,6 +235,7 @@
 #adminsettings .form-item .patherror {margin-left: 0.5em;}
 #adminsettings #admin-emoticons table td input {width: 8em;}
 #adminsettings #admin-emoticons table td.c0 input {width: 4em;}
+#adminsettings .form-overridden {background-color: yellow;}
 
 #adminthemeselector .selectedtheme td.c0 {border:1px solid;border-right-width:0;}
 #adminthemeselector .selectedtheme td.c1 {border:1px solid;border-left-width:0;}
@@ -332,5 +331,6 @@
 #core-cache-store-summaries .default-store td {color:#333;font-style: italic;}
 #core-cache-rescan-definitions,
 #core-cache-mode-mappings .edit-link {margin-top:0.5em;text-align:center;}
+#core-cache-store-summaries .store-requires-attention {background-color:#ffd3d9;}
 
 .tinymcesubplugins img.icon { padding-top: 0; padding-bottom: 0; }

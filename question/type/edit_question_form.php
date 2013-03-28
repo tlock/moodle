@@ -325,14 +325,9 @@ abstract class question_edit_form extends question_wizard_form {
                 $repeatedoptions, $answersoption);
 
         if (isset($this->question->options)) {
-            $countanswers = count($this->question->options->$answersoption);
+            $repeatsatstart = count($this->question->options->$answersoption);
         } else {
-            $countanswers = 0;
-        }
-        if ($this->question->formoptions->repeatelements) {
-            $repeatsatstart = max($minoptions, $countanswers + $addoptions);
-        } else {
-            $repeatsatstart = $countanswers;
+            $repeatsatstart = $minoptions;
         }
 
         $this->repeat_elements($repeated, $repeatsatstart, $repeatedoptions,
@@ -430,7 +425,6 @@ abstract class question_edit_form extends question_wizard_form {
         }
         $mform->addElement('select', 'penalty',
                 get_string('penaltyforeachincorrecttry', 'question'), $penaltyoptions);
-        $mform->addRule('penalty', null, 'required', null, 'client');
         $mform->addHelpButton('penalty', 'penaltyforeachincorrecttry', 'question');
         $mform->setDefault('penalty', 0.3333333);
 
@@ -677,6 +671,12 @@ abstract class question_edit_form extends question_wizard_form {
                 && empty($fromform['usecurrentcat']) && !$this->question->formoptions->canmove) {
             $errors['currentgrp'] = get_string('nopermissionmove', 'question');
         }
+
+        // Default mark.
+        if (array_key_exists('defaultmark', $fromform) && $fromform['defaultmark'] < 0) {
+            $errors['defaultmark'] = get_string('defaultmarkmustbepositive', 'question');
+        }
+
         return $errors;
     }
 

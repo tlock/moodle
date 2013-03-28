@@ -316,6 +316,12 @@ class theme_config {
     public $hidefromselector = false;
 
     /**
+     * @var array list of YUI CSS modules to be included on each page. This may be used
+     * to remove cssreset and use cssnormalise module instead.
+     */
+    public $yuicssmodules = array('cssreset', 'cssfonts', 'cssgrids', 'cssbase');
+
+    /**
      * @var renderer_factory Instance of the renderer_factory implementation
      * we are using. Implementation detail.
      */
@@ -407,7 +413,8 @@ class theme_config {
 
         $configurable = array('parents', 'sheets', 'parents_exclude_sheets', 'plugins_exclude_sheets', 'javascripts', 'javascripts_footer',
                               'parents_exclude_javascripts', 'layouts', 'enable_dock', 'enablecourseajax', 'supportscssoptimisation',
-                              'rendererfactory', 'csspostprocess', 'editor_sheets', 'rarrow', 'larrow', 'hidefromselector', 'doctype');
+                              'rendererfactory', 'csspostprocess', 'editor_sheets', 'rarrow', 'larrow', 'hidefromselector', 'doctype',
+                              'yuicssmodules');
 
         foreach ($config as $key=>$value) {
             if (in_array($key, $configurable)) {
@@ -823,10 +830,12 @@ class theme_config {
     protected function css_files_get_contents($file, array $keys, css_optimiser $optimiser = null) {
         global $CFG;
         if (is_array($file)) {
+            // We use a separate array to keep everything in the exact same order.
+            $return = array();
             foreach ($file as $key=>$f) {
-                $file[$key] = $this->css_files_get_contents($f, array_merge($keys, array($key)), $optimiser);
+                $return[clean_param($key, PARAM_SAFEDIR)] = $this->css_files_get_contents($f, array_merge($keys, array($key)), $optimiser);
             }
-            return $file;
+            return $return;
         } else {
             $contents = file_get_contents($file);
             $contents = $this->post_process($contents);
@@ -922,7 +931,6 @@ class theme_config {
                 }
             }
         }
-
         return $js;
     }
 

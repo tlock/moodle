@@ -136,8 +136,12 @@ class assign {
      * @return void
      */
     public function register_return_link($action, $params) {
-        $this->returnaction = $action;
-        $this->returnparams = $params;
+        global $PAGE;
+        $params['action'] = $action;
+        $currenturl = $PAGE->url;
+
+        $currenturl->params($params);
+        $PAGE->set_url($currenturl);
     }
 
     /**
@@ -146,7 +150,14 @@ class assign {
      * @return string action
      */
     public function get_return_action() {
-        return $this->returnaction;
+        global $PAGE;
+
+        $params = $PAGE->url->params();
+
+        if (!empty($params['action'])) {
+            return $params['action'];
+        }
+        return '';
     }
 
     /**
@@ -168,7 +179,12 @@ class assign {
      * @return array params
      */
     public function get_return_params() {
-        return $this->returnparams;
+        global $PAGE;
+
+        $params = $PAGE->url->params();
+        unset($params['id']);
+        unset($params['action']);
+        return $params;
     }
 
     /**
@@ -330,79 +346,102 @@ class assign {
         $mform = null;
         $notices = array();
 
+        $nextpageparams = array('id'=>$this->get_course_module()->id);
+
         // Handle form submissions first.
         if ($action == 'savesubmission') {
             $action = 'editsubmission';
             if ($this->process_save_submission($mform, $notices)) {
-                $action = 'view';
+                $action = 'redirect';
+                $nextpageparams['action'] = 'view';
             }
         } else if ($action == 'lock') {
             $this->process_lock();
-            $action = 'grading';
+            $action = 'redirect';
+            $nextpageparams['action'] = 'grading';
         } else if ($action == 'reverttodraft') {
             $this->process_revert_to_draft();
-            $action = 'grading';
+            $action = 'redirect';
+            $nextpageparams['action'] = 'grading';
         } else if ($action == 'unlock') {
             $this->process_unlock();
-            $action = 'grading';
+            $action = 'redirect';
+            $nextpageparams['action'] = 'grading';
         } else if ($action == 'confirmsubmit') {
             $action = 'submit';
             if ($this->process_submit_for_grading($mform)) {
-                $action = 'view';
+                $action = 'redirect';
+                $nextpageparams['action'] = 'view';
             }
         } else if ($action == 'gradingbatchoperation') {
             $action = $this->process_grading_batch_operation($mform);
+            if ($action == 'grading') {
+                $action = 'redirect';
+                $nextpageparams['action'] = 'grading';
+            }
         } else if ($action == 'submitgrade') {
             if (optional_param('saveandshownext', null, PARAM_RAW)) {
                 // Save and show next.
                 $action = 'grade';
                 if ($this->process_save_grade($mform)) {
-                    $action = 'nextgrade';
+                    $action = 'redirect';
+                    $nextpageparams['action'] = 'grade';
+                    $nextpageparams['rownum'] = optional_param('rownum', 0, PARAM_INT) + 1;
+                    $nextpageparams['useridlistid'] = optional_param('useridlistid', time(), PARAM_INT);
                 }
             } else if (optional_param('nosaveandprevious', null, PARAM_RAW)) {
-                $action = 'previousgrade';
+                $action = 'redirect';
+                $nextpageparams['action'] = 'grade';
+                $nextpageparams['rownum'] = optional_param('rownum', 0, PARAM_INT) - 1;
+                $nextpageparams['useridlistid'] = optional_param('useridlistid', time(), PARAM_INT);
             } else if (optional_param('nosaveandnext', null, PARAM_RAW)) {
-                // Show next button.
-                $action = 'nextgrade';
+                $action = 'redirect';
+                $nextpageparams['action'] = 'grade';
+                $nextpageparams['rownum'] = optional_param('rownum', 0, PARAM_INT) + 1;
+                $nextpageparams['useridlistid'] = optional_param('useridlistid', time(), PARAM_INT);
             } else if (optional_param('savegrade', null, PARAM_RAW)) {
                 // Save changes button.
                 $action = 'grade';
                 if ($this->process_save_grade($mform)) {
-                    $action = 'grading';
+                    $action = 'redirect';
+                    $nextpageparams['action'] = 'grading';
                 }
             } else {
                 // Cancel button.
-                $action = 'grading';
+                $action = 'redirect';
+                $nextpageparams['action'] = 'grading';
             }
         } else if ($action == 'quickgrade') {
             $message = $this->process_save_quick_grades();
             $action = 'quickgradingresult';
         } else if ($action == 'saveoptions') {
             $this->process_save_grading_options();
-            $action = 'grading';
+            $action = 'redirect';
+            $nextpageparams['action'] = 'grading';
         } else if ($action == 'saveextension') {
             $action = 'grantextension';
             if ($this->process_save_extension($mform)) {
-                $action = 'grading';
+                $action = 'redirect';
+                $nextpageparams['action'] = 'grading';
             }
         } else if ($action == 'revealidentitiesconfirm') {
             $this->process_reveal_identities();
-            $action = 'grading';
+            $action = 'redirect';
+            $nextpageparams['action'] = 'grading';
         }
 
-        $returnparams = array('rownum'=>optional_param('rownum', 0, PARAM_INT));
+        $returnparams = array('rownum'=>optional_param('rownum', 0, PARAM_INT),
+                              'useridlistid'=>optional_param('useridlistid', 0, PARAM_INT));
         $this->register_return_link($action, $returnparams);
 
         // Now show the right view page.
-        if ($action == 'previousgrade') {
-            $mform = null;
-            $o .= $this->view_single_grade_page($mform, -1);
+        if ($action == 'redirect') {
+            $nextpageurl = new moodle_url('/mod/assign/view.php', $nextpageparams);
+            redirect($nextpageurl);
+            return;
         } else if ($action == 'quickgradingresult') {
             $mform = null;
             $o .= $this->view_quickgrading_result($message);
-        } else if ($action == 'nextgrade') {
-            $mform = null;
-            $o .= $this->view_single_grade_page($mform, 1);
         } else if ($action == 'grade') {
             $o .= $this->view_single_grade_page($mform);
         } else if ($action == 'viewpluginassignfeedback') {
@@ -657,7 +696,7 @@ class assign {
     protected function update_plugin_instance(assign_plugin $plugin, stdClass $formdata) {
         if ($plugin->is_visible()) {
             $enabledname = $plugin->get_subtype() . '_' . $plugin->get_type() . '_enabled';
-            if ($formdata->$enabledname) {
+            if (!empty($formdata->$enabledname)) {
                 $plugin->enable();
                 if (!$plugin->save_settings($formdata)) {
                     print_error($plugin->get_error());
@@ -843,17 +882,18 @@ class assign {
      * @param assign_plugin $plugin The plugin to add the settings from
      * @param MoodleQuickForm $mform The form to add the configuration settings to.
      *                               This form is modified directly (not returned).
+     * @param array $pluginsenabled A list of form elements to be added to a group.
+     *                              The new element is added to this array by this function.
      * @return void
      */
-    protected function add_plugin_settings(assign_plugin $plugin, MoodleQuickForm $mform) {
+    protected function add_plugin_settings(assign_plugin $plugin, MoodleQuickForm $mform, & $pluginsenabled) {
         global $CFG;
         if ($plugin->is_visible()) {
-            $mform->addElement('selectyesno',
-                               $plugin->get_subtype() . '_' . $plugin->get_type() . '_enabled',
-                               $plugin->get_name());
-            $mform->addHelpButton($plugin->get_subtype() . '_' . $plugin->get_type() . '_enabled',
-                                  'enabled',
-                                  $plugin->get_subtype() . '_' . $plugin->get_type());
+
+            $name = $plugin->get_subtype() . '_' . $plugin->get_type() . '_enabled';
+            $label = $plugin->get_name();
+            $label .= ' ' . $this->get_renderer()->help_icon('enabled', $plugin->get_subtype() . '_' . $plugin->get_type());
+            $pluginsenabled[] = $mform->createElement('checkbox', $name, '', $label);
 
             $default = get_config($plugin->get_subtype() . '_' . $plugin->get_type(), 'default');
             if ($plugin->get_config('enabled') !== false) {
@@ -874,16 +914,23 @@ class assign {
      * @return void
      */
     public function add_all_plugin_settings(MoodleQuickForm $mform) {
-        $mform->addElement('header', 'general', get_string('submissionsettings', 'assign'));
+        $mform->addElement('header', 'submissiontypes', get_string('submissionsettings', 'assign'));
 
+        $submissionpluginsenabled = array();
+        $group = $mform->addGroup(array(), 'submissionplugins', get_string('submissiontypes', 'assign'), array(' '), false);
         foreach ($this->submissionplugins as $plugin) {
-            $this->add_plugin_settings($plugin, $mform);
+            $this->add_plugin_settings($plugin, $mform, $submissionpluginsenabled);
+        }
+        $group->setElements($submissionpluginsenabled);
 
-        }
-        $mform->addElement('header', 'general', get_string('feedbacksettings', 'assign'));
+        $mform->addElement('header', 'feedbacktypes', get_string('feedbacksettings', 'assign'));
+        $feedbackpluginsenabled = array();
+        $group = $mform->addGroup(array(), 'feedbackplugins', get_string('feedbacktypes', 'assign'), array(' '), false);
         foreach ($this->feedbackplugins as $plugin) {
-            $this->add_plugin_settings($plugin, $mform);
+            $this->add_plugin_settings($plugin, $mform, $feedbackpluginsenabled);
         }
+        $group->setElements($feedbackpluginsenabled);
+        $mform->setExpanded('submissiontypes');
     }
 
     /**
@@ -2324,10 +2371,9 @@ class assign {
      * Print the grading page for a single user submission.
      *
      * @param moodleform $mform
-     * @param int $offset
      * @return string
      */
-    protected function view_single_grade_page($mform, $offset=0) {
+    protected function view_single_grade_page($mform) {
         global $DB, $CFG;
 
         $o = '';
@@ -2345,20 +2391,22 @@ class assign {
                                     get_string('grading', 'assign'));
         $o .= $this->get_renderer()->render($header);
 
-        $rownum = required_param('rownum', PARAM_INT) + $offset;
-        $useridlist = optional_param('useridlist', '', PARAM_TEXT);
-        if ($useridlist) {
-            $useridlist = explode(',', $useridlist);
-        } else {
+        $rownum = required_param('rownum', PARAM_INT);
+        $useridlistid = optional_param('useridlistid', time(), PARAM_INT);
+        $cache = cache::make_from_params(cache_store::MODE_SESSION, 'mod_assign', 'useridlist');
+        if (!$useridlist = $cache->get($this->get_course_module()->id . '_' . $useridlistid)) {
             $useridlist = $this->get_grading_userid_list();
+            $cache->set($this->get_course_module()->id . '_' . $useridlistid, $useridlist);
         }
+
+        if ($rownum < 0 || $rownum > count($useridlist)) {
+            throw new coding_exception('Row is out of bounds for the current grading table: ' . $rownum);
+        }
+
         $last = false;
         $userid = $useridlist[$rownum];
         if ($rownum == count($useridlist) - 1) {
             $last = true;
-        }
-        if (!$userid) {
-            throw new coding_exception('Row is out of bounds for the current grading table: ' . $rownum);
         }
         $user = $DB->get_record('user', array('id' => $userid));
         if ($user) {
@@ -2367,7 +2415,8 @@ class assign {
                                                    $this->get_course()->id,
                                                    $viewfullnames,
                                                    $this->is_blind_marking(),
-                                                   $this->get_uniqueid_for_user($user->id));
+                                                   $this->get_uniqueid_for_user($user->id),
+                                                   get_extra_user_fields($this->get_context()));
             $o .= $this->get_renderer()->render($usersummary);
         }
         $submission = $this->get_user_submission($userid, false);
@@ -2449,7 +2498,7 @@ class assign {
 
         // Now show the grading form.
         if (!$mform) {
-            $pagination = array( 'rownum'=>$rownum, 'useridlist'=>$useridlist, 'last'=>$last);
+            $pagination = array( 'rownum'=>$rownum, 'useridlistid'=>$useridlistid, 'last'=>$last);
             $formparams = array($this, $data, $pagination);
             $mform = new mod_assign_grade_form(null,
                                                $formparams,
@@ -2512,6 +2561,7 @@ class assign {
         $returnparams = optional_param('returnparams', '', PARAM_TEXT);
 
         $params = array();
+        $returnparams = str_replace('&amp;', '&', $returnparams);
         parse_str($returnparams, $params);
         $newparams = array('id' => $this->get_course_module()->id, 'action' => $returnaction);
         $params = array_merge($newparams, $params);
@@ -2572,10 +2622,6 @@ class assign {
         $filter = get_user_preferences('assign_filter', '');
         $controller = $gradingmanager->get_active_controller();
         $showquickgrading = empty($controller);
-        if (optional_param('action', '', PARAM_ALPHA) == 'saveoptions') {
-            $quickgrading = optional_param('quickgrading', false, PARAM_BOOL);
-            set_user_preference('assign_quickgrading', $quickgrading);
-        }
         $quickgrading = get_user_preferences('assign_quickgrading', false);
 
         // Print options for changing the filter and changing the number of results per page.
@@ -3112,7 +3158,6 @@ class assign {
                     }
                 }
 
-
                 $feedbackstatus = new assign_feedback_status($gradefordisplay,
                                                       $gradeddate,
                                                       $grader,
@@ -3599,6 +3644,9 @@ class assign {
         $info = new stdClass();
         if ($blindmarking) {
             $info->username = get_string('participant', 'assign') . ' ' . $uniqueidforuser;
+            $userfrom->firstname = get_string('participant', 'assign');
+            $userfrom->lastname = $uniqueidforuser;
+            $userfrom->email = $CFG->noreplyaddress;
         } else {
             $info->username = fullname($userfrom, true);
         }
@@ -4109,17 +4157,26 @@ class assign {
         // Need submit permission to submit an assignment.
         require_capability('mod/assign:grade', $this->context);
 
+        // Is advanced grading enabled?
+        $gradingmanager = get_grading_manager($this->get_context(), 'mod_assign', 'submissions');
+        $controller = $gradingmanager->get_active_controller();
+        $showquickgrading = empty($controller);
+
         $gradingoptionsparams = array('cm'=>$this->get_course_module()->id,
                                       'contextid'=>$this->context->id,
                                       'userid'=>$USER->id,
                                       'submissionsenabled'=>$this->is_any_submission_plugin_enabled(),
-                                      'showquickgrading'=>false);
+                                      'showquickgrading'=>$showquickgrading,
+                                      'quickgrading'=>false);
 
         $mform = new mod_assign_grading_options_form(null, $gradingoptionsparams);
         if ($formdata = $mform->get_data()) {
             set_user_preference('assign_perpage', $formdata->perpage);
             if (isset($formdata->filter)) {
                 set_user_preference('assign_filter', $formdata->filter);
+            }
+            if ($showquickgrading) {
+                set_user_preference('assign_quickgrading', isset($formdata->quickgrading));
             }
         }
     }
@@ -4364,7 +4421,13 @@ class assign {
 
         $rownum = $params['rownum'];
         $last = $params['last'];
-        $useridlist = $params['useridlist'];
+        $useridlistid = $params['useridlistid'];
+        $cache = cache::make_from_params(cache_store::MODE_SESSION, 'mod_assign', 'useridlist');
+        if (!$useridlist = $cache->get($this->get_course_module()->id . '_' . $useridlistid)) {
+            $useridlist = $this->get_grading_userid_list();
+            $cache->set($this->get_course_module()->id . '_' . $useridlistid, $useridlist);
+        }
+
         $userid = $useridlist[$rownum];
         $grade = $this->get_user_grade($userid, false);
 
@@ -4471,8 +4534,8 @@ class assign {
         $mform->addElement('hidden', 'rownum', $rownum);
         $mform->setType('rownum', PARAM_INT);
         $mform->setConstant('rownum', $rownum);
-        $mform->addElement('hidden', 'useridlist', implode(',', $useridlist));
-        $mform->setType('useridlist', PARAM_TEXT);
+        $mform->addElement('hidden', 'useridlistid', $useridlistid);
+        $mform->setType('useridlistid', PARAM_INT);
         $mform->addElement('hidden', 'ajax', optional_param('ajax', 0, PARAM_INT));
         $mform->setType('ajax', PARAM_INT);
 
@@ -4840,11 +4903,11 @@ class assign {
         require_sesskey();
 
         $rownum = required_param('rownum', PARAM_INT);
-        $useridlist = optional_param('useridlist', '', PARAM_TEXT);
-        if ($useridlist) {
-            $useridlist = explode(',', $useridlist);
-        } else {
+        $useridlistid = optional_param('useridlistid', time(), PARAM_INT);
+        $cache = cache::make_from_params(cache_store::MODE_SESSION, 'mod_assign', 'useridlist');
+        if (!$useridlist = $cache->get($this->get_course_module()->id . '_' . $useridlistid)) {
             $useridlist = $this->get_grading_userid_list();
+            $cache->set($this->get_course_module()->id . '_' . $useridlistid, $useridlist);
         }
         $last = false;
         $userid = $useridlist[$rownum];
@@ -4854,7 +4917,7 @@ class assign {
 
         $data = new stdClass();
 
-        $gradeformparams = array('rownum'=>$rownum, 'useridlist'=>$useridlist, 'last'=>false);
+        $gradeformparams = array('rownum'=>$rownum, 'useridlistid'=>$useridlistid, 'last'=>false);
         $mform = new mod_assign_grade_form(null,
                                            array($this, $data, $gradeformparams),
                                            'post',

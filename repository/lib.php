@@ -487,6 +487,9 @@ abstract class repository {
     public $returntypes;
     /** @var stdClass repository instance database record */
     public $instance;
+    /** @var string Type of repository (webdav, google_docs, dropbox, ...). Read from $this->get_typename(). */
+    protected $typename;
+
     /**
      * Constructor
      *
@@ -559,6 +562,24 @@ abstract class repository {
     }
 
     /**
+     * Returns the type name of the repository.
+     *
+     * @return string type name of the repository.
+     * @since  2.5
+     */
+    public function get_typename() {
+        if (empty($this->typename)) {
+            $matches = array();
+            if (!preg_match("/^repository_(.*)$/", get_class($this), $matches)) {
+                throw new coding_exception('The class name of a repository should be repository_<typeofrepository>, '.
+                        'e.g. repository_dropbox');
+            }
+            $this->typename = $matches[1];
+        }
+        return $this->typename;
+    }
+
+    /**
      * Get a repository type object by a given type name.
      *
      * @static
@@ -620,39 +641,77 @@ abstract class repository {
     }
 
     /**
-     * Checks if user has a capability to view the current repository in current context
+     * Checks if user has a capability to view the current repository.
      *
-     * @return bool
+     * @return bool true when the user can, otherwise throws an exception.
+     * @throws repository_exception when the user does not meet the requirements.
      */
     public final function check_capability() {
-        $capability = false;
-        if (preg_match("/^repository_(.*)$/", get_class($this), $matches)) {
-            $type = $matches[1];
-            $capability = has_capability('repository/'.$type.':view', $this->context);
+        global $USER;
+
+        // The context we are on.
+        $currentcontext = $this->context;
+
+        // Ensure that the user can view the repository in the current context.
+        $can = has_capability('repository/'.$this->get_typename().':view', $currentcontext);
+
+        // Context in which the repository has been created.
+        $repocontext = context::instance_by_id($this->instance->contextid);
+
+        // Prevent access to private repositories when logged in as.
+        if ($can && session_is_loggedinas()) {
+            if ($this->contains_private_data() || $repocontext->contextlevel == CONTEXT_USER) {
+                $can = false;
+            }
         }
-        if (!$capability) {
-            throw new repository_exception('nopermissiontoaccess', 'repository');
+
+        // We are going to ensure that the current context was legit, and reliable to check
+        // the capability against. (No need to do that if we already cannot).
+        if ($can) {
+            if ($repocontext->contextlevel == CONTEXT_USER) {
+                // The repository is a user instance, ensure we're the right user to access it!
+                if ($repocontext->instanceid != $USER->id) {
+                    $can = false;
+                }
+            } else if ($repocontext->contextlevel == CONTEXT_COURSE) {
+                // The repository is a course one. Let's check that we are on the right course.
+                if (in_array($currentcontext->contextlevel, array(CONTEXT_COURSE, CONTEXT_MODULE, CONTEXT_BLOCK))) {
+                    $coursecontext = $currentcontext->get_course_context();
+                    if ($coursecontext->instanceid != $repocontext->instanceid) {
+                        $can = false;
+                    }
+                } else {
+                    // We are on a parent context, therefore it's legit to check the permissions
+                    // in the current context.
+                }
+            } else {
+                // Nothing to check here, system instances can have different permissions on different
+                // levels. We do not want to prevent URL hack here, because it does not make sense to
+                // prevent a user to access a repository in a context if it's accessible in another one.
+            }
         }
+
+        if ($can) {
+            return true;
+        }
+
+        throw new repository_exception('nopermissiontoaccess', 'repository');
     }
 
     /**
-     * Check if file already exists in draft area
+     * Check if file already exists in draft area.
      *
      * @static
-     * @param int $itemid
-     * @param string $filepath
-     * @param string $filename
+     * @param int $itemid of the draft area.
+     * @param string $filepath path to the file.
+     * @param string $filename file name.
      * @return bool
      */
     public static function draftfile_exists($itemid, $filepath, $filename) {
         global $USER;
         $fs = get_file_storage();
         $usercontext = context_user::instance($USER->id);
-        if ($fs->get_file($usercontext->id, 'user', 'draft', $itemid, $filepath, $filename)) {
-            return true;
-        } else {
-            return false;
-        }
+        return $fs->file_exists($usercontext->id, 'user', 'draft', $itemid, $filepath, $filename);
     }
 
     /**
@@ -769,31 +828,34 @@ abstract class repository {
     }
 
     /**
-     * Get unused filename by appending suffix
+     * Get an unused filename from the current draft area.
+     *
+     * Will check if the file ends with ([0-9]) and increase the number.
      *
      * @static
-     * @param int $itemid
-     * @param string $filepath
-     * @param string $filename
-     * @return string
+     * @param int $itemid draft item ID.
+     * @param string $filepath path to the file.
+     * @param string $filename name of the file.
+     * @return string an unused file name.
      */
     public static function get_unused_filename($itemid, $filepath, $filename) {
         global $USER;
+        $contextid = context_user::instance($USER->id)->id;
         $fs = get_file_storage();
-        while (repository::draftfile_exists($itemid, $filepath, $filename)) {
-            $filename = repository::append_suffix($filename);
-        }
-        return $filename;
+        return $fs->get_unused_filename($contextid, 'user', 'draft', $itemid, $filepath, $filename);
     }
 
     /**
-     * Append a suffix to filename
+     * Append a suffix to filename.
      *
      * @static
      * @param string $filename
      * @return string
+     * @deprecated since 2.5
      */
     public static function append_suffix($filename) {
+        debugging('The function repository::append_suffix() has been deprecated. Use repository::get_unused_filename() instead.',
+            DEBUG_DEVELOPER);
         $pathinfo = pathinfo($filename);
         if (empty($pathinfo['extension'])) {
             return $filename . RENAME_SUFFIX;
@@ -1454,12 +1516,12 @@ abstract class repository {
         $pluginstr = get_string('plugin', 'repository');
         $settingsstr = get_string('settings');
         $deletestr = get_string('delete');
-        //retrieve list of instances. In administration context we want to display all
-        //instances of a type, even if this type is not visible. In course/user context we
-        //want to display only visible instances, but for every type types. The repository::get_instances()
-        //third parameter displays only visible type.
+        // Retrieve list of instances. In administration context we want to display all
+        // instances of a type, even if this type is not visible. In course/user context we
+        // want to display only visible instances, but for every type types. The repository::get_instances()
+        // third parameter displays only visible type.
         $params = array();
-        $params['context'] = array($context, get_system_context());
+        $params['context'] = array($context);
         $params['currentcontext'] = $context;
         $params['onlyvisible'] = !$admin;
         $params['type']        = $typename;
@@ -1762,17 +1824,75 @@ abstract class repository {
     }
 
     /**
+     * Can the instance be edited by the current user?
+     *
+     * The property $readonly must not be used within this method because
+     * it only controls if the options from self::get_instance_option_names()
+     * can be edited.
+     *
+     * @return bool true if the user can edit the instance.
+     * @since 2.5
+     */
+    public final function can_be_edited_by_user() {
+        global $USER;
+
+        // We need to be able to explore the repository.
+        try {
+            $this->check_capability();
+        } catch (repository_exception $e) {
+            return false;
+        }
+
+        $repocontext = context::instance_by_id($this->instance->contextid);
+        if ($repocontext->contextlevel == CONTEXT_USER && $repocontext->instanceid != $USER->id) {
+            // If the context of this instance is a user context, we need to be this user.
+            return false;
+        } else if ($repocontext->contextlevel == CONTEXT_MODULE && !has_capability('moodle/course:update', $repocontext)) {
+            // We need to have permissions on the course to edit the instance.
+            return false;
+        } else if ($repocontext->contextlevel == CONTEXT_SYSTEM && !has_capability('moodle/site:config', $repocontext)) {
+            // Do not meet the requirements for the context system.
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Return the name of this instance, can be overridden.
      *
      * @return string
      */
     public function get_name() {
         global $DB;
-        if ( $name = $this->instance->name ) {
+        if ($name = $this->instance->name) {
             return $name;
         } else {
-            return get_string('pluginname', 'repository_' . $this->options['type']);
+            return get_string('pluginname', 'repository_' . $this->get_typename());
         }
+    }
+
+    /**
+     * Is this repository accessing private data?
+     *
+     * This function should return true for the repositories which access external private
+     * data from a user. This is the case for repositories such as Dropbox, Google Docs or Box.net
+     * which authenticate the user and then store the auth token.
+     *
+     * Of course, many repositories store 'private data', but we only want to set
+     * contains_private_data() to repositories which are external to Moodle and shouldn't be accessed
+     * to by the users having the capability to 'login as' someone else. For instance, the repository
+     * 'Private files' is not considered as private because it's part of Moodle.
+     *
+     * You should not set contains_private_data() to true on repositories which allow different types
+     * of instances as the levels other than 'user' are, by definition, not private. Also
+     * the user instances will be protected when they need to.
+     *
+     * @return boolean True when the repository accesses private external data.
+     * @since  2.5
+     */
+    public function contains_private_data() {
+        return true;
     }
 
     /**
@@ -1807,7 +1927,7 @@ abstract class repository {
         $meta = new stdClass();
         $meta->id   = $this->id;
         $meta->name = format_string($this->get_name());
-        $meta->type = $this->options['type'];
+        $meta->type = $this->get_typename();
         $meta->icon = $OUTPUT->pix_url('icon', 'repository_'.$meta->type)->out(false);
         $meta->supported_types = file_get_typegroup('extension', $this->supported_filetypes());
         $meta->return_types = $this->supported_returntypes();

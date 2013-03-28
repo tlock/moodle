@@ -68,7 +68,9 @@ class enrol_manual_plugin extends enrol_plugin {
 
         $context = context_course::instance($instance->courseid, MUST_EXIST);
 
-        if (!has_capability('enrol/manual:manage', $context) or !has_capability('enrol/manual:enrol', $context) or !has_capability('enrol/manual:unenrol', $context)) {
+        if (!has_capability('enrol/manual:enrol', $context)) {
+            // Note: manage capability not used here because it is used for editing
+            // of existing enrolments which is not possible here.
             return NULL;
         }
 
@@ -111,13 +113,14 @@ class enrol_manual_plugin extends enrol_plugin {
 
         $icons = array();
 
-        if (has_capability('enrol/manual:manage', $context)) {
+        if (has_capability('enrol/manual:enrol', $context) or has_capability('enrol/manual:unenrol', $context)) {
             $managelink = new moodle_url("/enrol/manual/manage.php", array('enrolid'=>$instance->id));
             $icons[] = $OUTPUT->action_icon($managelink, new pix_icon('t/enrolusers', get_string('enrolusers', 'enrol_manual'), 'core', array('class'=>'iconsmall')));
         }
         if (has_capability('enrol/manual:config', $context)) {
             $editlink = new moodle_url("/enrol/manual/edit.php", array('courseid'=>$instance->courseid));
-            $icons[] = $OUTPUT->action_icon($editlink, new pix_icon('i/edit', get_string('edit'), 'core', array('class'=>'icon')));
+            $icons[] = $OUTPUT->action_icon($editlink, new pix_icon('t/edit', get_string('edit'), 'core',
+                    array('class' => 'iconsmall')));
         }
 
         return $icons;
@@ -435,10 +438,14 @@ class enrol_manual_plugin extends enrol_plugin {
     public function get_bulk_operations(course_enrolment_manager $manager) {
         global $CFG;
         require_once($CFG->dirroot.'/enrol/manual/locallib.php');
-        $bulkoperations = array(
-            'editselectedusers' => new enrol_manual_editselectedusers_operation($manager, $this),
-            'deleteselectedusers' => new enrol_manual_deleteselectedusers_operation($manager, $this)
-        );
+        $context = $manager->get_context();
+        $bulkoperations = array();
+        if (has_capability("enrol/manual:manage", $context)) {
+            $bulkoperations['editselectedusers'] = new enrol_manual_editselectedusers_operation($manager, $this);
+        }
+        if (has_capability("enrol/manual:unenrol", $context)) {
+            $bulkoperations['deleteselectedusers'] = new enrol_manual_deleteselectedusers_operation($manager, $this);
+        }
         return $bulkoperations;
     }
 

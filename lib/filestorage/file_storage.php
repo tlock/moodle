@@ -181,6 +181,89 @@ class file_storage {
     }
 
     /**
+     * Return an available file name.
+     *
+     * This will return the next available file name in the area, adding/incrementing a suffix
+     * of the file, ie: file.txt > file (1).txt > file (2).txt > etc...
+     *
+     * If the file name passed is available without modification, it is returned as is.
+     *
+     * @param int $contextid context ID.
+     * @param string $component component.
+     * @param string $filearea file area.
+     * @param int $itemid area item ID.
+     * @param string $filepath the file path.
+     * @param string $filename the file name.
+     * @return string available file name.
+     * @throws coding_exception if the file name is invalid.
+     * @since 2.5
+     */
+    public function get_unused_filename($contextid, $component, $filearea, $itemid, $filepath, $filename) {
+        global $DB;
+
+        // Do not accept '.' or an empty file name (zero is acceptable).
+        if ($filename == '.' || (empty($filename) && !is_numeric($filename))) {
+            throw new coding_exception('Invalid file name passed', $filename);
+        }
+
+        // The file does not exist, we return the same file name.
+        if (!$this->file_exists($contextid, $component, $filearea, $itemid, $filepath, $filename)) {
+            return $filename;
+        }
+
+        // Trying to locate a file name using the used pattern. We remove the used pattern from the file name first.
+        $pathinfo = pathinfo($filename);
+        $basename = $pathinfo['filename'];
+        $matches = array();
+        if (preg_match('~^(.+) \(([0-9]+)\)$~', $basename, $matches)) {
+            $basename = $matches[1];
+        }
+
+        $filenamelike = $DB->sql_like_escape($basename) . ' (%)';
+        if (isset($pathinfo['extension'])) {
+            $filenamelike .= '.' . $DB->sql_like_escape($pathinfo['extension']);
+        }
+
+        $filenamelikesql = $DB->sql_like('f.filename', ':filenamelike');
+        $filenamelen = $DB->sql_length('f.filename');
+        $sql = "SELECT filename
+                FROM {files} f
+                WHERE
+                    f.contextid = :contextid AND
+                    f.component = :component AND
+                    f.filearea = :filearea AND
+                    f.itemid = :itemid AND
+                    f.filepath = :filepath AND
+                    $filenamelikesql
+                ORDER BY
+                    $filenamelen DESC,
+                    f.filename DESC";
+        $params = array('contextid' => $contextid, 'component' => $component, 'filearea' => $filearea, 'itemid' => $itemid,
+                'filepath' => $filepath, 'filenamelike' => $filenamelike);
+        $results = $DB->get_fieldset_sql($sql, $params, IGNORE_MULTIPLE);
+
+        // Loop over the results to make sure we are working on a valid file name. Because 'file (1).txt' and 'file (copy).txt'
+        // would both be returned, but only the one only containing digits should be used.
+        $number = 1;
+        foreach ($results as $result) {
+            $resultbasename = pathinfo($result, PATHINFO_FILENAME);
+            $matches = array();
+            if (preg_match('~^(.+) \(([0-9]+)\)$~', $resultbasename, $matches)) {
+                $number = $matches[2] + 1;
+                break;
+            }
+        }
+
+        // Constructing the new filename.
+        $newfilename = $basename . ' (' . $number . ')';
+        if (isset($pathinfo['extension'])) {
+            $newfilename .= '.' . $pathinfo['extension'];
+        }
+
+        return $newfilename;
+    }
+
+    /**
      * Generates a preview image for the stored file
      *
      * @param stored_file $file the file we want to preview
@@ -250,6 +333,9 @@ class file_storage {
 
         } else if ($mode === 'thumb') {
             $data = generate_image_thumbnail($tmpfilepath, 90, 90);
+
+        } else if ($mode === 'bigthumb') {
+            $data = generate_image_thumbnail($tmpfilepath, 250, 250);
 
         } else {
             throw new file_exception('storedfileproblem', 'Invalid preview mode requested');
@@ -1635,6 +1721,11 @@ class file_storage {
     public function deleted_file_cleanup($contenthash) {
         global $DB;
 
+        if ($contenthash === sha1('')) {
+            // No need to delete empty content file with sha1('') content hash.
+            return;
+        }
+
         //Note: this section is critical - in theory file could be reused at the same
         //      time, if this happens we can still recover the file from trash
         if ($DB->record_exists('files', array('contenthash'=>$contenthash))) {
@@ -1852,8 +1943,8 @@ class file_storage {
         $referencehash = sha1($reference);
 
         $sql = "SELECT repositoryid, id FROM {files_reference}
-                 WHERE referencehash = ? and reference = ?";
-        $rs = $DB->get_recordset_sql($sql, array($referencehash, $reference));
+                 WHERE referencehash = ?";
+        $rs = $DB->get_recordset_sql($sql, array($referencehash));
 
         $now = time();
         foreach ($rs as $record) {
@@ -1913,6 +2004,7 @@ class file_storage {
         // find out all stale draft areas (older than 4 days) and purge them
         // those are identified by time stamp of the /. root dir
         mtrace('Deleting old draft files... ', '');
+        cron_trace_time_and_memory();
         $old = time() - 60*60*24*4;
         $sql = "SELECT *
                   FROM {files}
@@ -1928,6 +2020,7 @@ class file_storage {
         // remove orphaned preview files (that is files in the core preview filearea without
         // the existing original file)
         mtrace('Deleting orphaned preview files... ', '');
+        cron_trace_time_and_memory();
         $sql = "SELECT p.*
                   FROM {files} p
              LEFT JOIN {files} o ON (p.filename = o.contenthash)
@@ -1950,6 +2043,7 @@ class file_storage {
             require_once($CFG->libdir.'/filelib.php');
             // Delete files that are associated with a context that no longer exists.
             mtrace('Cleaning up files from deleted contexts... ', '');
+            cron_trace_time_and_memory();
             $sql = "SELECT DISTINCT f.contextid
                     FROM {files} f
                     LEFT OUTER JOIN {context} c ON f.contextid = c.id
@@ -1965,6 +2059,7 @@ class file_storage {
             mtrace('done.');
 
             mtrace('Deleting trash files... ', '');
+            cron_trace_time_and_memory();
             fulldelete($this->trashdir);
             set_config('fileslastcleanup', time());
             mtrace('done.');

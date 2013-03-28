@@ -212,6 +212,14 @@ function forum_update_instance($forum, $mform) {
 
     $DB->update_record('forum', $forum);
 
+    $modcontext = context_module::instance($forum->coursemodule);
+    if (($forum->forcesubscribe == FORUM_INITIALSUBSCRIBE) && ($oldforum->forcesubscribe <> $forum->forcesubscribe)) {
+        $users = forum_get_potential_subscribers($modcontext, 0, 'u.id, u.email', '');
+        foreach ($users as $user) {
+            forum_subscribe($user->id, $forum->id);
+        }
+    }
+
     forum_grade_item_update($forum);
 
     return true;
@@ -7886,8 +7894,6 @@ abstract class forum_subscriber_selector_base extends user_selector_base {
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class forum_potential_subscriber_selector extends forum_subscriber_selector_base {
-    const MAX_USERS_PER_PAGE = 100;
-
     /**
      * If set to true EVERYONE in this course is force subscribed to this forum
      * @var bool
@@ -7975,7 +7981,7 @@ class forum_potential_subscriber_selector extends forum_subscriber_selector_base
         // Check to see if there are too many to show sensibly.
         if (!$this->is_validating()) {
             $potentialmemberscount = $DB->count_records_sql($countfields . $sql, $params);
-            if ($potentialmemberscount > self::MAX_USERS_PER_PAGE) {
+            if ($potentialmemberscount > $this->maxusersperpage) {
                 return $this->too_many_results($search, $potentialmemberscount);
             }
         }

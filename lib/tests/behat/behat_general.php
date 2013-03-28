@@ -50,7 +50,7 @@ class behat_general extends behat_base {
      * @Given /^I am on homepage$/
      */
     public function i_am_on_homepage() {
-        $this->getSession()->visit($this->locatePath('/'));
+        $this->getSession()->visit($this->locate_path('/'));
     }
 
     /**
@@ -58,9 +58,9 @@ class behat_general extends behat_base {
      *
      * @When /^I follow "(?P<link_string>(?:[^"]|\\")*)"$/
      * @throws ElementNotFoundException Thrown by behat_base::find
+     * @param string $link
      */
     public function click_link($link) {
-        $link = $this->fixStepArgument($link);
 
         $linknode = $this->find_link($link);
         $linknode->click();
@@ -86,20 +86,46 @@ class behat_general extends behat_base {
     }
 
     /**
-     * Mouse over a CSS element.
+     * Generic mouse over action. Mouse over a element of the specified type.
      *
-     * @When /^I hover "(?P<element_string>(?:[^"]|\\")*)"$/
-     * @throws ExpectationException Thrown by behat_base::find
-     * @param string $element
+     * @When /^I hover "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)"$/
+     * @param string $element Element we look for
+     * @param string $selectortype The type of what we look for
      */
-    public function i_hover($element) {
+    public function i_hover($element, $selectortype) {
 
-        $exception = new ExpectationException(
-            'The hovered element "' . $element . '" was not found anywhere in the page', $this->getSession()
-        );
-
-        $node = $this->find('css', $element, $exception);
+        // Gets the node based on the requested selector type and locator.
+        $node = $this->get_selected_node($selectortype, $element);
         $node->mouseOver();
+    }
+
+    /**
+     * Generic click action. Click on the element of the specified type.
+     *
+     * @When /^I click on "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)"$/
+     * @param string $element Element we look for
+     * @param string $selectortype The type of what we look for
+     */
+    public function i_click_on($element, $selectortype) {
+
+        // Gets the node based on the requested selector type and locator.
+        $node = $this->get_selected_node($selectortype, $element);
+        $node->click();
+    }
+
+    /**
+     * Click on the element of the specified type which is located inside the second element.
+     *
+     * @When /^I click on "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" in the "(?P<element_container_string>(?:[^"]|\\")*)" "(?P<text_selector_string>[^"]*)"$/
+     * @param string $element Element we look for
+     * @param string $selectortype The type of what we look for
+     * @param string $nodeelement Element we look in
+     * @param string $nodeselectortype The type of selector where we look in
+     */
+    public function i_click_on_in_the($element, $selectortype, $nodeelement, $nodeselectortype) {
+
+        $node = $this->get_node_in_container($selectortype, $element, $nodeselectortype, $nodeelement);
+        $node->click();
     }
 
     /**
@@ -107,9 +133,10 @@ class behat_general extends behat_base {
      *
      * @see Behat\MinkExtension\Context\MinkContext
      * @Then /^I should see "(?P<text_string>(?:[^"]|\\")*)"$/
+     * @param string $text
      */
     public function assert_page_contains_text($text) {
-        $this->assertSession()->pageTextContains($this->fixStepArgument($text));
+        $this->assertSession()->pageTextContains($text);
     }
 
     /**
@@ -117,40 +144,54 @@ class behat_general extends behat_base {
      *
      * @see Behat\MinkExtension\Context\MinkContext
      * @Then /^I should not see "(?P<text_string>(?:[^"]|\\")*)"$/
+     * @param string $text
      */
     public function assert_page_not_contains_text($text) {
-        $this->assertSession()->pageTextNotContains($this->fixStepArgument($text));
+        $this->assertSession()->pageTextNotContains($text);
     }
 
     /**
-     * Checks, that element with specified CSS contains specified text.
+     * Checks, that element with specified CSS selector or XPath contains specified text.
      *
-     * @Then /^I should see "(?P<text_string>(?:[^"]|\\")*)" in the "(?P<element_string>(?:[^"]|\\")*)" element$/
+     * @Then /^I should see "(?P<text_string>(?:[^"]|\\")*)" in the "(?P<element_string>(?:[^"]|\\")*)" "(?P<text_selector_string>[^"]*)"$/
+     * @param string $text
+     * @param string $element Element we look in.
+     * @param string $selectortype The type of element where we are looking in.
      */
-    public function assert_element_contains_text($text, $element) {
-        $this->assertSession()->elementTextContains('css', $element, $this->fixStepArgument($text));
+    public function assert_element_contains_text($text, $element, $selectortype) {
+
+        // Transforming from steps definitions selector/locator format to Mink format.
+        list($selector, $locator) = $this->transform_text_selector($selectortype, $element);
+        $this->assertSession()->elementTextContains($selector, $locator, $text);
     }
 
     /**
-     * Checks, that element with specified CSS doesn't contain specified text.
+     * Checks, that element with specified CSS selector or XPath doesn't contain specified text.
      *
-     * @Then /^I should not see "(?P<text_string>(?:[^"]|\\")*)" in the "(?P<element_string>(?:[^"]|\\")*)" element$/
+     * @Then /^I should not see "(?P<text_string>(?:[^"]|\\")*)" in the "(?P<element_string>(?:[^"]|\\")*)" "(?P<text_selector_string>[^"]*)"$/
+     * @param string $text
+     * @param string $element Element we look in.
+     * @param string $selectortype The type of element where we are looking in.
      */
-    public function assert_element_not_contains_text($text, $element) {
-        $this->assertSession()->elementTextNotContains('css', $element, $this->fixStepArgument($text));
+    public function assert_element_not_contains_text($text, $element, $selectortype) {
+
+        // Transforming from steps definitions selector/locator format to mink format.
+        list($selector, $locator) = $this->transform_text_selector($selectortype, $element);
+        $this->assertSession()->elementTextNotContains($selector, $locator, $text);
     }
 
     /**
-     * Checks, that element with given CSS is disabled.
+     * Checks, that element of specified type is disabled.
      *
-     * @Then /^the element "(?P<element_string>(?:[^"]|\\")*)" should be disabled$/
+     * @Then /^the "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" should be disabled$/
      * @throws ExpectationException Thrown by behat_base::find
-     * @param string $element
+     * @param string $element Element we look in
+     * @param string $selectortype The type of element where we are looking in.
      */
-    public function the_element_should_be_disabled($element) {
+    public function the_element_should_be_disabled($element, $selectortype) {
 
-        $exception = new ExpectationException('There is no "' . $element . '" element', $this->getSession());
-        $node = $this->find('css', $element, $exception);
+        // Transforming from steps definitions selector/locator format to Mink format and getting the NodeElement.
+        $node = $this->get_selected_node($selectortype, $element);
 
         if (!$node->hasAttribute('disabled')) {
             throw new ExpectationException('The element "' . $element . '" is not disabled', $this->getSession());
@@ -158,16 +199,17 @@ class behat_general extends behat_base {
     }
 
     /**
-     * Checks, that element with given CSS is enabled.
+     * Checks, that element of specified type is enabled.
      *
-     * @Then /^the element "(?P<element_string>(?:[^"]|\\")*)" should be enabled$/
+     * @Then /^the "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" should be enabled$/
      * @throws ExpectationException Thrown by behat_base::find
-     * @param string $element
+     * @param string $element Element we look on
+     * @param string $selectortype The type of where we look
      */
-    public function the_element_should_be_enabled($element) {
+    public function the_element_should_be_enabled($element, $selectortype) {
 
-        $exception = new ExpectationException('There is no "' . $element . '" element', $this->getSession());
-        $node = $this->find('css', $element, $exception);
+        // Transforming from steps definitions selector/locator format to mink format and getting the NodeElement.
+        $node = $this->get_selected_node($selectortype, $element);
 
         if ($node->hasAttribute('disabled')) {
             throw new ExpectationException('The element "' . $element . '" is not enabled', $this->getSession());

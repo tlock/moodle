@@ -18,12 +18,32 @@ Feature: Page contents assertions
     When I follow "Overview"
     And I wait until the page is ready
     And I wait "2" seconds
-    And I hover ".region-content .generaltable td span"
+    And I hover ".region-content .generaltable td span" "css_element"
     Then I should see "I'm the description"
     And I should see "Filter groups by"
     And I should not see "Filter groupssss by"
-    And I should see "Group members" in the ".region-content table th.c1" element
-    And I should not see "Group membersssss" in the ".region-content table th.c1" element
+    And I should see "Group members" in the ".region-content table th.c1" "css_element"
+    And I should not see "Group membersssss" in the ".region-content table th.c1" "css_element"
     And I follow "Groups"
-    And the element "#groupeditform #showcreateorphangroupform" should be enabled
-    And the element "#groupeditform #showeditgroupsettingsform" should be disabled
+    And the "#groupeditform #showcreateorphangroupform" "css_element" should be enabled
+    And the "#groupeditform #showeditgroupsettingsform" "css_element" should be disabled
+
+  @javascript
+  Scenario: Locators inside specific DOM nodes using CSS selectors
+    Given the following "courses" exists:
+      | fullname | shortname | category |
+      | Course 1 | C1 | 0 |
+    And I log in as "admin"
+    And I follow "Course 1"
+    When I click on "Move this to the dock" "button" in the ".block_settings" "css_element"
+    Then I should not see "Question bank"
+    And I click on "//div[@id='dock']/descendant::*[contains(., 'Administration')]/h2" "xpath_element"
+
+  @javascript
+  Scenario: Locators inside specific DOM nodes using XPath
+    Given the following "courses" exists:
+      | fullname | shortname | category |
+      | Course 1 | C1 | 0 |
+    And I log in as "admin"
+    When I click on "Move this to the dock" "button" in the "//*[contains(concat(' ', normalize-space(@class), ' '), ' block_settings ')]" "xpath_element"
+    Then I should not see "Turn editing on"

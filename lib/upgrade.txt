@@ -1,8 +1,10 @@
-This files describes API changes in core lbraries and APIs,
+This files describes API changes in core libraries and APIs,
 information provided here is intended especially for developers.
 
 === 2.5 ===
 
+* The cron output has been changed to include time and memory usage (see cron_trace_time_and_memory()),
+  so any custom utility relying on the old output may require modification.
 * Function get_max_file_sizes now returns an option for (for example) "Course limit (500MB)" or
   "Site limit (200MB)" when appropriate with the option set to 0. This function no longer returns
   an option for 0 bytes. Existing code that was replacing the 0 option in the return
@@ -18,6 +20,20 @@ information provided here is intended especially for developers.
   only partially deletes data, so wherever it was called extra code was needed to
   perform the whole deletion process. The function course_delete_module now takes care
   of the whole process.
+* curl::setopt() does not accept constant values any more. As it never worked properly,
+  we decided to make the type check stricter. Now, the keys of the array pass must be a string
+  corresponding to the curl constant name.
+* Function get_users_listing now return list of users except guest and deleted users. Previously
+  deleted users were excluded by get_users_listing. As guest user is not expected while browsing users,
+  and not included in get_user function, it will not be returned by get_users_listing.
+* The add_* functions in course/dnduploadlib.php have been deprecated. Plugins should be using the
+  MODNAME_dndupload_register callback instead.
+* The signature of the add() method of classes implementing the parentable_part_of_admin_tree
+  interface (such as admin_category) has been extended. The new parameter allows the caller
+  to prepend the new node before an existing sibling in the admin tree.
+* condition_info:get_condition_user_fields($formatoptions) now accepts the optional
+  param $formatoptions, that will determine if the field names are processed by
+  format_string() with the passed options.
 
 YUI changes:
 * M.util.help_icon has been deprecated. Code should be updated to use moodle-core-popuphelp

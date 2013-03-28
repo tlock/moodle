@@ -1327,6 +1327,9 @@ function set_config($name, $value, $plugin=NULL) {
                 $DB->insert_record('config', $config, false);
             }
         }
+        if ($name === 'siteidentifier') {
+            cache_helper::update_site_identifier($value);
+        }
         cache_helper::invalidate_by_definition('core', 'config', array(), 'core');
     } else { // plugin scope
         if ($id = $DB->get_field('config_plugins', 'id', array('name'=>$name, 'plugin'=>$plugin))) {
@@ -1360,12 +1363,16 @@ function set_config($name, $value, $plugin=NULL) {
  * If called with 2 parameters it will return a string single
  * value or false if the value is not found.
  *
+ * @static $siteidentifier The site identifier is not cached. We use this static cache so
+ *     that we need only fetch it once per request.
  * @param string $plugin full component name
  * @param string $name default NULL
  * @return mixed hash-like object or single value, return false no config found
  */
 function get_config($plugin, $name = NULL) {
     global $CFG, $DB;
+
+    static $siteidentifier = null;
 
     if ($plugin === 'moodle' || $plugin === 'core' || empty($plugin)) {
         $forced =& $CFG->config_php_settings;
@@ -1380,13 +1387,33 @@ function get_config($plugin, $name = NULL) {
         $iscore = false;
     }
 
-    if (!empty($name) && array_key_exists($name, $forced)) {
-        return (string)$forced[$name];
+    if ($siteidentifier === null) {
+        try {
+            // This may fail during installation.
+            // If you have a look at {@link initialise_cfg()} you will see that this is how we detect the need to
+            // install the database.
+            $siteidentifier = $DB->get_field('config', 'value', array('name' => 'siteidentifier'));
+        } catch (dml_exception $ex) {
+            // It's failed. We'll use this opportunity to disable cache stores so that we don't inadvertingly start using
+            // old caches. People should delete their moodledata dirs when reinstalling the database... but they don't.
+            cache_factory::disable_stores();
+            // Set siteidentifier to false. We don't want to trip this continually.
+            $siteidentifier = false;
+            throw $ex;
+        }
+    }
+
+    if (!empty($name)) {
+        if (array_key_exists($name, $forced)) {
+            return (string)$forced[$name];
+        } else if ($name === 'siteidentifier' && $plugin == 'core') {
+            return $siteidentifier;
+        }
     }
 
     $cache = cache::make('core', 'config');
     $result = $cache->get($plugin);
-    if (!$result) {
+    if ($result === false) {
         // the user is after a recordset
         $result = new stdClass;
         if (!$iscore) {
@@ -1403,6 +1430,10 @@ function get_config($plugin, $name = NULL) {
             return $result[$name];
         }
         return false;
+    }
+
+    if ($plugin === 'core') {
+        $result['siteidentifier'] = $siteidentifier;
     }
 
     foreach ($forced as $key => $value) {
@@ -8152,10 +8183,18 @@ function get_core_subsystems() {
 function get_plugin_types($fullpaths=true) {
     global $CFG;
 
-    static $info     = null;
-    static $fullinfo = null;
+    $cache = cache::make('core', 'plugintypes');
 
-    if (!$info) {
+    if ($fullpaths) {
+        $cached = $cache->get(1);
+    } else {
+        $cached = $cache->get(0);
+    }
+
+    if ($cached !== false) {
+        return $cached;
+
+    } else {
         $info = array('qtype'         => 'question/type',
                       'mod'           => 'mod',
                       'auth'          => 'auth',
@@ -8204,9 +8243,12 @@ function get_plugin_types($fullpaths=true) {
         foreach ($info as $type => $dir) {
             $fullinfo[$type] = $CFG->dirroot.'/'.$dir;
         }
-    }
 
-    return ($fullpaths ? $fullinfo : $info);
+        $cache->set(0, $info);
+        $cache->set(1, $fullinfo);
+
+        return ($fullpaths ? $fullinfo : $info);
+    }
 }
 
 /**
@@ -8216,6 +8258,12 @@ function get_plugin_types($fullpaths=true) {
  */
 function get_plugin_list($plugintype) {
     global $CFG;
+
+    $cache = cache::make('core', 'pluginlist');
+    $cached = $cache->get($plugintype);
+    if ($cached !== false) {
+        return $cached;
+    }
 
     $ignored = array('CVS', '_vti_cnf', 'simpletest', 'db', 'yui', 'tests');
     if ($plugintype == 'auth') {
@@ -8250,10 +8298,12 @@ function get_plugin_list($plugintype) {
     } else {
         $types = get_plugin_types(true);
         if (!array_key_exists($plugintype, $types)) {
+            $cache->set($plugintype, array());
             return array();
         }
         $fulldir = $types[$plugintype];
         if (!file_exists($fulldir)) {
+            $cache->set($plugintype, array());
             return array();
         }
         $fulldirs[] = $fulldir;
@@ -8286,6 +8336,7 @@ function get_plugin_list($plugintype) {
 
     //TODO: implement better sorting once we migrated all plugin names to 'pluginname', ksort does not work for unicode, that is why we have to sort by the dir name, not the strings!
     ksort($result);
+    $cache->set($plugintype, $result);
     return $result;
 }
 
@@ -9088,7 +9139,18 @@ function moodle_needs_upgrading() {
         return true;
     }
 
-    // main versio nfirst
+    // We have to purge plugin related caches now to be sure we have fresh data
+    // and new plugins can be detected.
+    cache::make('core', 'plugintypes')->purge();
+    cache::make('core', 'pluginlist')->purge();
+    cache::make('core', 'plugininfo_base')->purge();
+    cache::make('core', 'plugininfo_mod')->purge();
+    cache::make('core', 'plugininfo_block')->purge();
+    cache::make('core', 'plugininfo_filter')->purge();
+    cache::make('core', 'plugininfo_repository')->purge();
+    cache::make('core', 'plugininfo_portfolio')->purge();
+
+    // Check the main version first.
     $version = null;
     include($CFG->dirroot.'/version.php');  // defines $version and upgrades
     if ($version > $CFG->version) {
@@ -9103,10 +9165,14 @@ function moodle_needs_upgrading() {
             continue;
         }
         $module = new stdClass();
+        $plugin = new stdClass();
         if (!is_readable($fullmod.'/version.php')) {
             continue;
         }
         include($fullmod.'/version.php');  // defines $module with version etc
+        if (!isset($module->version) and isset($plugin->version)) {
+            $module = $plugin;
+        }
         if (empty($installed[$mod])) {
             return true;
         } else if ($module->version > $installed[$mod]->version) {
@@ -10634,24 +10700,33 @@ function get_performance_info() {
 
     if ($stats = cache_helper::get_stats()) {
         $html = '<span class="cachesused">';
-        $html .= '<span class="cache-stats-heading">Caches interaction by definition then store</span>';
+        $html .= '<span class="cache-stats-heading">Caches used (hits/misses/sets)</span>';
         $text = 'Caches used (hits/misses/sets): ';
         $hits = 0;
         $misses = 0;
         $sets = 0;
         foreach ($stats as $definition => $stores) {
-            $html .= '<span class="cache-definition-stats">'.$definition.'</span>';
+            $html .= '<span class="cache-definition-stats">';
+            $html .= '<span class="cache-definition-stats-heading">'.$definition.'</span>';
             $text .= "$definition {";
             foreach ($stores as $store => $data) {
                 $hits += $data['hits'];
                 $misses += $data['misses'];
                 $sets += $data['sets'];
+                if ($data['hits'] == 0 and $data['misses'] > 0) {
+                    $cachestoreclass = 'nohits';
+                } else if ($data['hits'] < $data['misses']) {
+                    $cachestoreclass = 'lowhits';
+                } else {
+                    $cachestoreclass = 'hihits';
+                }
                 $text .= "$store($data[hits]/$data[misses]/$data[sets]) ";
-                $html .= "<span class='cache-store-stats'>$store: $data[hits] / $data[misses] / $data[sets]</span>";
+                $html .= "<span class=\"cache-store-stats $cachestoreclass\">$store: $data[hits] / $data[misses] / $data[sets]</span>";
             }
+            $html .= '</span>';
             $text .= '} ';
         }
-        $html .= "<span class='cache-total-stats'>Total Hits / Misses / Sets : $hits / $misses / $sets</span>";
+        $html .= "<span class='cache-total-stats'>Total: $hits / $misses / $sets</span>";
         $html .= '</span> ';
         $info['cachesused'] = "$hits / $misses / $sets";
         $info['html'] .= $html;
