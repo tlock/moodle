@@ -729,7 +729,7 @@ function calendar_get_events($tstart, $tend, $users, $groups, $courses, $withdur
  * @return string $content return available control for the calender in html
  */
 function calendar_top_controls($type, $data) {
-    global $CFG;
+    global $CFG, $PAGE;
     $content = '';
     if(!isset($data['d'])) {
         $data['d'] = 1;
@@ -752,6 +752,7 @@ function calendar_top_controls($type, $data) {
 
     $data['m'] = $date['mon'];
     $data['y'] = $date['year'];
+    $urlbase = $PAGE->url;
 
     //Accessibility: calendar block controls, replaced <table> with <div>.
     //$nexttext = link_arrow_right(get_string('monthnext', 'access'), $url='', $accesshide=true);
@@ -761,8 +762,8 @@ function calendar_top_controls($type, $data) {
         case 'frontpage':
             list($prevmonth, $prevyear) = calendar_sub_month($data['m'], $data['y']);
             list($nextmonth, $nextyear) = calendar_add_month($data['m'], $data['y']);
-            $nextlink = calendar_get_link_next(get_string('monthnext', 'access'), 'index.php?', 0, $nextmonth, $nextyear, $accesshide=true);
-            $prevlink = calendar_get_link_previous(get_string('monthprev', 'access'), 'index.php?', 0, $prevmonth, $prevyear, true);
+            $nextlink = calendar_get_link_next(get_string('monthnext', 'access'), $urlbase, 0, $nextmonth, $nextyear, true);
+            $prevlink = calendar_get_link_previous(get_string('monthprev', 'access'), $urlbase, 0, $prevmonth, $prevyear, true);
 
             $calendarlink = calendar_get_link_href(new moodle_url(CALENDAR_URL.'view.php', array('view'=>'month')), 1, $data['m'], $data['y']);
             if (!empty($data['id'])) {
@@ -788,8 +789,8 @@ function calendar_top_controls($type, $data) {
         case 'course':
             list($prevmonth, $prevyear) = calendar_sub_month($data['m'], $data['y']);
             list($nextmonth, $nextyear) = calendar_add_month($data['m'], $data['y']);
-            $nextlink = calendar_get_link_next(get_string('monthnext', 'access'), 'view.php?id='.$data['id'].'&amp;', 0, $nextmonth, $nextyear, $accesshide=true);
-            $prevlink = calendar_get_link_previous(get_string('monthprev', 'access'), 'view.php?id='.$data['id'].'&amp;', 0, $prevmonth, $prevyear, true);
+            $nextlink = calendar_get_link_next(get_string('monthnext', 'access'), $urlbase, 0, $nextmonth, $nextyear, true);
+            $prevlink = calendar_get_link_previous(get_string('monthprev', 'access'), $urlbase, 0, $prevmonth, $prevyear, true);
 
             $calendarlink = calendar_get_link_href(new moodle_url(CALENDAR_URL.'view.php', array('view'=>'month')), 1, $data['m'], $data['y']);
             if (!empty($data['id'])) {
@@ -1721,11 +1722,19 @@ function calendar_get_allowed_types(&$allowed, $course = null) {
                 $allowed->courses = array($course->id => 1);
 
                 if ($course->groupmode != NOGROUPS || !$course->groupmodeforce) {
-                    $allowed->groups = groups_get_all_groups($course->id);
+                    if (has_capability('moodle/site:accessallgroups', $coursecontext)) {
+                        $allowed->groups = groups_get_all_groups($course->id);
+                    } else {
+                        $allowed->groups = groups_get_all_groups($course->id, $USER->id);
+                    }
                 }
             } else if (has_capability('moodle/calendar:managegroupentries', $coursecontext)) {
                 if($course->groupmode != NOGROUPS || !$course->groupmodeforce) {
-                    $allowed->groups = groups_get_all_groups($course->id);
+                    if (has_capability('moodle/site:accessallgroups', $coursecontext)) {
+                        $allowed->groups = groups_get_all_groups($course->id);
+                    } else {
+                        $allowed->groups = groups_get_all_groups($course->id, $USER->id);
+                    }
                 }
             }
         }
@@ -2080,24 +2089,22 @@ class calendar_event {
             if ($usingeditor) {
                 switch ($this->properties->eventtype) {
                     case 'user':
-                        $this->editorcontext = $this->properties->context;
                         $this->properties->courseid = 0;
+                        $this->properties->course = 0;
                         $this->properties->groupid = 0;
                         $this->properties->userid = $USER->id;
                         break;
                     case 'site':
-                        $this->editorcontext = $this->properties->context;
                         $this->properties->courseid = SITEID;
+                        $this->properties->course = SITEID;
                         $this->properties->groupid = 0;
                         $this->properties->userid = $USER->id;
                         break;
                     case 'course':
-                        $this->editorcontext = $this->properties->context;
                         $this->properties->groupid = 0;
                         $this->properties->userid = $USER->id;
                         break;
                     case 'group':
-                        $this->editorcontext = $this->properties->context;
                         $this->properties->userid = $USER->id;
                         break;
                     default:
@@ -2105,6 +2112,13 @@ class calendar_event {
                         // fail gracefully
                         $usingeditor = false;
                         break;
+                }
+
+                // If we are actually using the editor, we recalculate the context because some default values
+                // were set when calculate_context() was called from the constructor.
+                if ($usingeditor) {
+                    $this->properties->context = $this->calculate_context($this->properties);
+                    $this->editorcontext = $this->properties->context;
                 }
 
                 $editor = $this->properties->description;
@@ -2125,7 +2139,6 @@ class calendar_event {
                                                 $this->editoroptions,
                                                 $editor['text'],
                                                 $this->editoroptions['forcehttps']);
-
                 $DB->set_field('event', 'description', $this->properties->description, array('id'=>$this->properties->id));
             }
 

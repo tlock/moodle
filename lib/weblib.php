@@ -747,12 +747,18 @@ class moodle_url {
         global $CFG;
 
         $url = $this->out($escaped, $overrideparams);
+        $httpswwwroot = str_replace("http://", "https://", $CFG->wwwroot);
 
-        if (strpos($url, $CFG->wwwroot) !== 0) {
+        // $url should be equal to wwwroot or httpswwwroot. If not then throw exception.
+        if (($url === $CFG->wwwroot) || (strpos($url, $CFG->wwwroot.'/') === 0)) {
+            $localurl = substr($url, strlen($CFG->wwwroot));
+            return !empty($localurl) ? $localurl : '';
+        } else if (($url === $httpswwwroot) || (strpos($url, $httpswwwroot.'/') === 0)) {
+            $localurl = substr($url, strlen($httpswwwroot));
+            return !empty($localurl) ? $localurl : '';
+        } else {
             throw new coding_exception('out_as_local_url called on a non-local URL');
         }
-
-        return str_replace($CFG->wwwroot, '', $url);
     }
 
     /**
@@ -1382,7 +1388,7 @@ function format_text_email($text, $format) {
         case FORMAT_WIKI:
             // there should not be any of these any more!
             $text = wikify_links($text);
-            return strtr(strip_tags($text), array_flip(get_html_translation_table(HTML_ENTITIES)));
+            return textlib::entities_to_utf8(strip_tags($text), true);
             break;
 
         case FORMAT_HTML:
@@ -1393,7 +1399,7 @@ function format_text_email($text, $format) {
         case FORMAT_MARKDOWN:
         default:
             $text = wikify_links($text);
-            return strtr(strip_tags($text), array_flip(get_html_translation_table(HTML_ENTITIES)));
+            return textlib::entities_to_utf8(strip_tags($text), true);
             break;
     }
 }

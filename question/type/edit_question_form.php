@@ -190,7 +190,7 @@ abstract class question_edit_form extends question_wizard_form {
         $mform->setType('questiontext', PARAM_RAW);
 
         $mform->addElement('text', 'defaultmark', get_string('defaultmark', 'question'),
-                array('size' => 3));
+                array('size' => 7));
         $mform->setType('defaultmark', PARAM_FLOAT);
         $mform->setDefault('defaultmark', 1);
         $mform->addRule('defaultmark', null, 'required', null, 'client');
@@ -481,7 +481,7 @@ abstract class question_edit_form extends question_wizard_form {
         if (is_array($extraquestionfields) && !empty($question->options)) {
             array_shift($extraquestionfields);
             foreach ($extraquestionfields as $field) {
-                if (isset($question->options->$field)) {
+                if (property_exists($question->options, $field)) {
                     $question->$field = $question->options->$field;
                 }
             }
@@ -654,6 +654,12 @@ abstract class question_edit_form extends question_wizard_form {
                 && empty($fromform['usecurrentcat']) && !$this->question->formoptions->canmove) {
             $errors['currentgrp'] = get_string('nopermissionmove', 'question');
         }
+
+        // Default mark.
+        if (array_key_exists('defaultmark', $fromform) && $fromform['defaultmark'] < 0) {
+            $errors['defaultmark'] = get_string('defaultmarkmustbepositive', 'question');
+        }
+
         return $errors;
     }
 

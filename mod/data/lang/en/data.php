@@ -178,7 +178,7 @@ $string['expired'] = 'Sorry, this activity closed on {$a} and is no longer avail
 $string['importentries'] = 'Import entries';
 $string['importsuccess'] = 'The preset has been successfully applied.';
 $string['insufficiententries'] = 'more entries needed to view this database';
-$string['intro'] = 'Introduction';
+$string['intro'] = 'Description';
 $string['invalidaccess'] = 'This page was not accessed correctly';
 $string['invalidfieldid'] = 'Field ID is incorrect';
 $string['invalidfieldname'] = 'Please choose another name for this field';
@@ -338,6 +338,7 @@ $string['uploadrecords_help'] = 'Entries may be uploaded via text file. The form
 The field enclosure is a character that surrounds each field in each record. It can normally be left unset.';
 $string['uploadrecords_link'] = 'mod/data/import';
 $string['url'] = 'Url';
+$string['usedate'] = 'Include in search.';
 $string['usestandard'] = 'Use a preset';
 $string['usestandard_help'] = 'To use a preset available to the whole site, select it from the list. (If you have added a preset to the list using the save as preset feature then you have the option of deleting it.)';
 $string['viewfromdate'] = 'Read only from';

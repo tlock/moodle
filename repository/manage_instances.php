@@ -106,12 +106,24 @@ if (!empty($new)){
     $type = repository::get_type_by_id($instance->options['typeid']);
 }
 
-if (isset($type) && !$type->get_visible()) {
-    print_error('typenotvisible', 'repository', $baseurl);
+// The context passed MUST match the context of the repository. And as both have to be
+// similar, this also ensures that the context is either a user one, or a course one.
+if (!empty($instance)) {
+    if ($instance->instance->contextid != $context->id) {
+        print_error('invalidcontext');
+    }
 }
 
-if (isset($type) && !$type->get_contextvisibility($context)) {
-    print_error('usercontextrepositorydisabled', 'repository', $baseurl);
+if (isset($type)) {
+    if (!$type->get_visible()) {
+        print_error('typenotvisible', 'repository', $baseurl);
+    }
+    // Prevents the user from creating/editing an instance if the repository is not visible in
+    // this context OR if the user does not have the capability to view this repository in this context.
+    $canviewrepository = has_capability('repository/'.$type->get_typename().':view', $context);
+    if (!$type->get_contextvisibility($context) || !$canviewrepository) {
+        print_error('usercontextrepositorydisabled', 'repository', $baseurl);
+    }
 }
 
 /// Create navigation links
@@ -146,6 +158,8 @@ if (!empty($edit) || !empty($new)) {
         if ($instance->readonly) {
             throw new repository_exception('readonlyinstance', 'repository');
         }
+        // Check if we can read the content of the repository, if not exception is thrown.
+        $instance->check_capability();
         $instancetype = repository::get_type_by_id($instance->options['typeid']);
         $classname = 'repository_' . $instancetype->get_typename();
         $configs  = $instance->get_instance_option_names();
@@ -202,6 +216,8 @@ if (!empty($edit) || !empty($new)) {
     if ($instance->readonly) {
         throw new repository_exception('readonlyinstance', 'repository');
     }
+    // Check if we can read the content of the repository, if not exception is thrown.
+    $instance->check_capability();
     if ($sure) {
         if (!confirm_sesskey()) {
             print_error('confirmsesskeybad', '', $baseurl);

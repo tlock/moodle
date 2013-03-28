@@ -621,16 +621,20 @@ class completion_info {
             debugging('set_module_viewed must be called before header is printed',
                     DEBUG_DEVELOPER);
         }
+
         // Don't do anything if view condition is not turned on
         if ($cm->completionview == COMPLETION_VIEW_NOT_REQUIRED || !$this->is_enabled($cm)) {
             return;
         }
+
         // Get current completion state
-        $data = $this->get_data($cm, $userid);
+        $data = $this->get_data($cm, false, $userid);
+
         // If we already viewed it, don't do anything
         if ($data->viewed == COMPLETION_VIEWED) {
             return;
         }
+
         // OK, change state, save it, and update completion
         $data->viewed = COMPLETION_VIEWED;
         $this->internal_set_data($cm, $data);
@@ -1017,7 +1021,7 @@ class completion_info {
      * @return bool
      */
     public function is_tracked_user($userid) {
-        return is_enrolled(context_course::instance($this->course->id), $userid, '', true);
+        return is_enrolled(context_course::instance($this->course->id), $userid, 'moodle/course:isincompletionreports', true);
     }
 
     /**
@@ -1034,7 +1038,7 @@ class completion_info {
         global $DB;
 
         list($enrolledsql, $enrolledparams) = get_enrolled_sql(
-                context_course::instance($this->course->id), '', $groupid, true);
+                context_course::instance($this->course->id), 'moodle/course:isincompletionreports', $groupid, true);
         $sql  = 'SELECT COUNT(eu.id) FROM (' . $enrolledsql . ') eu JOIN {user} u ON u.id = eu.id';
         if ($where) {
             $sql .= " WHERE $where";
@@ -1065,7 +1069,8 @@ class completion_info {
         global $DB;
 
         list($enrolledsql, $params) = get_enrolled_sql(
-                context_course::instance($this->course->id), '', $groupid, true);
+                context_course::instance($this->course->id),
+                'moodle/course:isincompletionreports', $groupid, true);
 
         $sql = 'SELECT u.id, u.firstname, u.lastname, u.idnumber';
         if ($extracontext) {

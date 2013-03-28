@@ -564,7 +564,7 @@ class webservice {
             //detect the missing capabilities
             foreach ($servicecaps as $functioname => $functioncaps) {
                 foreach ($functioncaps as $functioncap) {
-                    if (!key_exists($functioncap, $usercaps)) {
+                    if (!array_key_exists($functioncap, $usercaps)) {
                         if (!isset($usersmissingcaps[$user->id])
                                 or array_search($functioncap, $usersmissingcaps[$user->id]) === false) {
                             $usersmissingcaps[$user->id][] = $functioncap;
@@ -1191,7 +1191,7 @@ class '.$classname.' {
                     } else {
                         switch($keydesc->type) {
                             case PARAM_BOOL:
-                                $paramanddefault .= '='.$keydesc->default; break;
+                                $paramanddefault .= '='. (int) $keydesc->default; break;
                             case PARAM_INT:
                                 $paramanddefault .= '='.$keydesc->default; break;
                             case PARAM_FLOAT;

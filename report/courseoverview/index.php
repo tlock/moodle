@@ -33,7 +33,7 @@ $numcourses = optional_param('numcourses', 20, PARAM_INT);
 
 if (empty($CFG->enablestats)) {
     if (has_capability('moodle/site:config', get_context_instance(CONTEXT_SYSTEM))) {
-        redirect("$CFG->wwwroot/$CFG->admin/settings.php?section=stats", get_string('mustenablestats', 'admin'), 3);
+        redirect("$CFG->wwwroot/$CFG->admin/search.php?query=enablestats", get_string('mustenablestats', 'admin'), 3);
     } else {
         print_error('statsdisable');
     }
@@ -75,12 +75,15 @@ $table = new html_table();
 $table->width = '*';
 $table->align = array('left','left','left','left','left','left');
 
-$reporttypemenu = html_writer::select($reportoptions,'report',$report, false);
-$timeoptionsmenu = html_writer::select($timeoptions,'time',$time, false);
+$reporttypemenu = html_writer::label(get_string('statsreporttype'), 'menureport', false, array('class' => 'accesshide'));
+$reporttypemenu .= html_writer::select($reportoptions,'report',$report, false);
+$timeoptionsmenu = html_writer::label(get_string('time'), 'menutime', false, array('class' => 'accesshide'));
+$timeoptionsmenu .= html_writer::select($timeoptions,'time',$time, false);
 
 $table->data[] = array(get_string('statsreporttype'),$reporttypemenu,
                        get_string('statstimeperiod'),$timeoptionsmenu,
-                       '<input type="text" name="numcourses" size="3" maxlength="2" value="'.$numcourses.'" />',
+                       '<label class="accesshide" for="numcourses">' . get_string('numberofcourses') . '</label>' .
+                       '<input type="text" id="numcourses" name="numcourses" size="3" maxlength="2" value="'.$numcourses.'" />',
                        '<input type="submit" value="'.get_string('view').'" />') ;
 
 echo html_writer::table($table);

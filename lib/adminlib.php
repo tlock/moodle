@@ -123,6 +123,9 @@ define('INSECURE_DATAROOT_ERROR', 2);
 function uninstall_plugin($type, $name) {
     global $CFG, $DB, $OUTPUT;
 
+    // This may take a long time.
+    @set_time_limit(0);
+
     // recursively uninstall all module subplugins first
     if ($type === 'mod') {
         if (file_exists("$CFG->dirroot/mod/$name/db/subplugins.php")) {
@@ -3626,7 +3629,7 @@ class admin_settings_num_course_sections extends admin_setting_configselect {
     /** Lazy-load the available choices for the select box */
     public function load_choices() {
         $max = get_config('moodlecourse', 'maxsections');
-        if (empty($max)) {
+        if (!isset($max) || !is_numeric($max)) {
             $max = 52;
         }
         for ($i = 0; $i <= $max; $i++) {
@@ -6217,9 +6220,8 @@ function format_admin_setting($setting, $title='', $form='', $description='', $l
     $str = '
 <div class="form-item clearfix" id="admin-'.$setting->name.'">
   <div class="form-label">
-    <label '.$labelfor.'>'.highlightfast($query, $title).'<span class="form-shortname">'.highlightfast($query, $name).'</span>
-      '.$override.$warning.'
-    </label>
+    <label '.$labelfor.'>'.highlightfast($query, $title).$override.$warning.'</label>
+    <span class="form-shortname">'.highlightfast($query, $name).'</span>
   </div>
   <div class="form-setting">'.$form.$defaultinfo.'</div>
   <div class="form-description">'.highlight($query, markdown_to_html($description)).'</div>
@@ -7562,7 +7564,7 @@ class admin_setting_managewebservicetokens extends admin_setting {
                         array(array('id' => $token->userid)), $token->serviceid);
 
                 if (!is_siteadmin($token->userid) and
-                        key_exists($token->userid, $usermissingcaps)) {
+                        array_key_exists($token->userid, $usermissingcaps)) {
                     $missingcapabilities = implode(', ',
                             $usermissingcaps[$token->userid]);
                     if (!empty($missingcapabilities)) {
@@ -7677,7 +7679,7 @@ class admin_setting_configcolourpicker extends admin_setting {
         $PAGE->requires->js_init_call('M.util.init_colour_picker', array($this->get_id(), $this->previewconfig));
         $content  = html_writer::start_tag('div', array('class'=>'form-colourpicker defaultsnext'));
         $content .= html_writer::tag('div', $OUTPUT->pix_icon('i/loading', get_string('loading', 'admin'), 'moodle', array('class'=>'loadingicon')), array('class'=>'admin_colourpicker clearfix'));
-        $content .= html_writer::empty_tag('input', array('type'=>'text','id'=>$this->get_id(), 'name'=>$this->get_full_name(), 'value'=>$this->get_setting(), 'size'=>'12'));
+        $content .= html_writer::empty_tag('input', array('type'=>'text','id'=>$this->get_id(), 'name'=>$this->get_full_name(), 'value'=>$data, 'size'=>'12'));
         if (!empty($this->previewconfig)) {
             $content .= html_writer::empty_tag('input', array('type'=>'button','id'=>$this->get_id().'_preview', 'value'=>get_string('preview'), 'class'=>'admin_colourpicker_preview'));
         }

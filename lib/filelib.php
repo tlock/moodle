@@ -804,10 +804,6 @@ function file_save_draft_area_files($draftitemid, $contextid, $component, $filea
                 continue;
             }
 
-            // Replaced file content
-            if ($oldfile->get_contenthash() != $newfile->get_contenthash()) {
-                $oldfile->replace_content_with($newfile);
-            }
             // Updated author
             if ($oldfile->get_author() != $newfile->get_author()) {
                 $oldfile->set_author($newfile->get_author());
@@ -827,14 +823,16 @@ function file_save_draft_area_files($draftitemid, $contextid, $component, $filea
                 $oldfile->set_sortorder($newfile->get_sortorder());
             }
 
-            // Update file size
-            if ($oldfile->get_filesize() != $newfile->get_filesize()) {
-                $oldfile->set_filesize($newfile->get_filesize());
-            }
-
             // Update file timemodified
             if ($oldfile->get_timemodified() != $newfile->get_timemodified()) {
                 $oldfile->set_timemodified($newfile->get_timemodified());
+            }
+
+            // Replaced file content
+            if ($oldfile->get_contenthash() != $newfile->get_contenthash() || $oldfile->get_filesize() != $newfile->get_filesize()) {
+                $oldfile->replace_content_with($newfile);
+                // push changes to all local files that are referencing this file
+                $fs->update_references_to_storedfile($oldfile);
             }
 
             // unchanged file or directory - we keep it as is
@@ -1231,7 +1229,8 @@ function download_file_content($url, $headers=null, $postdata=null, $fullrespons
         //reinstate affected curl options
         curl_setopt_array ($ch, array(
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_NOBODY         => false)
+            CURLOPT_NOBODY         => false,
+            CURLOPT_HTTPGET        => true)
         );
     }
 
@@ -1406,9 +1405,14 @@ function &get_mimetypes_array() {
         'dir'  => array ('type'=>'application/x-director', 'icon'=>'flash'),
         'dxr'  => array ('type'=>'application/x-director', 'icon'=>'flash'),
         'eps'  => array ('type'=>'application/postscript', 'icon'=>'eps'),
+        'epub' => array ('type'=>'application/epub+zip', 'icon'=>'epub', 'groups'=>array('document')),
         'fdf'  => array ('type'=>'application/pdf', 'icon'=>'pdf'),
         'flv'  => array ('type'=>'video/x-flv', 'icon'=>'flash', 'groups'=>array('video','web_video'), 'string'=>'video'),
         'f4v'  => array ('type'=>'video/mp4', 'icon'=>'flash', 'groups'=>array('video','web_video'), 'string'=>'video'),
+
+        'gallery'           => array ('type'=>'application/x-smarttech-notebook', 'icon'=>'archive'),
+        'galleryitem'       => array ('type'=>'application/x-smarttech-notebook', 'icon'=>'archive'),
+        'gallerycollection' => array ('type'=>'application/x-smarttech-notebook', 'icon'=>'archive'),
         'gif'  => array ('type'=>'image/gif', 'icon'=>'gif', 'groups'=>array('image', 'web_image'), 'string'=>'image'),
         'gtar' => array ('type'=>'application/x-gtar', 'icon'=>'archive', 'groups'=>array('archive'), 'string'=>'archive'),
         'tgz'  => array ('type'=>'application/g-zip', 'icon'=>'archive', 'groups'=>array('archive'), 'string'=>'archive'),
@@ -1426,6 +1430,7 @@ function &get_mimetypes_array() {
         'isf'  => array ('type'=>'application/inspiration', 'icon'=>'isf'),
         'ist'  => array ('type'=>'application/inspiration.template', 'icon'=>'isf'),
         'java' => array ('type'=>'text/plain', 'icon'=>'sourcecode'),
+        'jar'  => array ('type'=>'application/java-archive', 'icon' => 'archive'),
         'jcb'  => array ('type'=>'text/xml', 'icon'=>'markup'),
         'jcl'  => array ('type'=>'text/xml', 'icon'=>'markup'),
         'jcw'  => array ('type'=>'text/xml', 'icon'=>'markup'),
@@ -1450,6 +1455,9 @@ function &get_mimetypes_array() {
         'mpeg' => array ('type'=>'video/mpeg', 'icon'=>'mpeg', 'groups'=>array('video','web_video'), 'string'=>'video'),
         'mpe'  => array ('type'=>'video/mpeg', 'icon'=>'mpeg', 'groups'=>array('video','web_video'), 'string'=>'video'),
         'mpg'  => array ('type'=>'video/mpeg', 'icon'=>'mpeg', 'groups'=>array('video','web_video'), 'string'=>'video'),
+
+        'nbk'       => array ('type'=>'application/x-smarttech-notebook', 'icon'=>'archive'),
+        'notebook'  => array ('type'=>'application/x-smarttech-notebook', 'icon'=>'archive'),
 
         'odt'  => array ('type'=>'application/vnd.oasis.opendocument.text', 'icon'=>'writer', 'groups'=>array('document')),
         'ott'  => array ('type'=>'application/vnd.oasis.opendocument.text-template', 'icon'=>'writer', 'groups'=>array('document')),
@@ -1530,6 +1538,8 @@ function &get_mimetypes_array() {
         'webm'  => array ('type'=>'video/webm', 'icon'=>'video', 'groups'=>array('video'), 'string'=>'video'),
         'wmv'  => array ('type'=>'video/x-ms-wmv', 'icon'=>'wmv', 'groups'=>array('video'), 'string'=>'video'),
         'asf'  => array ('type'=>'video/x-ms-asf', 'icon'=>'wmv', 'groups'=>array('video'), 'string'=>'video'),
+
+        'xbk'  => array ('type'=>'application/x-smarttech-notebook', 'icon'=>'archive'),
         'xdp'  => array ('type'=>'application/pdf', 'icon'=>'pdf'),
         'xfd'  => array ('type'=>'application/pdf', 'icon'=>'pdf'),
         'xfdf' => array ('type'=>'application/pdf', 'icon'=>'pdf'),
@@ -1544,6 +1554,7 @@ function &get_mimetypes_array() {
 
         'xml'  => array ('type'=>'application/xml', 'icon'=>'markup'),
         'xsl'  => array ('type'=>'text/xml', 'icon'=>'markup'),
+
         'zip'  => array ('type'=>'application/zip', 'icon'=>'archive', 'groups'=>array('archive'), 'string'=>'archive')
     );
     return $mimearray;
@@ -1819,10 +1830,14 @@ function get_mimetype_description($obj, $capitalise=false) {
         $a[strtoupper($key)] = strtoupper($value);
         $a[ucfirst($key)] = ucfirst($value);
     }
-    if (get_string_manager()->string_exists($mimetype, 'mimetypes')) {
-        $result = get_string($mimetype, 'mimetypes', (object)$a);
-    } else if (get_string_manager()->string_exists($mimetypestr, 'mimetypes')) {
-        $result = get_string($mimetypestr, 'mimetypes', (object)$a);
+
+    // MIME types may include + symbol but this is not permitted in string ids.
+    $safemimetype = str_replace('+', '_', $mimetype);
+    $safemimetypestr = str_replace('+', '_', $mimetypestr);
+    if (get_string_manager()->string_exists($safemimetype, 'mimetypes')) {
+        $result = get_string($safemimetype, 'mimetypes', (object)$a);
+    } else if (get_string_manager()->string_exists($safemimetypestr, 'mimetypes')) {
+        $result = get_string($safemimetypestr, 'mimetypes', (object)$a);
     } else if (get_string_manager()->string_exists('default', 'mimetypes')) {
         $result = get_string('default', 'mimetypes', (object)$a);
     } else {
@@ -2247,7 +2262,7 @@ function send_file($path, $filename, $lifetime = 'default' , $filter=0, $pathiss
             $options = new stdClass();
             $options->newlines = false;
             $options->noclean = true;
-            $text = htmlentities($pathisstring ? $path : implode('', file($path)));
+            $text = htmlentities($pathisstring ? $path : implode('', file($path)), ENT_QUOTES, 'UTF-8');
             $output = '<pre>'. format_text($text, FORMAT_MOODLE, $options, $COURSE->id) .'</pre>';
 
             readstring_accel($output, $mimetype, false);
@@ -2328,7 +2343,7 @@ function send_stored_file($stored_file, $lifetime=86400 , $filter=0, $forcedownl
     }
 
     // handle external resource
-    if ($stored_file && $stored_file->is_external_file()) {
+    if ($stored_file && $stored_file->is_external_file() && !isset($options['sendcachedexternalfile'])) {
         $stored_file->send_file($lifetime, $filter, $forcedownload, $options);
         die;
     }
@@ -2752,6 +2767,8 @@ class curl {
     public  $info;
     /** @var string error */
     public  $error;
+    /** @var int error code */
+    public  $errno;
 
     /** @var array cURL options */
     private $options;
@@ -2895,6 +2912,14 @@ class curl {
         unset($this->options['CURLOPT_INFILE']);
         unset($this->options['CURLOPT_INFILESIZE']);
         unset($this->options['CURLOPT_CUSTOMREQUEST']);
+        unset($this->options['CURLOPT_FILE']);
+    }
+
+    /**
+     * Resets the HTTP Request headers (to prepare for the new request)
+     */
+    public function resetHeader() {
+        $this->header = array();
     }
 
     /**
@@ -2984,6 +3009,12 @@ class curl {
                 ));
         }
         curl_setopt($curl, CURLOPT_HTTPHEADER, $this->header);
+
+        // Bypass proxy (for this request only) if required.
+        if (!empty($this->options['CURLOPT_URL']) &&
+                is_proxybypass($this->options['CURLOPT_URL'])) {
+            unset($this->options['CURLOPT_PROXY']);
+        }
 
         if ($this->debug){
             echo '<h1>Options</h1>';
@@ -3119,6 +3150,7 @@ class curl {
 
         $this->info  = curl_getinfo($curl);
         $this->error = curl_error($curl);
+        $this->errno = curl_errno($curl);
 
         if ($this->debug){
             echo '<h1>Return Data</h1>';
@@ -3203,6 +3235,62 @@ class curl {
     }
 
     /**
+     * Downloads one file and writes it to the specified file handler
+     *
+     * <code>
+     * $c = new curl();
+     * $file = fopen('savepath', 'w');
+     * $result = $c->download_one('http://localhost/', null,
+     *   array('file' => $file, 'timeout' => 5, 'followlocation' => true, 'maxredirs' => 3));
+     * fclose($file);
+     * $download_info = $c->get_info();
+     * if ($result === true) {
+     *   // file downloaded successfully
+     * } else {
+     *   $error_text = $result;
+     *   $error_code = $c->get_errno();
+     * }
+     * </code>
+     *
+     * <code>
+     * $c = new curl();
+     * $result = $c->download_one('http://localhost/', null,
+     *   array('filepath' => 'savepath', 'timeout' => 5, 'followlocation' => true, 'maxredirs' => 3));
+     * // ... see above, no need to close handle and remove file if unsuccessful
+     * </code>
+     *
+     * @param string $url
+     * @param array|null $params key-value pairs to be added to $url as query string
+     * @param array $options request options. Must include either 'file' or 'filepath'
+     * @return bool|string true on success or error string on failure
+     */
+    public function download_one($url, $params, $options = array()) {
+        $options['CURLOPT_HTTPGET'] = 1;
+        $options['CURLOPT_BINARYTRANSFER'] = true;
+        if (!empty($params)){
+            $url .= (stripos($url, '?') !== false) ? '&' : '?';
+            $url .= http_build_query($params, '', '&');
+        }
+        if (!empty($options['filepath']) && empty($options['file'])) {
+            // open file
+            if (!($options['file'] = fopen($options['filepath'], 'w'))) {
+                $this->errno = 100;
+                return get_string('cannotwritefile', 'error', $options['filepath']);
+            }
+            $filepath = $options['filepath'];
+        }
+        unset($options['filepath']);
+        $result = $this->request($url, $options);
+        if (isset($filepath)) {
+            fclose($options['file']);
+            if ($result !== true) {
+                unlink($filepath);
+            }
+        }
+        return $result;
+    }
+
+    /**
      * HTTP PUT method
      *
      * @param string $url
@@ -3278,6 +3366,54 @@ class curl {
      */
     public function get_info() {
         return $this->info;
+    }
+
+    /**
+     * Get curl error code
+     *
+     * @return int
+     */
+    public function get_errno() {
+        return $this->errno;
+    }
+
+    /**
+     * When using a proxy, an additional HTTP response code may appear at
+     * the start of the header. For example, when using https over a proxy
+     * there may be 'HTTP/1.0 200 Connection Established'. Other codes are
+     * also possible and some may come with their own headers.
+     *
+     * If using the return value containing all headers, this function can be
+     * called to remove unwanted doubles.
+     *
+     * Note that it is not possible to distinguish this situation from valid
+     * data unless you know the actual response part (below the headers)
+     * will not be included in this string, or else will not 'look like' HTTP
+     * headers. As a result it is not safe to call this function for general
+     * data.
+     *
+     * @param string $input Input HTTP response
+     * @return string HTTP response with additional headers stripped if any
+     */
+    public static function strip_double_headers($input) {
+        // I have tried to make this regular expression as specific as possible
+        // to avoid any case where it does weird stuff if you happen to put
+        // HTTP/1.1 200 at the start of any line in your RSS file. This should
+        // also make it faster because it can abandon regex processing as soon
+        // as it hits something that doesn't look like an http header. The
+        // header definition is taken from RFC 822, except I didn't support
+        // folding which is never used in practice.
+        $crlf = "\r\n";
+        return preg_replace(
+                // HTTP version and status code (ignore value of code).
+                '~^HTTP/1\..*' . $crlf .
+                // Header name: character between 33 and 126 decimal, except colon.
+                // Colon. Header value: any character except \r and \n. CRLF.
+                '(?:[\x21-\x39\x3b-\x7e]+:[^' . $crlf . ']+' . $crlf . ')*' .
+                // Headers are terminated by another CRLF (blank line).
+                $crlf .
+                // Second HTTP status code, this time must be 200.
+                '(HTTP/1.[01] 200 )~', '$1', $input);
     }
 }
 
@@ -3570,7 +3706,6 @@ function file_pluginfile($relativepath, $forcedownload, $preview = null) {
             if (!$event = $DB->get_record('event', array('id'=>(int)$eventid, 'eventtype'=>'site'))) {
                 send_file_not_found();
             }
-            // Check that we got an event and that it's userid is that of the user
 
             // Get the file and serve if successful
             $filename = array_pop($args);
@@ -3618,8 +3753,8 @@ function file_pluginfile($relativepath, $forcedownload, $preview = null) {
                 require_login($course);
             }
 
-            // Must be able to at least view the course
-            if (!is_enrolled($context) and !is_viewing($context)) {
+            // Must be able to at least view the course. This does not apply to the front page.
+            if ($course->id != SITEID && (!is_enrolled($context)) && (!is_viewing($context))) {
                 //TODO: hmm, do we really want to block guests here?
                 send_file_not_found();
             }
@@ -3640,10 +3775,10 @@ function file_pluginfile($relativepath, $forcedownload, $preview = null) {
                 if (!has_capability('moodle/site:accessallgroups', $context) && !groups_is_member($event->groupid, $USER->id)) {
                     send_file_not_found();
                 }
-            } else if ($event->eventtype === 'course') {
-                //ok
+            } else if ($event->eventtype === 'course' || $event->eventtype === 'site') {
+                // Ok. Please note that the event type 'site' still uses a course context.
             } else {
-                // some other type
+                // Some other type.
                 send_file_not_found();
             }
 
@@ -4157,7 +4292,7 @@ function file_pluginfile($relativepath, $forcedownload, $preview = null) {
                 send_file_not_found();
             }
 
-            $bprecord = $DB->get_record('block_positions', array('blockinstanceid' => $context->instanceid), 'visible');
+            $bprecord = $DB->get_record('block_positions', array('contextid' => $context->id, 'blockinstanceid' => $context->instanceid));
             // User can't access file, if block is hidden or doesn't have block:view capability
             if (($bprecord && !$bprecord->visible) || !has_capability('moodle/block:view', $context)) {
                  send_file_not_found();
@@ -4196,171 +4331,4 @@ function file_pluginfile($relativepath, $forcedownload, $preview = null) {
         send_file_not_found();
     }
 
-}
-
-/**
- * Universe file cacheing class
- *
- * @package    core_files
- * @category   files
- * @copyright  2012 Dongsheng Cai {@link http://dongsheng.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class cache_file {
-    /** @var string */
-    public $cachedir = '';
-
-    /**
-     * static method to create cache_file class instance
-     *
-     * @param array $options caching ooptions
-     */
-    public static function get_instance($options = array()) {
-        return new cache_file($options);
-    }
-
-    /**
-     * Constructor
-     *
-     * @param array $options
-     */
-    private function __construct($options = array()) {
-        global $CFG;
-
-        // Path to file caches.
-        if (isset($options['cachedir'])) {
-            $this->cachedir = $options['cachedir'];
-        } else {
-            $this->cachedir = $CFG->cachedir . '/filedir';
-        }
-
-        // Create cache directory.
-        if (!file_exists($this->cachedir)) {
-            mkdir($this->cachedir, $CFG->directorypermissions, true);
-        }
-
-        // When use cache_file::get, it will check ttl.
-        if (isset($options['ttl']) && is_numeric($options['ttl'])) {
-            $this->ttl = $options['ttl'];
-        } else {
-            // One day.
-            $this->ttl = 60 * 60 * 24;
-        }
-    }
-
-    /**
-     * Get cached file, false if file expires
-     *
-     * @param mixed $param
-     * @param array $options caching options
-     * @return bool|string
-     */
-    public static function get($param, $options = array()) {
-        $instance = self::get_instance($options);
-        $filepath = $instance->generate_filepath($param);
-        if (file_exists($filepath)) {
-            $lasttime = filemtime($filepath);
-            if (time() - $lasttime > $instance->ttl) {
-                // Remove cache file.
-                unlink($filepath);
-                return false;
-            } else {
-                return $filepath;
-            }
-        } else {
-            return false;
-        }
-    }
-
-    /**
-     * Static method to create cache from a file
-     *
-     * @param mixed $ref
-     * @param string $srcfile
-     * @param array $options
-     * @return string cached file path
-     */
-    public static function create_from_file($ref, $srcfile, $options = array()) {
-        $instance = self::get_instance($options);
-        $cachedfilepath = $instance->generate_filepath($ref);
-        copy($srcfile, $cachedfilepath);
-        return $cachedfilepath;
-    }
-
-    /**
-     * Static method to create cache from url
-     *
-     * @param mixed $ref file reference
-     * @param string $url file url
-     * @param array $options options
-     * @return string cached file path
-     */
-    public static function create_from_url($ref, $url, $options = array()) {
-        $instance = self::get_instance($options);
-        $cachedfilepath = $instance->generate_filepath($ref);
-        $fp = fopen($cachedfilepath, 'w');
-        $curl = new curl;
-        $curl->download(array(array('url'=>$url, 'file'=>$fp)));
-        // Must close file handler.
-        fclose($fp);
-        return $cachedfilepath;
-    }
-
-    /**
-     * Static method to create cache from string
-     *
-     * @param mixed $ref file reference
-     * @param string $url file url
-     * @param array $options options
-     * @return string cached file path
-     */
-    public static function create_from_string($ref, $string, $options = array()) {
-        $instance = self::get_instance($options);
-        $cachedfilepath = $instance->generate_filepath($ref);
-        $fp = fopen($cachedfilepath, 'w');
-        fwrite($fp, $string);
-        // Must close file handler.
-        fclose($fp);
-        return $cachedfilepath;
-    }
-
-    /**
-     * Build path to cache file
-     *
-     * @param mixed $ref
-     * @return string
-     */
-    private function generate_filepath($ref) {
-        global $CFG;
-        $hash = sha1(serialize($ref));
-        $l1 = $hash[0].$hash[1];
-        $l2 = $hash[2].$hash[3];
-        $dir = $this->cachedir . "/$l1/$l2";
-        if (!file_exists($dir)) {
-            mkdir($dir, $CFG->directorypermissions, true);
-        }
-        return "$dir/$hash";
-    }
-
-    /**
-     * Remove cache files
-     *
-     * @param array $options options
-     * @param int $expire The number of seconds before expiry
-     */
-    public static function cleanup($options = array(), $expire) {
-        global $CFG;
-        $instance = self::get_instance($options);
-        if ($dir = opendir($instance->cachedir)) {
-            while (($file = readdir($dir)) !== false) {
-                if (!is_dir($file) && $file != '.' && $file != '..') {
-                    $lasttime = @filemtime($instance->cachedir . $file);
-                    if(time() - $lasttime > $expire){
-                        @unlink($instance->cachedir . $file);
-                    }
-                }
-            }
-            closedir($dir);
-        }
-    }
 }

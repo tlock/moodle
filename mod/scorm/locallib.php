@@ -250,9 +250,6 @@ function scorm_parse($scorm, $full) {
         }
 
     } else if ($scorm->scormtype === SCORM_TYPE_EXTERNAL and $cfg_scorm->allowtypeexternal) {
-        if (!$full and $scorm->sha1hash === sha1($scorm->reference)) {
-            return;
-        }
         require_once("$CFG->dirroot/mod/scorm/datamodels/scormlib.php");
         // SCORM only, AICC can not be external
         if (!scorm_parse_scorm($scorm, $scorm->reference)) {
@@ -646,33 +643,50 @@ function scorm_count_launchable($scormid, $organization='') {
     return $DB->count_records_select('scorm_scoes', "scorm = ? $sqlorganization AND ".$DB->sql_isnotempty('scorm_scoes', 'launch', false, true), $params);
 }
 
+/**
+ * Returns the last attempt used - if no attempts yet, returns 1 for first attempt
+ *
+ * @param int $scormid the id of the scorm.
+ * @param int $userid the id of the user.
+ *
+ * @return int The attempt number to use.
+ */
 function scorm_get_last_attempt($scormid, $userid) {
     global $DB;
 
     /// Find the last attempt number for the given user id and scorm id
-    if ($lastattempt = $DB->get_record('scorm_scoes_track', array('userid'=>$userid, 'scormid'=>$scormid), 'max(attempt) as a')) {
-        if (empty($lastattempt->a)) {
-            return '1';
-        } else {
-            return $lastattempt->a;
-        }
+    $sql = "SELECT MAX(attempt)
+              FROM {scorm_scoes_track}
+             WHERE userid = ? AND scormid = ?";
+    $lastattempt = $DB->get_field_sql($sql, array($userid, $scormid));
+    if (empty($lastattempt)) {
+        return '1';
     } else {
-        return false;
+        return $lastattempt;
     }
 }
 
+/**
+ * Returns the last completed attempt used - if no completed attempts yet, returns 1 for first attempt
+ *
+ * @param int $scormid the id of the scorm.
+ * @param int $userid the id of the user.
+ *
+ * @return int The attempt number to use.
+ */
 function scorm_get_last_completed_attempt($scormid, $userid) {
     global $DB;
 
-    /// Find the last attempt number for the given user id and scorm id
-    if ($lastattempt = $DB->get_record_select('scorm_scoes_track', "userid = ? AND scormid = ? AND (value='completed' OR value='passed')", array($userid, $scormid), 'max(attempt) as a')) {
-        if (empty($lastattempt->a)) {
-            return '1';
-        } else {
-            return $lastattempt->a;
-        }
+    /// Find the last completed attempt number for the given user id and scorm id
+    $sql = "SELECT MAX(attempt)
+              FROM {scorm_scoes_track}
+             WHERE userid = ? AND scormid = ?
+               AND (value='completed' OR value='passed')";
+    $lastattempt = $DB->get_field_sql($sql, array($userid, $scormid));
+    if (empty($lastattempt)) {
+        return '1';
     } else {
-        return false;
+        return $lastattempt;
     }
 }
 
@@ -731,7 +745,7 @@ function scorm_course_format_display($user, $course) {
 }
 
 function scorm_view_display ($user, $scorm, $action, $cm) {
-    global $CFG, $DB, $PAGE, $OUTPUT;
+    global $CFG, $DB, $PAGE, $OUTPUT, $COURSE;
 
     if ($scorm->scormtype != SCORM_TYPE_LOCAL && $scorm->updatefreq == SCORM_UPDATE_EVERYTIME) {
         scorm_parse($scorm, false);
@@ -810,7 +824,7 @@ function scorm_view_display ($user, $scorm, $action, $cm) {
                       <label for="a"><?php print_string('newattempt', 'scorm') ?></label>
             <?php
         }
-        if (!empty($scorm->popup)) {
+        if ($COURSE->format != 'scorm' && !empty($scorm->popup)) {
             echo '<input type="hidden" name="display" value="popup" />'."\n";
         }
         ?>
@@ -830,13 +844,13 @@ function scorm_simple_play($scorm, $user, $context, $cmid) {
 
     $result = false;
 
-    if ($scorm->scormtype != SCORM_TYPE_LOCAL && $scorm->updatefreq == SCORM_UPDATE_EVERYTIME) {
-        scorm_parse($scorm, false);
-    }
     if (has_capability('mod/scorm:viewreport', $context)) { //if this user can view reports, don't skipview so they can see links to reports.
         return $result;
     }
 
+    if ($scorm->scormtype != SCORM_TYPE_LOCAL && $scorm->updatefreq == SCORM_UPDATE_EVERYTIME) {
+        scorm_parse($scorm, false);
+    }
     $scoes = $DB->get_records_select('scorm_scoes', 'scorm = ? AND '.$DB->sql_isnotempty('scorm_scoes', 'launch', false, true), array($scorm->id), 'id', 'id');
 
     if ($scoes) {
@@ -1308,10 +1322,11 @@ function scorm_get_toc($user,$scorm,$cmid,$toclink=TOCJSLINK,$currentorg='',$sco
     //
     // If not specified retrieve the last attempt number
     //
+    $attemptsmade = scorm_get_attempt_count($user->id, $scorm);
     if (empty($attempt)) {
-        $attempt = scorm_get_attempt_count($user->id, $scorm);
+        $attempt = $attemptsmade;
     }
-    $result->attemptleft = $scorm->maxattempt == 0 ? 1 : $scorm->maxattempt - $attempt;
+    $result->attemptleft = $scorm->maxattempt == 0 ? 1 : $scorm->maxattempt - $attemptsmade;
     if ($scoes = scorm_get_scoes($scorm->id, $currentorg)){
         //
         // Retrieve user tracking data for each learning object

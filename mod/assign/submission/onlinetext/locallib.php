@@ -90,9 +90,10 @@ class assign_submission_onlinetext extends assign_submission_plugin {
 
         }
 
-
         $data = file_prepare_standard_editor($data, 'onlinetext', $editoroptions, $this->assignment->get_context(), 'assignsubmission_onlinetext', ASSIGNSUBMISSION_ONLINETEXT_FILEAREA, $submissionid);
-        $mform->addElement('editor', 'onlinetext_editor', '', null, $editoroptions);
+        $mform->addElement('editor', 'onlinetext_editor', html_writer::tag('span', $this->get_name(),
+            array('class' => 'accesshide')), null, $editoroptions);
+
         return true;
     }
 
@@ -200,7 +201,12 @@ class assign_submission_onlinetext extends assign_submission_plugin {
         $showviewlink = true;
 
         if ($onlinetextsubmission) {
-            $text = format_text($onlinetextsubmission->onlinetext, $onlinetextsubmission->onlineformat, array('context'=>$this->assignment->get_context()));
+            $text = $this->assignment->render_editor_content(ASSIGNSUBMISSION_ONLINETEXT_FILEAREA,
+                                                             $onlinetextsubmission->submission,
+                                                             $this->get_type(),
+                                                             'onlinetext',
+                                                             'assignsubmission_onlinetext');
+
             $shorttext = shorten_text($text, 140);
             if ($text != $shorttext) {
                 return $shorttext . get_string('numwords', 'assignsubmission_onlinetext', count_words($text));
@@ -376,7 +382,9 @@ class assign_submission_onlinetext extends assign_submission_plugin {
      * @return bool
      */
     public function is_empty(stdClass $submission) {
-        return $this->view($submission) == '';
+        $onlinetextsubmission = $this->get_onlinetext_submission($submission->id);
+
+        return empty($onlinetextsubmission->onlinetext);
     }
 
     /**

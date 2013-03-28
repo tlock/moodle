@@ -76,6 +76,9 @@ class core_course_external_testcase extends externallib_advanced_testcase {
 
         $createdcats = core_course_external::create_categories($categories);
 
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $createdcats = external_api::clean_returnvalue(core_course_external::create_categories_returns(), $createdcats);
+
         // Initially confirm that base data was inserted correctly.
         $this->assertEquals($category1->name, $createdcats[0]['name']);
         $this->assertEquals($category2->name, $createdcats[1]['name']);
@@ -93,6 +96,9 @@ class core_course_external_testcase extends externallib_advanced_testcase {
 
         $createdsubcats = core_course_external::create_categories($subcategories);
 
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $createdsubcats = external_api::clean_returnvalue(core_course_external::create_categories_returns(), $createdsubcats);
+
         // Confirm that sub categories were inserted correctly.
         $this->assertEquals($category3->name, $createdsubcats[0]['name']);
 
@@ -105,8 +111,12 @@ class core_course_external_testcase extends externallib_advanced_testcase {
         $category2 = $DB->get_record('course_categories', array('id' => $category2->id));
         $category3 = $DB->get_record('course_categories', array('id' => $category3->id));
 
-        $this->assertGreaterThanOrEqual($category1->sortorder, $category3->sortorder);
-        $this->assertGreaterThanOrEqual($category2->sortorder, $category3->sortorder);
+        // sortorder sequence (and sortorder) must be:
+        // category 1
+        //   category 3
+        // category 2
+        $this->assertGreaterThan($category1->sortorder, $category3->sortorder);
+        $this->assertGreaterThan($category3->sortorder, $category2->sortorder);
 
         // Call without required capability
         $this->unassignUserCapability('moodle/category:manage', $contextid, $roleid);
@@ -165,20 +175,28 @@ class core_course_external_testcase extends externallib_advanced_testcase {
         global $DB;
 
         $this->resetAfterTest(true);
+
+        $generatedcats = array();
         $category1data['idnumber'] = 'idnumbercat1';
         $category1data['name'] = 'Category 1 for PHPunit test';
         $category1data['description'] = 'Category 1 description';
         $category1data['descriptionformat'] = FORMAT_MOODLE;
         $category1  = self::getDataGenerator()->create_category($category1data);
+        $generatedcats[$category1->id] = $category1;
         $category2  = self::getDataGenerator()->create_category(
                 array('parent' => $category1->id));
+        $generatedcats[$category2->id] = $category2;
         $category6  = self::getDataGenerator()->create_category(
                 array('parent' => $category1->id, 'visible' => 0));
+        $generatedcats[$category6->id] = $category6;
         $category3  = self::getDataGenerator()->create_category();
+        $generatedcats[$category3->id] = $category3;
         $category4  = self::getDataGenerator()->create_category(
                 array('parent' => $category3->id));
+        $generatedcats[$category4->id] = $category4;
         $category5  = self::getDataGenerator()->create_category(
                 array('parent' => $category4->id));
+        $generatedcats[$category5->id] = $category5;
 
         // Set the required capabilities by the external function.
         $context = context_system::instance();
@@ -189,21 +207,30 @@ class core_course_external_testcase extends externallib_advanced_testcase {
             array('key' => 'id', 'value' => $category1->id),
             array('key' => 'visible', 'value' => 1)), 1);
 
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $categories = external_api::clean_returnvalue(core_course_external::get_categories_returns(), $categories);
+
         // Check we retrieve the good total number of categories.
         $this->assertEquals(2, count($categories));
 
         // Check the return values
-        $this->assertEquals($categories[0]['id'], $category1->id);
-        $this->assertEquals($categories[0]['idnumber'], $category1->idnumber);
-        $this->assertEquals($categories[0]['name'], $category1->name);
-        $this->assertEquals($categories[0]['description'], $category1->description);
-        $this->assertEquals($categories[0]['descriptionformat'], FORMAT_HTML);
+        foreach ($categories as $category) {
+            $generatedcat = $generatedcats[$category['id']];
+            $this->assertEquals($category['idnumber'], $generatedcat->idnumber);
+            $this->assertEquals($category['name'], $generatedcat->name);
+            $this->assertEquals($category['description'], $generatedcat->description);
+            $this->assertEquals($category['descriptionformat'], FORMAT_HTML);
+        }
 
         // Check different params.
         $categories = core_course_external::get_categories(array(
             array('key' => 'id', 'value' => $category1->id),
             array('key' => 'idnumber', 'value' => $category1->idnumber),
             array('key' => 'visible', 'value' => 1)), 0);
+
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $categories = external_api::clean_returnvalue(core_course_external::get_categories_returns(), $categories);
+
         $this->assertEquals(1, count($categories));
 
         // Retrieve categories from parent.
@@ -213,6 +240,10 @@ class core_course_external_testcase extends externallib_advanced_testcase {
 
         // Retrieve all categories.
         $categories = core_course_external::get_categories();
+
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $categories = external_api::clean_returnvalue(core_course_external::get_categories_returns(), $categories);
+
         $this->assertEquals($DB->count_records('course_categories'), count($categories));
 
         // Call without required capability (it will fail cause of the search on idnumber).
@@ -295,6 +326,9 @@ class core_course_external_testcase extends externallib_advanced_testcase {
 
         $this->resetAfterTest(true);
 
+        // Enable course completion.
+        set_config('enablecompletion', 1);
+
         // Set the required capabilities by the external function
         $contextid = context_system::instance()->id;
         $roleid = $this->assignUserCapability('moodle/course:create', $contextid);
@@ -333,6 +367,9 @@ class core_course_external_testcase extends externallib_advanced_testcase {
 
         $createdcourses = core_course_external::create_courses($courses);
 
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $createdcourses = external_api::clean_returnvalue(core_course_external::create_courses_returns(), $createdcourses);
+
         // Check that right number of courses were created.
         $this->assertEquals(2, count($createdcourses));
 
@@ -366,13 +403,8 @@ class core_course_external_testcase extends externallib_advanced_testcase {
                     $this->assertEquals($dbcourse->theme, $course2['forcetheme']);
                 }
 
-                if (completion_info::is_enabled_for_site()) {
-                    $this->assertEquals($dbcourse->enablecompletion, $course2['enabledcompletion']);
-                    $this->assertEquals($dbcourse->completionstartonenrol, $course2['completionstartonenrol']);
-                } else {
-                    $this->assertEquals($dbcourse->enablecompletion, 0);
-                    $this->assertEquals($dbcourse->completionstartonenrol, 0);
-                }
+                $this->assertEquals($dbcourse->enablecompletion, $course2['enablecompletion']);
+                $this->assertEquals($dbcourse->completionstartonenrol, $course2['completionstartonenrol']);
 
             } else if ($createdcourse['shortname'] == $course1['shortname']) {
                 $courseconfig = get_config('moodlecourse');
@@ -440,13 +472,17 @@ class core_course_external_testcase extends externallib_advanced_testcase {
 
         $this->resetAfterTest(true);
 
+        $generatedcourses = array();
         $coursedata['idnumber'] = 'idnumbercourse1';
         $coursedata['fullname'] = 'Course 1 for PHPunit test';
         $coursedata['summary'] = 'Course 1 description';
         $coursedata['summaryformat'] = FORMAT_MOODLE;
         $course1  = self::getDataGenerator()->create_course($coursedata);
+        $generatedcourses[$course1->id] = $course1;
         $course2  = self::getDataGenerator()->create_course();
+        $generatedcourses[$course2->id] = $course2;
         $course3  = self::getDataGenerator()->create_course();
+        $generatedcourses[$course3->id] = $course3;
 
         // Set the required capabilities by the external function.
         $context = context_system::instance();
@@ -461,39 +497,46 @@ class core_course_external_testcase extends externallib_advanced_testcase {
         $courses = core_course_external::get_courses(array('ids' =>
             array($course1->id, $course2->id)));
 
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $courses = external_api::clean_returnvalue(core_course_external::get_courses_returns(), $courses);
+
         // Check we retrieve the good total number of categories.
         $this->assertEquals(2, count($courses));
 
-        // Check the return values for course 1
-        $dbcourse = $DB->get_record('course', array('id' => $course1->id));
-        $this->assertEquals($courses[0]['id'], $dbcourse->id);
-        $this->assertEquals($courses[0]['idnumber'], $coursedata['idnumber']);
-        $this->assertEquals($courses[0]['fullname'], $coursedata['fullname']);
-        $this->assertEquals($courses[0]['summary'], $coursedata['summary']);
-        $this->assertEquals($courses[0]['summaryformat'], FORMAT_HTML);
-        $this->assertEquals($courses[0]['shortname'], $dbcourse->shortname);
-        $this->assertEquals($courses[0]['categoryid'], $dbcourse->category);
-        $this->assertEquals($courses[0]['format'], $dbcourse->format);
-        $this->assertEquals($courses[0]['showgrades'], $dbcourse->showgrades);
-        $this->assertEquals($courses[0]['newsitems'], $dbcourse->newsitems);
-        $this->assertEquals($courses[0]['startdate'], $dbcourse->startdate);
-        $this->assertEquals($courses[0]['numsections'], $dbcourse->numsections);
-        $this->assertEquals($courses[0]['maxbytes'], $dbcourse->maxbytes);
-        $this->assertEquals($courses[0]['showreports'], $dbcourse->showreports);
-        $this->assertEquals($courses[0]['visible'], $dbcourse->visible);
-        $this->assertEquals($courses[0]['hiddensections'], $dbcourse->hiddensections);
-        $this->assertEquals($courses[0]['groupmode'], $dbcourse->groupmode);
-        $this->assertEquals($courses[0]['groupmodeforce'], $dbcourse->groupmodeforce);
-        $this->assertEquals($courses[0]['defaultgroupingid'], $dbcourse->defaultgroupingid);
-        $this->assertEquals($courses[0]['completionnotify'], $dbcourse->completionnotify);
-        $this->assertEquals($courses[0]['lang'], $dbcourse->lang);
-        $this->assertEquals($courses[0]['forcetheme'], $dbcourse->theme);
-        $this->assertEquals($courses[0]['completionstartonenrol'], $dbcourse->completionstartonenrol);
-        $this->assertEquals($courses[0]['enablecompletion'], $dbcourse->enablecompletion);
-        $this->assertEquals($courses[0]['completionstartonenrol'], $dbcourse->completionstartonenrol);
+        foreach ($courses as $course) {
+            $dbcourse = $generatedcourses[$course['id']];
+            $this->assertEquals($course['idnumber'], $dbcourse->idnumber);
+            $this->assertEquals($course['fullname'], $dbcourse->fullname);
+            $this->assertEquals($course['summary'], $dbcourse->summary);
+            $this->assertEquals($course['summaryformat'], FORMAT_HTML);
+            $this->assertEquals($course['shortname'], $dbcourse->shortname);
+            $this->assertEquals($course['categoryid'], $dbcourse->category);
+            $this->assertEquals($course['format'], $dbcourse->format);
+            $this->assertEquals($course['showgrades'], $dbcourse->showgrades);
+            $this->assertEquals($course['newsitems'], $dbcourse->newsitems);
+            $this->assertEquals($course['startdate'], $dbcourse->startdate);
+            $this->assertEquals($course['numsections'], $dbcourse->numsections);
+            $this->assertEquals($course['maxbytes'], $dbcourse->maxbytes);
+            $this->assertEquals($course['showreports'], $dbcourse->showreports);
+            $this->assertEquals($course['visible'], $dbcourse->visible);
+            $this->assertEquals($course['hiddensections'], $dbcourse->hiddensections);
+            $this->assertEquals($course['groupmode'], $dbcourse->groupmode);
+            $this->assertEquals($course['groupmodeforce'], $dbcourse->groupmodeforce);
+            $this->assertEquals($course['defaultgroupingid'], $dbcourse->defaultgroupingid);
+            $this->assertEquals($course['completionnotify'], $dbcourse->completionnotify);
+            $this->assertEquals($course['lang'], $dbcourse->lang);
+            $this->assertEquals($course['forcetheme'], $dbcourse->theme);
+            $this->assertEquals($course['completionstartonenrol'], $dbcourse->completionstartonenrol);
+            $this->assertEquals($course['enablecompletion'], $dbcourse->enablecompletion);
+            $this->assertEquals($course['completionstartonenrol'], $dbcourse->completionstartonenrol);
+        }
 
         // Get all courses in the DB
         $courses = core_course_external::get_courses(array());
+
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $courses = external_api::clean_returnvalue(core_course_external::get_courses_returns(), $courses);
+
         $this->assertEquals($DB->count_records('course'), count($courses));
     }
 
@@ -520,6 +563,9 @@ class core_course_external_testcase extends externallib_advanced_testcase {
         $this->assignUserCapability('moodle/course:update', $context->id, $roleid);
 
         $courses = core_course_external::get_course_contents($course->id, array());
+
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $courses = external_api::clean_returnvalue(core_course_external::get_course_contents_returns(), $courses);
 
         // Check that the course has the 3 created modules
         $this->assertEquals(3, count($courses[0]['modules']));
@@ -563,6 +609,9 @@ class core_course_external_testcase extends externallib_advanced_testcase {
 
         $duplicate = core_course_external::duplicate_course($course->id, $newcourse['fullname'],
                 $newcourse['shortname'], $newcourse['categoryid'], $newcourse['visible'], $newcourse['options']);
+
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $duplicate = external_api::clean_returnvalue(core_course_external::duplicate_course_returns(), $duplicate);
 
         // Check that the course has been duplicated.
         $this->assertEquals($newcourse['shortname'], $duplicate['shortname']);

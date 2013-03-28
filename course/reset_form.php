@@ -61,13 +61,13 @@ class course_reset_form extends moodleform {
         if ($allmods = $DB->get_records('modules') ) {
             foreach ($allmods as $mod) {
                 $modname = $mod->name;
-                if (!$DB->count_records($modname, array('course'=>$COURSE->id))) {
-                    continue; // skip mods with no instances
-                }
                 $modfile = $CFG->dirroot."/mod/$modname/lib.php";
                 $mod_reset_course_form_definition = $modname.'_reset_course_form_definition';
                 $mod_reset__userdata = $modname.'_reset_userdata';
                 if (file_exists($modfile)) {
+                    if (!$DB->count_records($modname, array('course'=>$COURSE->id))) {
+                        continue; // Skip mods with no instances
+                    }
                     include_once($modfile);
                     if (function_exists($mod_reset_course_form_definition)) {
                         $mod_reset_course_form_definition($mform);
@@ -106,6 +106,11 @@ class course_reset_form extends moodleform {
         $mform =& $this->_form;
 
         $defaults = array ('reset_events'=>1, 'reset_logs'=>1, 'reset_roles_local'=>1, 'reset_gradebook_grades'=>1, 'reset_notes'=>1);
+
+        // Set student as default in unenrol user list, if role with student archetype exist.
+        if ($studentrole = get_archetype_roles('student')) {
+            $defaults['unenrol_users'] = array_keys($studentrole);
+        }
 
         if ($allmods = $DB->get_records('modules') ) {
             foreach ($allmods as $mod) {

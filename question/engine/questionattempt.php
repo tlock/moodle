@@ -64,7 +64,7 @@ class question_attempt {
      * @var string special value to indicate a response variable that is uploaded
      * files.
      */
-    const PARAM_CLEANHTML_FILES = 'paramcleanhtmlfiles';
+    const PARAM_RAW_FILES = 'paramrawfiles';
 
     /** @var integer if this attempts is stored in the question_attempts table, the id of that row. */
     protected $id = null;
@@ -882,19 +882,14 @@ class question_attempt {
     public function get_submitted_var($name, $type, $postdata = null) {
         switch ($type) {
             case self::PARAM_MARK:
-                // Special case to work around PARAM_NUMBER converting '' to 0.
-                $mark = $this->get_submitted_var($name, PARAM_RAW_TRIMMED, $postdata);
-                if ($mark === '' || is_null($mark)) {
-                    return $mark;
-                } else {
-                    return clean_param(str_replace(',', '.', $mark), PARAM_NUMBER);
-                }
+                // Special case to work around PARAM_FLOAT converting '' to 0.
+                return question_utils::clean_param_mark($this->get_submitted_var($name, PARAM_RAW_TRIMMED, $postdata));
 
             case self::PARAM_FILES:
                 return $this->process_response_files($name, $name, $postdata);
 
-            case self::PARAM_CLEANHTML_FILES:
-                $var = $this->get_submitted_var($name, PARAM_CLEANHTML, $postdata);
+            case self::PARAM_RAW_FILES:
+                $var = $this->get_submitted_var($name, PARAM_RAW, $postdata);
                 return $this->process_response_files($name, $name . ':itemid', $postdata, $var);
 
             default:
@@ -1119,14 +1114,19 @@ class question_attempt {
 
     /**
      * Perform a manual grading action on this attempt.
-     * @param $comment the comment being added.
-     * @param $mark the new mark. (Optional, if not given, then only a comment is added.)
+     * @param string $comment the comment being added.
+     * @param float $mark the new mark. If null, then only a comment is added.
+     * @param int $commentformat the FORMAT_... for $comment. Must be given.
      * @param int $timestamp the time to record for the action. (If not given, use now.)
      * @param int $userid the user to attribute the aciton to. (If not given, use the current user.)
-     * @return unknown_type
      */
-    public function manual_grade($comment, $mark, $timestamp = null, $userid = null) {
+    public function manual_grade($comment, $mark, $commentformat = null, $timestamp = null, $userid = null) {
         $submitteddata = array('-comment' => $comment);
+        if (is_null($commentformat)) {
+            debugging('You should pass $commentformat to manual_grade.', DEBUG_DEVELOPER);
+            $commentformat = FORMAT_HTML;
+        }
+        $submitteddata['-commentformat'] = $commentformat;
         if (!is_null($mark)) {
             $submitteddata['-mark'] = $mark;
             $submitteddata['-maxmark'] = $this->maxmark;

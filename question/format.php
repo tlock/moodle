@@ -348,18 +348,19 @@ class qformat_default {
         foreach ($questions as $question) {
             if (!empty($question->fraction) and (is_array($question->fraction))) {
                 $fractions = $question->fraction;
-                $answersvalid = true; // in case they are!
+                $invalidfractions = array();
                 foreach ($fractions as $key => $fraction) {
                     $newfraction = match_grade_options($gradeoptionsfull, $fraction,
                             $this->matchgrades);
                     if ($newfraction === false) {
-                        $answersvalid = false;
+                        $invalidfractions[] = $fraction;
                     } else {
                         $fractions[$key] = $newfraction;
                     }
                 }
-                if (!$answersvalid) {
-                    echo $OUTPUT->notification(get_string('invalidgrade', 'question'));
+                if ($invalidfractions) {
+                    echo $OUTPUT->notification(get_string('invalidgrade', 'question',
+                            implode(', ', $invalidfractions)));
                     ++$gradeerrors;
                     continue;
                 } else {
@@ -408,20 +409,35 @@ class qformat_default {
             $question->timecreated = time();
             $question->modifiedby = $USER->id;
             $question->timemodified = time();
+            $fileoptions = array(
+                    'subdirs' => false,
+                    'maxfiles' => -1,
+                    'maxbytes' => 0,
+                );
 
             $question->id = $DB->insert_record('question', $question);
-            if (isset($question->questiontextfiles)) {
+
+            if (isset($question->questiontextitemid)) {
+                $question->questiontext = file_save_draft_area_files($question->questiontextitemid,
+                        $this->importcontext->id, 'question', 'questiontext', $question->id,
+                        $fileoptions, $question->questiontext);
+            } else if (isset($question->questiontextfiles)) {
                 foreach ($question->questiontextfiles as $file) {
                     question_bank::get_qtype($question->qtype)->import_file(
                             $this->importcontext, 'question', 'questiontext', $question->id, $file);
                 }
             }
-            if (isset($question->generalfeedbackfiles)) {
+            if (isset($question->generalfeedbackitemid)) {
+                $question->generalfeedback = file_save_draft_area_files($question->generalfeedbackitemid,
+                        $this->importcontext->id, 'question', 'generalfeedback', $question->id,
+                        $fileoptions, $question->generalfeedback);
+            } else if (isset($question->generalfeedbackfiles)) {
                 foreach ($question->generalfeedbackfiles as $file) {
                     question_bank::get_qtype($question->qtype)->import_file(
                             $this->importcontext, 'question', 'generalfeedback', $question->id, $file);
                 }
             }
+            $DB->update_record('question', $question);
 
             $this->questionids[] = $question->id;
 
@@ -633,6 +649,55 @@ class qformat_default {
         $question->export_process = true;
         $question->import_process = true;
 
+        return $question;
+    }
+
+    /**
+     * Construct a reasonable default question name, based on the start of the question text.
+     * @param string $questiontext the question text.
+     * @param string $default default question name to use if the constructed one comes out blank.
+     * @return string a reasonable question name.
+     */
+    public function create_default_question_name($questiontext, $default) {
+        $name = $this->clean_question_name(shorten_text($questiontext, 80));
+        if ($name) {
+            return $name;
+        } else {
+            return $default;
+        }
+    }
+
+    /**
+     * Ensure that a question name does not contain anything nasty, and will fit in the DB field.
+     * @param string $name the raw question name.
+     * @return string a safe question name.
+     */
+    public function clean_question_name($name) {
+        $name = clean_param($name, PARAM_TEXT); // Matches what the question editing form does.
+        $name = trim($name);
+        $trimlength = 251;
+        while (textlib::strlen($name) > 255 && $trimlength > 0) {
+            $name = shorten_text($name, $trimlength);
+            $trimlength -= 10;
+        }
+        return $name;
+    }
+
+    /**
+     * Add a blank combined feedback to a question object.
+     * @param object question
+     * @return object question
+     */
+    protected function add_blank_combined_feedback($question) {
+        $question->correctfeedback['text'] = '';
+        $question->correctfeedback['format'] = $question->questiontextformat;
+        $question->correctfeedback['files'] = array();
+        $question->partiallycorrectfeedback['text'] = '';
+        $question->partiallycorrectfeedback['format'] = $question->questiontextformat;
+        $question->partiallycorrectfeedback['files'] = array();
+        $question->incorrectfeedback['text'] = '';
+        $question->incorrectfeedback['format'] = $question->questiontextformat;
+        $question->incorrectfeedback['files'] = array();
         return $question;
     }
 
@@ -900,6 +965,28 @@ class qformat_default {
 }
 
 class qformat_based_on_xml extends qformat_default {
+
+    /**
+     * A lot of imported files contain unwanted entities.
+     * This method tries to clean up all known problems.
+     * @param string str string to correct
+     * @return string the corrected string
+     */
+    public function cleaninput($str) {
+
+        $html_code_list = array(
+            "&#039;" => "'",
+            "&#8217;" => "'",
+            "&#8220;" => "\"",
+            "&#8221;" => "\"",
+            "&#8211;" => "-",
+            "&#8212;" => "-",
+        );
+        $str = strtr($str, $html_code_list);
+        // Use textlib entities_to_utf8 function to convert only numerical entities.
+        $str = textlib::entities_to_utf8($str, false);
+        return $str;
+    }
 
     /**
      * Return the array moodle is expecting

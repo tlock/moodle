@@ -31,6 +31,30 @@ defined('MOODLE_INTERNAL') || die();
  * @return bool
  */
 function assignsubmission_comments_comment_validate(stdClass $options) {
+    global $USER, $CFG, $DB;
+
+    if ($options->commentarea != 'submission_comments' &&
+            $options->commentarea != 'submission_comments_upgrade') {
+        throw new comment_exception('invalidcommentarea');
+    }
+    if (!$submission = $DB->get_record('assign_submission', array('id'=>$options->itemid))) {
+        throw new comment_exception('invalidcommentitemid');
+    }
+    $context = $options->context;
+
+    require_once($CFG->dirroot . '/mod/assign/locallib.php');
+    $assignment = new assign($context, null, null);
+
+    if ($assignment->get_instance()->id != $submission->assignment) {
+        throw new comment_exception('invalidcontext');
+    }
+    if (!has_capability('mod/assign:grade', $context)) {
+        if (!has_capability('mod/assign:submit', $context)) {
+            throw new comment_exception('nopermissiontocomment');
+        } else if ($submission->userid != $USER->id) {
+            throw new comment_exception('nopermissiontocomment');
+        }
+    }
 
     return true;
 }
@@ -42,6 +66,30 @@ function assignsubmission_comments_comment_validate(stdClass $options) {
  * @return array
  */
 function assignsubmission_comments_comment_permissions(stdClass $options) {
+    global $USER, $CFG, $DB;
+
+    if ($options->commentarea != 'submission_comments' &&
+            $options->commentarea != 'submission_comments_upgrade') {
+        throw new comment_exception('invalidcommentarea');
+    }
+    if (!$submission = $DB->get_record('assign_submission', array('id'=>$options->itemid))) {
+        throw new comment_exception('invalidcommentitemid');
+    }
+    $context = $options->context;
+
+    require_once($CFG->dirroot . '/mod/assign/locallib.php');
+    $assignment = new assign($context, null, null);
+
+    if ($assignment->get_instance()->id != $submission->assignment) {
+        throw new comment_exception('invalidcontext');
+    }
+    if (!has_capability('mod/assign:grade', $context)) {
+        if (!has_capability('mod/assign:submit', $context)) {
+            return array('post' => false, 'view' => false);
+        } else if ($submission->userid != $USER->id) {
+            return array('post' => false, 'view' => false);
+        }
+    }
 
     return array('post' => true, 'view' => true);
 }

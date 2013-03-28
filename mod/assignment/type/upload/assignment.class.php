@@ -256,8 +256,11 @@ class assignment_upload extends assignment_base {
             echo '</form>';
             echo '</div>';
         } else if (!$this->isopen()) {
-            echo $OUTPUT->heading(get_string('nomoresubmissions','assignment'), 3);
-
+            if ($this->assignment->timeavailable < time()) {
+                echo $OUTPUT->heading(get_string('closedassignment','assignment'), 3);
+            } else {
+                echo $OUTPUT->heading(get_string('futureaassignment','assignment'), 3);
+            }
         } else if ($this->drafts_tracked() and $state = $this->is_finalized($submission)) {
             if ($state == ASSIGNMENT_STATUS_SUBMITTED) {
                 echo $OUTPUT->heading(get_string('submitedformarking','assignment'), 3);
@@ -1150,7 +1153,7 @@ class assignment_upload extends assignment_base {
         require_once($CFG->libdir.'/filelib.php');
         $submissions = $this->get_submissions('','');
         if (empty($submissions)) {
-            print_error('errornosubmissions', 'assignment');
+            print_error('errornosubmissions', 'assignment', new moodle_url('/mod/assignment/submissions.php', array('id'=>$this->cm->id)));
         }
         $filesforzipping = array();
         $fs = get_file_storage();
@@ -1164,6 +1167,11 @@ class assignment_upload extends assignment_base {
         }
         $filename = str_replace(' ', '_', clean_filename($this->course->shortname.'-'.$this->assignment->name.'-'.$groupname.$this->assignment->id.".zip")); //name of new zip file.
         foreach ($submissions as $submission) {
+            // If assignment is open and submission is not finalized and marking button enabled then don't add it to zip.
+            $submissionstatus = $this->is_finalized($submission);
+            if ($this->isopen() && empty($submissionstatus) && !empty($this->assignment->var4)) {
+                continue;
+            }
             $a_userid = $submission->userid; //get userid
             if ((groups_is_member($groupid,$a_userid)or !$groupmode or !$groupid)) {
                 $a_assignid = $submission->assignment; //get name of this assignment for use in the file names.
@@ -1180,6 +1188,12 @@ class assignment_upload extends assignment_base {
                 }
             }
         } // end of foreach loop
+
+        // Throw error if no files are added.
+        if (empty($filesforzipping)) {
+            print_error('errornosubmissions', 'assignment', new moodle_url('/mod/assignment/submissions.php', array('id'=>$this->cm->id)));
+        }
+
         if ($zipfile = assignment_pack_files($filesforzipping)) {
             send_temp_file($zipfile, $filename); //send file and delete after sending.
         }
@@ -1194,7 +1208,13 @@ class assignment_upload extends assignment_base {
      * @return bool                 Indicates if the submission was found to be complete
      */
     public function is_submitted_with_required_data($submission) {
-        return ($submission->timemodified AND $submission->data2);
+        if ($this->drafts_tracked()) {
+            $submitted = $submission->timemodified > 0 &&
+                         $submission->data2 == ASSIGNMENT_STATUS_SUBMITTED;
+        } else {
+            $submitted = $submission->numfiles > 0;
+        }
+        return $submitted;
     }
 }
 

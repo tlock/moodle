@@ -272,9 +272,10 @@ class course_enrolment_manager {
      * @param bool $searchanywhere
      * @param int $page Defaults to 0
      * @param int $perpage Defaults to 25
+     * @param int $addedenrollment Defaults to 0
      * @return array Array(totalusers => int, users => array)
      */
-    public function get_potential_users($enrolid, $search='', $searchanywhere=false, $page=0, $perpage=25) {
+    public function get_potential_users($enrolid, $search='', $searchanywhere=false, $page=0, $perpage=25, $addedenrollment=0) {
         global $DB, $CFG;
 
         // Add some additional sensible conditions
@@ -312,7 +313,7 @@ class course_enrolment_manager {
         $order = ' ORDER BY u.lastname ASC, u.firstname ASC';
         $params['enrolid'] = $enrolid;
         $totalusers = $DB->count_records_sql($countfields . $sql, $params);
-        $availableusers = $DB->get_records_sql($fields . $sql . $order, $params, $page*$perpage, $perpage);
+        $availableusers = $DB->get_records_sql($fields . $sql . $order, $params, ($page*$perpage) - $addedenrollment, $perpage);
         return array('totalusers'=>$totalusers, 'users'=>$availableusers);
     }
 
@@ -766,13 +767,15 @@ class course_enrolment_manager {
 
         $users = array();
         foreach ($userroles as $userrole) {
+            $contextid = $userrole->contextid;
+            unset($userrole->contextid); // This would collide with user avatar.
             if (!array_key_exists($userrole->id, $users)) {
                 $users[$userrole->id] = $this->prepare_user_for_display($userrole, $extrafields, $now);
             }
             $a = new stdClass;
             $a->role = $roles[$userrole->roleid]->localname;
             $changeable = ($userrole->component == '');
-            if ($userrole->contextid == $this->context->id) {
+            if ($contextid == $this->context->id) {
                 $roletext = get_string('rolefromthiscourse', 'enrol', $a);
             } else {
                 $changeable = false;
@@ -790,7 +793,9 @@ class course_enrolment_manager {
                         break;
                 }
             }
-            $users[$userrole->id]['roles'] = array();
+            if (!isset($users[$userrole->id]['roles'])) {
+                $users[$userrole->id]['roles'] = array();
+            }
             $users[$userrole->id]['roles'][$userrole->roleid] = array(
                 'text' => $roletext,
                 'unchangeable' => !$changeable

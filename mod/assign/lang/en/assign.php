@@ -65,6 +65,8 @@ $string['batchoperationlock'] = 'lock submissions';
 $string['batchoperationunlock'] = 'unlock submissions';
 $string['batchoperationreverttodraft'] = 'revert submissions to draft';
 $string['changegradewarning'] = 'This assignment has graded submissions and changing the grade will not automatically re-calculate existing submission grades. You must re-grade all existing submissions, if you wish to change the grade.';
+$string['choosegradingaction'] = 'Grading action';
+$string['chooseoperation'] = 'Choose operation';
 $string['comment'] = 'Comment';
 $string['conversionexception'] = 'Could not convert assignment. Exception was: {$a}.';
 $string['configshowrecentsubmissions'] = 'Everyone can see notifications of submissions in recent activity reports.';
@@ -78,6 +80,7 @@ $string['couldnotfindassignmenttoupgrade'] = 'Could not find old assignment inst
 $string['currentgrade'] = 'Current grade in gradebook';
 $string['defaultplugins'] = 'Default assignment settings';
 $string['defaultplugins_help'] = 'These settings define the defaults for all new assignments.';
+$string['deleteallsubmissions'] = 'Delete all submissions';
 $string['deletepluginareyousure'] = 'Delete assignment plugin {$a}: are you sure?';
 $string['deletepluginareyousuremessage'] = 'You are about to completely delete the assignment plugin {$a}. This will completely delete everything in the database associated with this assignment plugin. Are you SURE you want to continue?';
 $string['deletingplugin'] = 'Deleting plugin {$a}.';
@@ -87,6 +90,7 @@ $string['download all submissions'] = 'Download all submissions in a zip file.';
 $string['duedate'] = 'Due date';
 $string['duedate_help'] = 'This is when the assignment is due. If late submissions are allowed, any assignments submitted after this date are marked as late.';
 $string['duedateno'] = 'No due date';
+$string['submissionempty'] = 'Nothing was submitted';
 $string['duedatereached'] = 'The due date for this assignment has now passed';
 $string['duedatevalidation'] = 'Due date must be after the allow submissions from date.';
 $string['editsubmission'] = 'Edit my submission';
@@ -101,6 +105,7 @@ $string['gradersubmissionupdatedhtml'] = '{$a->username} has updated their assig
 for <i>\'{$a->assignment}\'  at {$a->timeupdated}</i><br /><br />
 It is <a href="{$a->url}">available on the web site</a>.';
 $string['gradersubmissionupdatedsmall'] = '{$a->username} has updated their submission for assignment {$a->assignment}.';
+$string['gradeuser'] = 'Grade {$a}';
 $string['enabled'] = 'Enabled';
 $string['errornosubmissions'] = 'There are no submissions to download';
 $string['errorquickgradingvsadvancedgrading'] = 'The grades were not saved because this assignment is currently using advanced grading';
@@ -154,7 +159,7 @@ $string['messageprovider:assign_notification'] = 'Assignment notifications';
 $string['modulename'] = 'Assignment';
 $string['modulename_help'] = 'The assignment activity module enables a teacher to communicate tasks, collect work and provide grades and feedback.
 
-Students can submit any digital content (files), such as word-processed documents, spreadsheets, images, or audio and video clips. Alternatively, or in addition, the assignment may require students to type text directly into the text editor. An assignment can also be used to remind students of \'real-world\' assignments they need to complete offline, such as art work, and thus not require any digital content.
+Students can submit any digital content (files), such as word-processed documents, spreadsheets, images, or audio and video clips. Alternatively, or in addition, the assignment may require students to type text directly into the text editor. An assignment can also be used to remind students of \'real-world\' assignments they need to complete offline, such as art work, and thus not require any digital content. Students can submit work individually or as a member of a group.
 
 When reviewing assignments, teachers can leave feedback comments and upload files, such as marked-up student submissions, documents with comments or spoken audio feedback. Assignments can be graded using a numerical or custom scale or an advanced grading method such as a rubric. Final grades are recorded in the gradebook.';
 $string['modulename_link'] = 'mod/assignment/view';

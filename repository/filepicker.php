@@ -141,12 +141,12 @@ case 'search':
             if (isset($item['thumbnail_width'])) {
                 $style .= 'max-width:'.$item['thumbnail_width'].'px;';
             }
-            echo html_writer::empty_tag('img', array('src' => $item['thumbnail'], 'style' => $style));
+            echo html_writer::empty_tag('img', array('src' => $item['thumbnail'], 'alt' => '', 'style' => $style));
             echo '</td><td>';
             if (!empty($item['url'])) {
-                echo html_writer::link($item['url'], $item['title'], array('target'=>'_blank'));
+                echo html_writer::link($item['url'], s($item['title']), array('target'=>'_blank'));
             } else {
-                echo $item['title'];
+                echo s($item['title']);
             }
             echo '</td>';
             echo '<td>';
@@ -203,7 +203,7 @@ case 'sign':
                         'draftpath'=>$draftpath,
                         'savepath'=>$savepath
                         ));
-                    echo '<strong>' . html_writer::link($pathurl, $p['name']) . '</strong>';
+                    echo '<strong>' . html_writer::link($pathurl, s($p['name'])) . '</strong>';
                     echo '<span> / </span>';
                 }
             }
@@ -240,9 +240,9 @@ case 'sign':
                 echo html_writer::empty_tag('img', array('src' => $item['thumbnail'], 'style' => $style));
                 echo '</td><td>';
                 if (!empty($item['url'])) {
-                    echo html_writer::link($item['url'], $item['title'], array('target'=>'_blank'));
+                    echo html_writer::link($item['url'], s($item['title']), array('target'=>'_blank'));
                 } else {
-                    echo $item['title'];
+                    echo s($item['title']);
                 }
                 echo '</td>';
                 echo '<td>';
@@ -282,6 +282,11 @@ case 'download':
     if (!$repo->file_is_accessible($fileurl)) {
         print_error('storedfilecannotread');
     }
+    $record = new stdClass();
+    $reference = $repo->get_file_reference($fileurl);
+
+    $sourcefield = $repo->get_file_source_info($fileurl);
+    $record->source = repository::build_source_field($sourcefield);
 
     // If file is already a reference, set $fileurl = file source, $repo = file repository
     // note that in this case user may not have permission to access the source file directly
@@ -289,13 +294,14 @@ case 'download':
     if ($repo->has_moodle_files()) {
         $file = repository::get_moodle_file($fileurl);
         if ($file && $file->is_external_file()) {
-            $fileurl = $file->get_reference();
+            $sourcefield = $file->get_source(); // remember the original source
+            $record->source = $repo::build_source_field($sourcefield);
+            $reference = $file->get_reference();
             $repo_id = $file->get_repository_id();
             $repo = repository::get_repository_by_id($repo_id, $contextid, $repooptions);
         }
     }
 
-    $record = new stdClass();
     $record->filepath = $savepath;
     $record->filename = $filename;
     $record->component = 'user';
@@ -311,14 +317,11 @@ case 'download':
     $record->contextid = $user_context->id;
     $record->sortorder = 0;
 
-    $sourcefield = $repo->get_file_source_info($fileurl);
-    $record->source = repository::build_source_field($sourcefield);
-
     if ($repo->has_moodle_files()) {
-        $fileinfo = $repo->copy_to_area($fileurl, $record, $maxbytes);
+        $fileinfo = $repo->copy_to_area($reference, $record, $maxbytes);
         redirect($home_url, get_string('downloadsucc', 'repository'));
     } else {
-        $thefile = $repo->get_file($fileurl, $filename);
+        $thefile = $repo->get_file($reference, $filename);
         if (!empty($thefile['path'])) {
             $filesize = filesize($thefile['path']);
             if ($maxbytes != -1 && $filesize>$maxbytes) {
@@ -384,8 +387,8 @@ case 'plugins':
         $aurl->params(array('savepath'=>$savepath, 'action' => 'list', 'repo_id' => $info->id, 'draftpath'=>$draftpath));
 
         echo '<li>';
-        echo '<img src="'.$info->icon.'" alt="'.$info->name.'" width="16" height="16" /> ';
-        echo html_writer::link($aurl, $info->name);
+        echo html_writer::empty_tag('img', array('src'=>$info->icon, 'alt'=>$info->name, 'class'=>'icon icon-pre'));
+        echo html_writer::link($aurl, s($info->name));
         echo '</li>';
     }
     echo '</ul>';

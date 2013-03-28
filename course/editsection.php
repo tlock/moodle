@@ -57,7 +57,7 @@ if (!empty($CFG->enableavailability)) {
 }
 
 $mform = new editsection_form($PAGE->url, array('course' => $course, 'editoroptions' => $editoroptions,
-        'cs' => $section, 'showavailability' => $section->showavailability));
+        'cs' => $section));
 $mform->set_data($section); // set current value
 
 $returnurl = course_get_url($course, $sectionreturn);
@@ -78,7 +78,7 @@ if ($mform->is_cancelled()){
     if (!empty($CFG->enableavailability)) {
         $section->availablefrom = $data->availablefrom;
         $section->availableuntil = $data->availableuntil;
-        if (!empty($data->groupingid)) {
+        if (isset($data->groupingid)) {
             $section->groupingid = $data->groupingid;
         }
         $section->showavailability = $data->showavailability;

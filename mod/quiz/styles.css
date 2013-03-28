@@ -11,6 +11,8 @@
 
 #page-mod-quiz-attempt .submitbtns,
 #page-mod-quiz-review .submitbtns {clear: left; text-align: left; padding-top: 1.5em;}
+#page-mod-quiz-attempt.dir-rtl .submitbtns,
+#page-mod-quiz-review.dir-rtl .submitbtns {text-align: right;}
 
 body.jsenabled .questionflagcheckbox {display: none;}
 
@@ -27,6 +29,7 @@ body.jsenabled .questionflagcheckbox {display: none;}
 .path-mod-quiz #user-picture img {width: auto;height: auto;float: left;}
 
 .path-mod-quiz .qnbutton {display: block; position: relative; float: left; width: 1.5em; height: 1.5em; overflow: hidden; margin: 0.3em 0.3em 0.3em 0; padding: 0; border: 1px solid #bbb; background: #ddd; text-align: center; vertical-align: middle;line-height: 1.5em !important; font-weight: bold; text-decoration: none;}
+.path-mod-quiz.dir-rtl  .qnbutton {float: right;}
 
 .path-mod-quiz .qnbutton .trafficlight,
 .path-mod-quiz .qnbutton .thispageholder {display: block; position: absolute; top: 0; bottom: 0; left: 0; right: 0;}
@@ -113,6 +116,7 @@ table.quizattemptsummary .noreviewmessage {color: gray;}
 #page-mod-quiz-view .generalbox#feedback {width:70%;margin-left:auto;margin-right:auto;padding-bottom:15px;}
 #page-mod-quiz-view .generalbox#feedback h2 {margin: 0;}
 #page-mod-quiz-view .generalbox#feedback h3 {text-align: left;}
+#page-mod-quiz-view.dir-rtl .generalbox#feedback h3 {text-align: center;}
 #page-mod-quiz-view .generalbox#feedback .overriddennotice {text-align: center;font-size: 0.7em;}
 .quizstartbuttondiv.quizsecuremoderequired input { display: none; }
 .jsenabled .quizstartbuttondiv.quizsecuremoderequired input { display: inline; }
@@ -135,6 +139,7 @@ table.quizattemptsummary .noreviewmessage {color: gray;}
 table.quizreviewsummary {width: 100%;}
 table.quizreviewsummary th.cell {padding: 1px 0.5em 1px 1em;font-weight: bold;text-align: right;width: 10em;background: #f0f0f0;}
 table.quizreviewsummary td.cell {padding: 1px 1em 1px 0.5em;text-align: left;background: #fafafa;}
+.dir-rtl table.quizreviewsummary td.cell {text-align: right;}
 
 /** Mod quiz make comment or override grade popup. **/
 #page-mod-quiz-comment .mform {width: 100%;}
@@ -178,6 +183,7 @@ table.quizreviewsummary td.cell {padding: 1px 1em 1px 0.5em;text-align: left;bac
 #page-mod-quiz-edit h2.main{display:inline;padding-right:1em;clear:left;}
 
 #categoryquestions .r1 {background: #e4e4e4;}
+#categoryquestions .r1.highlight {background-color:#AAFFAA;}
 #categoryquestions .header {text-align: center;padding: 0 2px;border: 0 none;}
 #categoryquestions th.modifiername .sorters,
 #categoryquestions th.creatorname .sorters {font-weight: normal;font-size: 0.8em;}
@@ -246,6 +252,7 @@ table#categoryquestions {width: 100%;overflow: hidden;table-layout: fixed;}
 #page-mod-quiz-edit div.question div.content .singlequestion .questiontext{display:inline-block;}
 #page-mod-quiz-edit div.question div.content .singlequestion .questionpreview{background-color:#eee;}
 #page-mod-quiz-edit div.question div.content .questiontype{display:block;clear:left;float:left;}
+#page-mod-quiz-edit.dir-rtl div.question div.content .questiontype {clear: right;float: right;}
 #page-mod-quiz-edit div.question div.content .questionpreview {display:block;float:left;margin-left:0.3em;padding-left:0.2em;padding-right:0.2em;}
 #page-mod-quiz-edit div.question div.content .questionpreview a{background-color:#eee;}
 #page-mod-quiz-edit div.question div.content div.quiz_randomquestion .questionpreview{display:inline;float:none;}
@@ -312,9 +319,14 @@ but in terms of usability, as testing showed,
 http://docs.moodle.org/dev/Quiz_UI_redesign/usability_testing_of_August_2008/Issues#Question_bank_.2F_question_adding_controls_visibility
 it must be ensured that the question
 bank window's title is prominent enough*/
-#page-mod-quiz-edit .questionbankwindow div.header {background-color:#009;color:#fff;background-image:none;padding-top:0.2em;font-weight:bold;}
-#page-mod-quiz-edit .questionbankwindow div.header a{text-decoration:underline;color:#FFF;}
+#page-mod-quiz-edit .questionbankwindow.block div.header {background-color:#009;background-image:none;padding-top:0.2em;font-weight:bold;border:0 none;}
+#page-mod-quiz-edit .questionbankwindow.block div.header div.title h2 {color:#FFF;text-align: center;}
 #page-mod-quiz-edit .collapsed .container{display: none;}
+
+#page-mod-quiz-edit .questionbankwindow a#showbankcmd,
+#page-mod-quiz-edit .questionbankwindow a#hidebankcmd {color: #FFF;text-decoration:underline;}
+#page-mod-quiz-edit .questionbankwindow a#showbankcmd:hover,
+#page-mod-quiz-edit .questionbankwindow a#hidebankcmd:hover {color:#009;background-color:#fff;text-decoration:none;}
 #page-mod-quiz-edit .questionbankwindow #showbankcmd{display:none;}
 #page-mod-quiz-edit .collapsed #showbankcmd{display:inline;}
 #page-mod-quiz-edit .questionbankwindow #hidebankcmd{display:inline;}
@@ -408,3 +420,6 @@ bank window's title is prominent enough*/
 #page-mod-quiz-edit.dir-rtl div.quizcontents {clear: right;float: right;}
 #page-mod-quiz-edit.dir-rtl .questionbankwindow.block {float: left;}
 #page-question-edit.dir-rtl td.creatorname, #page-question-edit.dir-rtl td.modifiername {text-align: center;}
+.path-question.dir-rtl input[name="maxmark"],
+.path-question-type.dir-rtl input[name="defaultmark"],
+#page-mod-quiz-edit.dir-rtl div.points input {direction: ltr;text-align: left;}

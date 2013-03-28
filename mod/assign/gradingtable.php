@@ -88,7 +88,9 @@ class assign_grading_table extends table_sql implements renderable {
         $params['assignmentid1'] = (int)$this->assignment->get_instance()->id;
         $params['assignmentid2'] = (int)$this->assignment->get_instance()->id;
 
-        $fields = user_picture::fields('u') . ', u.id as userid, u.firstname as firstname, u.lastname as lastname, ';
+        $extrauserfields = get_extra_user_fields($this->assignment->get_context());
+
+        $fields = user_picture::fields('u', $extrauserfields) . ', u.id as userid, ';
         $fields .= 's.status as status, s.id as submissionid, s.timecreated as firstsubmission, s.timemodified as timesubmitted, ';
         $fields .= 'g.id as gradeid, g.grade as grade, g.timemodified as timemarked, g.timecreated as firstmarked, g.mailed as mailed, g.locked as locked';
         $from = '{user} u LEFT JOIN {assign_submission} s ON u.id = s.userid AND s.assignment = :assignmentid1' .
@@ -101,16 +103,22 @@ class assign_grading_table extends table_sql implements renderable {
         $where = 'u.id ' . $userwhere;
         $params = array_merge($params, $userparams);
 
-        if ($filter == ASSIGN_FILTER_SUBMITTED) {
-            $where .= ' AND s.timecreated > 0 ';
-        }
-        if ($filter == ASSIGN_FILTER_REQUIRE_GRADING) {
-            $where .= ' AND (s.timemodified > g.timemodified OR (s.timemodified IS NOT NULL AND g.timemodified IS NULL))';
-        }
-        if (strpos($filter, ASSIGN_FILTER_SINGLE_USER) === 0) {
-            $userfilter = (int) array_pop(explode('=', $filter));
-            $where .= ' AND (u.id = :userid)';
-            $params['userid'] = $userfilter;
+        // The filters do not make sense when there are no submissions, so do not apply them.
+        if ($this->assignment->is_any_submission_plugin_enabled()) {
+            if ($filter == ASSIGN_FILTER_SUBMITTED) {
+                $where .= ' AND s.timecreated > 0 ';
+            }
+            if ($filter == ASSIGN_FILTER_REQUIRE_GRADING) {
+                $where .= ' AND (s.timemodified IS NOT NULL AND
+                                 s.status = :submitted AND
+                                 (s.timemodified > g.timemodified OR g.timemodified IS NULL))';
+                $params['submitted'] = ASSIGN_SUBMISSION_STATUS_SUBMITTED;
+            }
+            if (strpos($filter, ASSIGN_FILTER_SINGLE_USER) === 0) {
+                $userfilter = (int) array_pop(explode('=', $filter));
+                $where .= ' AND (u.id = :userid)';
+                $params['userid'] = $userfilter;
+            }
         }
         $this->set_sql($fields, $from, $where, $params);
 
@@ -118,13 +126,9 @@ class assign_grading_table extends table_sql implements renderable {
         $headers = array();
 
         // Select
-        $columns[] = 'select';
-        $headers[] = get_string('select') . '<div class="selectall"><input type="checkbox" name="selectall" title="' . get_string('selectall') . '"/></div>';
-
-        // Edit links
         if (!$this->is_downloading()) {
-            $columns[] = 'edit';
-            $headers[] = get_string('edit');
+            $columns[] = 'select';
+            $headers[] = get_string('select') . '<div class="selectall"><input type="checkbox" name="selectall" title="' . get_string('selectall') . '"/></div>';
         }
 
         // User picture
@@ -134,6 +138,10 @@ class assign_grading_table extends table_sql implements renderable {
         // Fullname
         $columns[] = 'fullname';
         $headers[] = get_string('fullname');
+        foreach ($extrauserfields as $extrafield) {
+            $columns[] = $extrafield;
+            $headers[] = get_user_field_name($extrafield);
+        }
 
         // Submission status
         if ($assignment->is_any_submission_plugin_enabled()) {
@@ -145,6 +153,11 @@ class assign_grading_table extends table_sql implements renderable {
         // Grade
         $columns[] = 'grade';
         $headers[] = get_string('grade');
+        if (!$this->is_downloading()) {
+            // We have to call this column userid so we can use userid as a default sortable column.
+            $columns[] = 'userid';
+            $headers[] = get_string('edit');
+        }
 
         // Submission plugins
         if ($assignment->is_any_submission_plugin_enabled()) {
@@ -187,8 +200,13 @@ class assign_grading_table extends table_sql implements renderable {
         // set the columns
         $this->define_columns($columns);
         $this->define_headers($headers);
+        foreach ($extrauserfields as $extrafield) {
+             $this->column_class($extrafield, $extrafield);
+        }
+        // We require at least one unique column for the sort.
+        $this->sortable(true, 'userid');
         $this->no_sorting('finalgrade');
-        $this->no_sorting('edit');
+        $this->no_sorting('userid');
         $this->no_sorting('select');
         $this->no_sorting('outcomes');
 
@@ -203,6 +221,22 @@ class assign_grading_table extends table_sql implements renderable {
             }
         }
 
+    }
+
+    /**
+     * Before adding each row to the table make sure rownum is incremented
+     *
+     * @param array $row row of data from db used to make one row of the table.
+     * @return array one row for the table
+     */
+    function format_row($row) {
+        if ($this->rownum < 0) {
+            $this->rownum = $this->currpage * $this->pagesize;
+        } else {
+            $this->rownum += 1;
+        }
+
+        return parent::format_row($row);
     }
 
     /**
@@ -274,7 +308,7 @@ class assign_grading_table extends table_sql implements renderable {
 
 
     /**
-     * Format a user picture for display (and update rownum as a sideeffect)
+     * Format a user picture for display
      *
      * @param stdClass $row
      * @return string
@@ -335,7 +369,8 @@ class assign_grading_table extends table_sql implements renderable {
         $grade = '';
 
         if (!$this->is_downloading()) {
-            $icon = $this->output->pix_icon('gradefeedback', get_string('grade'), 'mod_assign');
+            $name = fullname($row);
+            $icon = $this->output->pix_icon('gradefeedback', get_string('gradeuser', 'assign', $name), 'mod_assign');
             $url = new moodle_url('/mod/assign/view.php',
                                             array('id' => $this->assignment->get_course_module()->id,
                                                   'rownum'=>$this->rownum,'action'=>'grade'));
@@ -430,13 +465,8 @@ class assign_grading_table extends table_sql implements renderable {
      * @param stdClass $row
      * @return string
      */
-    function col_edit(stdClass $row) {
+    function col_userid(stdClass $row) {
         $edit = '';
-        if ($this->rownum < 0) {
-            $this->rownum = $this->currpage * $this->pagesize;
-        } else {
-            $this->rownum += 1;
-        }
 
         $actions = array();
 
@@ -589,7 +619,7 @@ class assign_grading_table extends table_sql implements renderable {
             }
             return '';
         }
-        return NULL;
+        return $row->$colname;
     }
 
     /**

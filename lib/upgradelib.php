@@ -821,8 +821,7 @@ function upgrade_plugins_blocks($startcallback, $endcallback, $verbose) {
 
             if ($currblock->cron != $block->cron) {
                 // update cron flag if needed
-                $currblock->cron = $block->cron;
-                $DB->update_record('block', $currblock);
+                $DB->set_field('block', 'cron', $block->cron, array('id' => $currblock->id));
             }
 
             // Upgrade various components
@@ -964,7 +963,7 @@ function external_update_descriptions($component) {
             $dbfunction->classpath = $function['classpath'];
             $update = true;
         }
-        $functioncapabilities = key_exists('capabilities', $function)?$function['capabilities']:'';
+        $functioncapabilities = array_key_exists('capabilities', $function)?$function['capabilities']:'';
         if ($dbfunction->capabilities != $functioncapabilities) {
             $dbfunction->capabilities = $functioncapabilities;
             $update = true;
@@ -980,7 +979,7 @@ function external_update_descriptions($component) {
         $dbfunction->methodname = $function['methodname'];
         $dbfunction->classpath  = empty($function['classpath']) ? null : $function['classpath'];
         $dbfunction->component  = $component;
-        $dbfunction->capabilities = key_exists('capabilities', $function)?$function['capabilities']:'';
+        $dbfunction->capabilities = array_key_exists('capabilities', $function)?$function['capabilities']:'';
         $dbfunction->id = $DB->insert_record('external_functions', $dbfunction);
     }
     unset($functions);

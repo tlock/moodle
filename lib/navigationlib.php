@@ -187,8 +187,6 @@ class navigation_node implements renderable {
         if ($this->text === null) {
             throw new coding_exception('You must set the text for the node when you create it.');
         }
-        // Default the title to the text
-        $this->title = $this->text;
         // Instantiate a new navigation node collection for this nodes children
         $this->children = new navigation_node_collection();
     }
@@ -664,6 +662,20 @@ class navigation_node implements renderable {
             $this->parent->make_inactive();
         }
     }
+
+    /**
+     * Hides the node and any children it has.
+     *
+     * @since 2.3.5
+     */
+    public function hide() {
+        $this->display = false;
+        if ($this->has_children()) {
+            foreach ($this->children as $child) {
+                $child->hide();
+            }
+        }
+    }
 }
 
 /**
@@ -1131,7 +1143,13 @@ class global_navigation extends navigation_node {
                     $addedcategories[$category->id] = $categoryparent->add($category->name, $url, self::TYPE_CATEGORY, $category->name, $category->id);
 
                     if (!$category->visible) {
-                        if (!has_capability('moodle/category:viewhiddencategories', get_context_instance(CONTEXT_COURSECAT, $category->parent))) {
+                        // Let's decide the context where viewhidden cap checks will happen.
+                        if ($category->parent == '0') {
+                            $contexttocheck = context_system::instance();
+                        } else {
+                            $contexttocheck = context_coursecat::instance($category->parent);
+                        }
+                        if (!has_capability('moodle/category:viewhiddencategories', $contexttocheck)) {
                             $addedcategories[$category->id]->display = false;
                         } else {
                             $addedcategories[$category->id]->hidden = true;
@@ -1191,7 +1209,7 @@ class global_navigation extends navigation_node {
                 break;
             case CONTEXT_COURSECAT :
                 // This has already been loaded we just need to map the variable
-                if ($showcategories) {
+                if ($this->show_categories()) {
                     $this->load_all_categories($this->page->context->instanceid, true);
                 }
                 break;
@@ -2020,9 +2038,7 @@ class global_navigation extends navigation_node {
                     // pre 2.3 style format url
                     $url = $urlfunction($course->id, $section->section);
                 }else{
-                    if ($course->coursedisplay == COURSE_DISPLAY_MULTIPAGE) {
-                        $url = course_get_url($course, $section->section);
-                    }
+                    $url = course_get_url($course, $section->section, array('navigation' => true));
                 }
                 $sectionnode = $coursenode->add($sectionname, $url, navigation_node::TYPE_SECTION, null, $section->id);
                 $sectionnode->nodetype = navigation_node::NODETYPE_BRANCH;
@@ -2319,8 +2335,8 @@ class global_navigation extends navigation_node {
 
         if (!empty($CFG->messaging)) {
             $messageargs = null;
-            if ($USER->id!=$user->id) {
-                $messageargs = array('id'=>$user->id);
+            if ($USER->id != $user->id) {
+                $messageargs = array('user1' => $user->id);
             }
             $url = new moodle_url('/message/index.php',$messageargs);
             $usernode->add(get_string('messages', 'message'), $url, self::TYPE_SETTING, null, 'messages');
@@ -2586,16 +2602,19 @@ class global_navigation extends navigation_node {
             $participants = $coursenode->add(get_string('participants'), new moodle_url('/user/index.php?id='.$course->id), self::TYPE_CONTAINER, get_string('participants'), 'participants');
             $currentgroup = groups_get_course_group($course, true);
             if ($course->id == $SITE->id) {
+                $filtervar = 'courseid';
                 $filterselect = '';
             } else if ($course->id && !$currentgroup) {
+                $filtervar = 'courseid';
                 $filterselect = $course->id;
             } else {
+                $filtervar = 'groupid';
                 $filterselect = $currentgroup;
             }
             $filterselect = clean_param($filterselect, PARAM_INT);
             if (($CFG->bloglevel == BLOG_GLOBAL_LEVEL or ($CFG->bloglevel == BLOG_SITE_LEVEL and (isloggedin() and !isguestuser())))
                and has_capability('moodle/blog:view', get_context_instance(CONTEXT_SYSTEM))) {
-                $blogsurls = new moodle_url('/blog/index.php', array('courseid' => $filterselect));
+                $blogsurls = new moodle_url('/blog/index.php', array($filtervar => $filterselect));
                 $participants->add(get_string('blogscourse','blog'), $blogsurls->out());
             }
             if (!empty($CFG->enablenotes) && (has_capability('moodle/notes:manage', $this->page->context) || has_capability('moodle/notes:view', $this->page->context))) {
@@ -2726,18 +2745,18 @@ class global_navigation extends navigation_node {
     public function set_expansion_limit($type) {
         global $SITE;
         $nodes = $this->find_all_of_type($type);
-        foreach ($nodes as &$node) {
+        foreach ($nodes as $node) {
             // We need to generate the full site node
             if ($type == self::TYPE_COURSE && $node->key == $SITE->id) {
                 continue;
             }
-            foreach ($node->children as &$child) {
+            foreach ($node->children as $child) {
                 // We still want to show course reports and participants containers
                 // or there will be navigation missing.
                 if ($type == self::TYPE_COURSE && $child->type === self::TYPE_CONTAINER) {
                     continue;
                 }
-                $child->display = false;
+                $child->hide();
             }
         }
         return true;
@@ -3511,9 +3530,9 @@ class settings_navigation extends navigation_node {
                         continue;
                     }
                     if ($type->modclass == MOD_CLASS_RESOURCE) {
-                        $resources[html_entity_decode($type->type)] = $type->typestr;
+                        $resources[html_entity_decode($type->type, ENT_QUOTES, 'UTF-8')] = $type->typestr;
                     } else {
-                        $activities[html_entity_decode($type->type)] = $type->typestr;
+                        $activities[html_entity_decode($type->type, ENT_QUOTES, 'UTF-8')] = $type->typestr;
                     }
                 }
             } else {
@@ -3557,7 +3576,7 @@ class settings_navigation extends navigation_node {
                 $baseurl->param('sesskey', sesskey());
             } else {
                 // Edit on the main course page.
-                $baseurl = new moodle_url('/course/view.php', array('id'=>$course->id, 'sesskey'=>sesskey()));
+                $baseurl = new moodle_url('/course/view.php', array('id'=>$course->id, 'return'=>$this->page->url->out_as_local_url(false), 'sesskey'=>sesskey()));
             }
 
             $editurl = clone($baseurl);
@@ -4190,7 +4209,7 @@ class settings_navigation extends navigation_node {
 
         // Messaging
         if (($currentuser && has_capability('moodle/user:editownmessageprofile', $systemcontext)) || (!isguestuser($user) && has_capability('moodle/user:editmessageprofile', $usercontext) && !is_primary_admin($user->id))) {
-            $url = new moodle_url('/message/edit.php', array('id'=>$user->id, 'course'=>$course->id));
+            $url = new moodle_url('/message/edit.php', array('id'=>$user->id));
             $usersetting->add(get_string('editmymessage', 'message'), $url, self::TYPE_SETTING);
         }
 
@@ -4250,7 +4269,7 @@ class settings_navigation extends navigation_node {
     protected function load_category_settings() {
         global $CFG;
 
-        $categorynode = $this->add(print_context_name($this->context));
+        $categorynode = $this->add(print_context_name($this->context), null, null, null, 'categorysettings');
         $categorynode->force_open();
 
         if (has_any_capability(array('moodle/category:manage', 'moodle/course:create'), $this->context)) {
@@ -4487,7 +4506,7 @@ class navigation_json {
         }
 
         if ($child->forcetitle || $child->title !== $child->text) {
-            $attributes['title'] = htmlentities($child->title);
+            $attributes['title'] = htmlentities($child->title, ENT_QUOTES, 'UTF-8');
         }
         if (array_key_exists($child->key.':'.$child->type, $this->expandable)) {
             $attributes['expandable'] = $child->key;

@@ -43,7 +43,7 @@ class enrol_database_plugin extends enrol_plugin {
         if (!enrol_is_enabled('database')) {
             return true;
         }
-        if (!$this->get_config('dbtype') or !$this->get_config('dbhost') or !$this->get_config('remoteenroltable') or !$this->get_config('remotecoursefield') or !$this->get_config('remoteuserfield')) {
+        if (!$this->get_config('dbtype') or !$this->get_config('remoteenroltable') or !$this->get_config('remotecoursefield') or !$this->get_config('remoteuserfield')) {
             return true;
         }
 
@@ -99,7 +99,7 @@ class enrol_database_plugin extends enrol_plugin {
         global $CFG, $DB;
 
         // we do not create courses here intentionally because it requires full sync and is slow
-        if (!$this->get_config('dbtype') or !$this->get_config('dbhost') or !$this->get_config('remoteenroltable') or !$this->get_config('remotecoursefield') or !$this->get_config('remoteuserfield')) {
+        if (!$this->get_config('dbtype') or !$this->get_config('remoteenroltable') or !$this->get_config('remotecoursefield') or !$this->get_config('remoteuserfield')) {
             return;
         }
 
@@ -288,7 +288,7 @@ class enrol_database_plugin extends enrol_plugin {
         global $CFG, $DB;
 
         // we do not create courses here intentionally because it requires full sync and is slow
-        if (!$this->get_config('dbtype') or !$this->get_config('dbhost') or !$this->get_config('remoteenroltable') or !$this->get_config('remotecoursefield') or !$this->get_config('remoteuserfield')) {
+        if (!$this->get_config('dbtype') or !$this->get_config('remoteenroltable') or !$this->get_config('remotecoursefield') or !$this->get_config('remoteuserfield')) {
             if ($verbose) {
                 mtrace('User enrolment synchronisation skipped.');
             }
@@ -481,9 +481,8 @@ class enrol_database_plugin extends enrol_plugin {
                 }
                 $rs->Close();
             } else {
-                mtrace('Error while communicating with external enrolment database');
-                $extdb->Close();
-                return;
+                mtrace("  error: skipping course '$course->mapping' - could not match with external database");
+                continue;
             }
             unset($user_mapping);
 
@@ -594,7 +593,7 @@ class enrol_database_plugin extends enrol_plugin {
         global $CFG, $DB;
 
         // make sure we sync either enrolments or courses
-        if (!$this->get_config('dbtype') or !$this->get_config('dbhost') or !$this->get_config('newcoursetable') or !$this->get_config('newcoursefullname') or !$this->get_config('newcourseshortname')) {
+        if (!$this->get_config('dbtype') or !$this->get_config('newcoursetable') or !$this->get_config('newcoursefullname') or !$this->get_config('newcourseshortname')) {
             if ($verbose) {
                 mtrace('Course synchronisation skipped.');
             }
@@ -630,7 +629,7 @@ class enrol_database_plugin extends enrol_plugin {
         if ($idnumber) {
             $sqlfields[] = $idnumber;
         }
-        $sql = $this->db_get_sql($table, array(), $sqlfields);
+        $sql = $this->db_get_sql($table, array(), $sqlfields, true);
         $createcourses = array();
         if ($rs = $extdb->Execute($sql)) {
             if (!$rs->EOF) {

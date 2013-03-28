@@ -445,6 +445,7 @@ M.course_dndupload = {
             a: document.createElement('a'),
             icon: document.createElement('img'),
             namespan: document.createElement('span'),
+            groupingspan: document.createElement('span'),
             progressouter: document.createElement('span'),
             progress: document.createElement('span')
         };
@@ -468,6 +469,9 @@ M.course_dndupload = {
         resel.a.appendChild(resel.namespan);
 
         resel.div.appendChild(document.createTextNode(' '));
+
+        resel.groupingspan.className = 'groupinglabel';
+        resel.div.appendChild(resel.groupingspan);
 
         resel.progressouter.className = 'dndupload-progress-outer';
         resel.progress.className = 'dndupload-progress-inner';
@@ -544,7 +548,7 @@ M.course_dndupload = {
         var extension = '';
         var dotpos = file.name.lastIndexOf('.');
         if (dotpos != -1) {
-            extension = file.name.substr(dotpos+1, file.name.length);
+            extension = file.name.substr(dotpos+1, file.name.length).toLowerCase();
         }
 
         for (var i=0; i<filehandlers.length; i++) {
@@ -724,6 +728,16 @@ M.course_dndupload = {
                             resel.icon.src = result.icon;
                             resel.a.href = result.link;
                             resel.namespan.innerHTML = result.name;
+                            if (!parseInt(result.visible, 10)) {
+                                resel.a.className = 'dimmed';
+                            }
+
+                            if (result.groupingname) {
+                                resel.groupingspan.innerHTML = '(' + result.groupingname + ')';
+                            } else {
+                                resel.div.removeChild(resel.groupingspan);
+                            }
+
                             resel.div.removeChild(resel.progressouter);
                             resel.li.id = result.elementid;
                             resel.div.innerHTML += result.commands;
@@ -904,6 +918,16 @@ M.course_dndupload = {
                             resel.icon.src = result.icon;
                             resel.a.href = result.link;
                             resel.namespan.innerHTML = result.name;
+                            if (!parseInt(result.visible, 10)) {
+                                resel.a.className = 'dimmed';
+                            }
+
+                            if (result.groupingname) {
+                                resel.groupingspan.innerHTML = '(' + result.groupingname + ')';
+                            } else {
+                                resel.div.removeChild(resel.groupingspan);
+                            }
+
                             resel.div.removeChild(resel.progressouter);
                             resel.li.id = result.elementid;
                             resel.div.innerHTML += result.commands;

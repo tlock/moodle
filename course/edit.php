@@ -32,7 +32,11 @@ $categoryid = optional_param('category', 0, PARAM_INT); // course category - can
 $returnto = optional_param('returnto', 0, PARAM_ALPHANUM); // generic navigation return page switch
 
 $PAGE->set_pagelayout('admin');
-$PAGE->set_url('/course/edit.php');
+$pageparams = array('id'=>$id);
+if (empty($id)) {
+    $pageparams = array('category'=>$categoryid);
+}
+$PAGE->set_url('/course/edit.php', $pageparams);
 
 // basic access control checks
 if ($id) { // editing course
@@ -46,7 +50,6 @@ if ($id) { // editing course
     $category = $DB->get_record('course_categories', array('id'=>$course->category), '*', MUST_EXIST);
     $coursecontext = get_context_instance(CONTEXT_COURSE, $course->id);
     require_capability('moodle/course:update', $coursecontext);
-    $PAGE->url->param('id',$id);
 
 } else if ($categoryid) { // creating new course in this category
     $course = null;
@@ -54,7 +57,6 @@ if ($id) { // editing course
     $category = $DB->get_record('course_categories', array('id'=>$categoryid), '*', MUST_EXIST);
     $catcontext = get_context_instance(CONTEXT_COURSECAT, $category->id);
     require_capability('moodle/course:create', $catcontext);
-    $PAGE->url->param('category',$categoryid);
     $PAGE->set_context($catcontext);
 
 } else {
@@ -128,16 +130,8 @@ if ($editform->is_cancelled()) {
     }
     rebuild_course_cache($course->id);
 
-    switch ($returnto) {
-        case 'category':
-        case 'topcat': //redirecting to where the new course was created by default.
-            $url = new moodle_url($CFG->wwwroot.'/course/category.php', array('id'=>$categoryid));
-            break;
-        default:
-            $url = new moodle_url($CFG->wwwroot.'/course/view.php', array('id'=>$course->id));
-            break;
-    }
-    redirect($url);
+    // Redirect user to newly created/updated course.
+    redirect(new moodle_url('/course/view.php', array('id' => $course->id)));
 }
 
 

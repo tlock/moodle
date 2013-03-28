@@ -1300,6 +1300,36 @@ class dml_testcase extends database_driver_testcase {
         // note: fetching nulls, empties, LOBs already tested by test_insert_record() no needed here
     }
 
+    public function test_export_table_recordset() {
+        $DB = $this->tdb;
+        $dbman = $DB->get_manager();
+
+        $table = $this->get_test_table();
+        $tablename = $table->getName();
+
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('course', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $dbman->create_table($table);
+
+        $ids = array();
+        $ids[] = $DB->insert_record($tablename, array('course' => 3));
+        $ids[] = $DB->insert_record($tablename, array('course' => 5));
+        $ids[] = $DB->insert_record($tablename, array('course' => 4));
+        $ids[] = $DB->insert_record($tablename, array('course' => 3));
+        $ids[] = $DB->insert_record($tablename, array('course' => 2));
+        $ids[] = $DB->insert_record($tablename, array('course' => 1));
+        $ids[] = $DB->insert_record($tablename, array('course' => 0));
+
+        $rs = $DB->export_table_recordset($tablename);
+        $rids = array();
+        foreach ($rs as $record) {
+            $rids[] = $record->id;
+        }
+        $rs->close();
+        $this->assertEquals($ids, $rids, '', 0, 0, true);
+    }
+
     public function test_get_records() {
         $DB = $this->tdb;
         $dbman = $DB->get_manager();
@@ -1767,7 +1797,7 @@ class dml_testcase extends database_driver_testcase {
         $this->assertSame(false, $DB->get_field($tablename, 'course', array('course' => 11), IGNORE_MISSING));
         try {
             $DB->get_field($tablename, 'course', array('course' => 4), MUST_EXIST);
-            $this->assertFail('Exception expected due to missing record');
+            $this->fail('Exception expected due to missing record');
         } catch (dml_exception $ex) {
             $this->assertTrue(true);
         }
@@ -1922,7 +1952,7 @@ class dml_testcase extends database_driver_testcase {
         // custom sequence - missing id error
         try {
             $DB->insert_record_raw($tablename, array('course' => 3, 'onechar' => 'bb'), true, false, true);
-            $this->assertFail('Exception expected due to missing record');
+            $this->fail('Exception expected due to missing record');
         } catch (coding_exception $ex) {
             $this->assertTrue(true);
         }
@@ -1930,7 +1960,7 @@ class dml_testcase extends database_driver_testcase {
         // wrong column error
         try {
             $DB->insert_record_raw($tablename, array('xxxxx' => 3, 'onechar' => 'bb'));
-            $this->assertFail('Exception expected due to invalid column');
+            $this->fail('Exception expected due to invalid column');
         } catch (dml_exception $ex) {
             $this->assertTrue(true);
         }
@@ -3783,7 +3813,7 @@ class dml_testcase extends database_driver_testcase {
         $this->assertEquals("Firstname Surname", $DB->get_field_sql($sql, $params));
     }
 
-    function sql_sql_order_by_text() {
+    function test_sql_order_by_text() {
         $DB = $this->tdb;
         $dbman = $DB->get_manager();
 
@@ -4277,6 +4307,35 @@ class dml_testcase extends database_driver_testcase {
                 $DB->set_field($tablename, 'course', $record1->course+1, array('id'=>$record1->id));
                 $DB->set_field($tablename2, 'course', $record2->course+1, array('id'=>$record2->id));
                 $t->allow_commit();
+                $j++;
+            }
+            $rs2->close();
+            $this->assertEquals(4, $j);
+        }
+        $rs1->close();
+        $this->assertEquals(3, $i);
+
+        // Test nested recordsets isolation without transaction.
+        $DB->delete_records($tablename);
+        $DB->insert_record($tablename, array('course'=>1));
+        $DB->insert_record($tablename, array('course'=>2));
+        $DB->insert_record($tablename, array('course'=>3));
+
+        $DB->delete_records($tablename2);
+        $DB->insert_record($tablename2, array('course'=>5));
+        $DB->insert_record($tablename2, array('course'=>6));
+        $DB->insert_record($tablename2, array('course'=>7));
+        $DB->insert_record($tablename2, array('course'=>8));
+
+        $rs1 = $DB->get_recordset($tablename);
+        $i = 0;
+        foreach ($rs1 as $record1) {
+            $i++;
+            $rs2 = $DB->get_recordset($tablename2);
+            $j = 0;
+            foreach ($rs2 as $record2) {
+                $DB->set_field($tablename, 'course', $record1->course+1, array('id'=>$record1->id));
+                $DB->set_field($tablename2, 'course', $record2->course+1, array('id'=>$record2->id));
                 $j++;
             }
             $rs2->close();
