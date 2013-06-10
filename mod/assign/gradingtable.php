@@ -116,6 +116,9 @@ class assign_grading_table extends table_sql implements renderable {
         $params = array();
         $params['assignmentid1'] = (int)$this->assignment->get_instance()->id;
         $params['assignmentid2'] = (int)$this->assignment->get_instance()->id;
+        $params['assignmentid3'] = (int)$this->assignment->get_instance()->id;
+        $params['assignmentid4'] = (int)$this->assignment->get_instance()->id;
+        $params['assignmentid5'] = (int)$this->assignment->get_instance()->id;
 
         $extrauserfields = get_extra_user_fields($this->assignment->get_context());
 
@@ -125,15 +128,33 @@ class assign_grading_table extends table_sql implements renderable {
         $fields .= 's.id as submissionid, ';
         $fields .= 's.timecreated as firstsubmission, ';
         $fields .= 's.timemodified as timesubmitted, ';
+        $fields .= 's.attemptnumber as attemptnumber, ';
         $fields .= 'g.id as gradeid, ';
         $fields .= 'g.grade as grade, ';
         $fields .= 'g.timemodified as timemarked, ';
         $fields .= 'g.timecreated as firstmarked, ';
-        $fields .= 'g.mailed as mailed, ';
-        $fields .= 'g.locked as locked, ';
-        $fields .= 'g.extensionduedate as extensionduedate';
-        $from = '{user} u LEFT JOIN {assign_submission} s ON u.id = s.userid AND s.assignment = :assignmentid1' .
-                        ' LEFT JOIN {assign_grades} g ON u.id = g.userid AND g.assignment = :assignmentid2';
+        $fields .= 'uf.mailed as mailed, ';
+        $fields .= 'uf.locked as locked, ';
+        $fields .= 'uf.extensionduedate as extensionduedate';
+
+        $submissionmaxattempt = 'SELECT mxs.userid, MAX(mxs.attemptnumber) AS maxattempt
+                                 FROM {assign_submission} mxs
+                                 WHERE mxs.assignment = :assignmentid4 GROUP BY mxs.userid';
+        $grademaxattempt = 'SELECT mxg.userid, MAX(mxg.attemptnumber) AS maxattempt
+                            FROM {assign_grades} mxg
+                            WHERE mxg.assignment = :assignmentid5 GROUP BY mxg.userid';
+        $from = '{user} u
+                         LEFT JOIN ( ' . $submissionmaxattempt . ' ) smx ON u.id = smx.userid
+                         LEFT JOIN ( ' . $grademaxattempt . ' ) gmx ON u.id = gmx.userid
+                         LEFT JOIN {assign_submission} s ON
+                            u.id = s.userid AND
+                            s.assignment = :assignmentid1 AND
+                            s.attemptnumber = smx.maxattempt
+                         LEFT JOIN {assign_grades} g ON
+                            u.id = g.userid AND
+                            g.assignment = :assignmentid2 AND
+                            g.attemptnumber = gmx.maxattempt
+                         LEFT JOIN {assign_user_flags} uf ON u.id = uf.userid AND uf.assignment = :assignmentid3';
 
         $userparams = array();
         $userindex = 0;
@@ -145,20 +166,23 @@ class assign_grading_table extends table_sql implements renderable {
         // The filters do not make sense when there are no submissions, so do not apply them.
         if ($this->assignment->is_any_submission_plugin_enabled()) {
             if ($filter == ASSIGN_FILTER_SUBMITTED) {
-                $where .= ' AND s.timecreated > 0 ';
-            }
-            if ($filter == ASSIGN_FILTER_REQUIRE_GRADING) {
+                $where .= ' AND (s.timemodified IS NOT NULL AND
+                                 s.status = :submitted) ';
+                $params['submitted'] = ASSIGN_SUBMISSION_STATUS_SUBMITTED;
+
+            } else if ($filter == ASSIGN_FILTER_REQUIRE_GRADING) {
                 $where .= ' AND (s.timemodified IS NOT NULL AND
                                  s.status = :submitted AND
                                  (s.timemodified > g.timemodified OR g.timemodified IS NULL))';
                 $params['submitted'] = ASSIGN_SUBMISSION_STATUS_SUBMITTED;
-            }
-            if (strpos($filter, ASSIGN_FILTER_SINGLE_USER) === 0) {
+
+            } else if (strpos($filter, ASSIGN_FILTER_SINGLE_USER) === 0) {
                 $userfilter = (int) array_pop(explode('=', $filter));
                 $where .= ' AND (u.id = :userid)';
                 $params['userid'] = $userfilter;
             }
         }
+
         $this->set_sql($fields, $from, $where, $params);
 
         if ($downloadfilename) {
@@ -446,7 +470,7 @@ class assign_grading_table extends table_sql implements renderable {
     public function col_team(stdClass $row) {
         $submission = false;
         $group = false;
-        $this->get_group_and_submission($row->id, $group, $submission);
+        $this->get_group_and_submission($row->id, $group, $submission, -1);
         if ($group) {
             return $group->name;
         }
@@ -459,8 +483,9 @@ class assign_grading_table extends table_sql implements renderable {
      * @param int $userid The user id for this submission
      * @param int $groupid The groupid (returned)
      * @param mixed $submission The stdClass submission or false (returned)
+     * @param int $attemptnumber Return a specific attempt number (-1 for latest)
      */
-    public function get_group_and_submission($userid, &$group, &$submission) {
+    protected function get_group_and_submission($userid, &$group, &$submission, $attemptnumber) {
         $group = false;
         if (isset($this->submissiongroups[$userid])) {
             $group = $this->submissiongroups[$userid];
@@ -474,11 +499,13 @@ class assign_grading_table extends table_sql implements renderable {
             $groupid = $group->id;
         }
 
-        if (isset($this->groupsubmissions[$groupid])) {
-            $submission = $this->groupsubmissions[$groupid];
+        // Static cache is keyed by groupid and attemptnumber.
+        // We may need both the latest and previous attempt in the same page.
+        if (isset($this->groupsubmissions[$groupid . ':' . $attemptnumber])) {
+            $submission = $this->groupsubmissions[$groupid . ':' . $attemptnumber];
         } else {
-            $submission = $this->assignment->get_group_submission($userid, $groupid, false);
-            $this->groupsubmissions[$groupid] = $submission;
+            $submission = $this->assignment->get_group_submission($userid, $groupid, false, $attemptnumber);
+            $this->groupsubmissions[$groupid . ':' . $attemptnumber] = $submission;
         }
     }
 
@@ -492,7 +519,7 @@ class assign_grading_table extends table_sql implements renderable {
     public function col_teamstatus(stdClass $row) {
         $submission = false;
         $group = false;
-        $this->get_group_and_submission($row->id, $group, $submission);
+        $this->get_group_and_submission($row->id, $group, $submission, -1);
 
         $status = '';
         if ($submission) {
@@ -829,6 +856,23 @@ class assign_grading_table extends table_sql implements renderable {
             $actions[$url->out(false)] = $description;
         }
 
+        $ismanual = $this->assignment->get_instance()->attemptreopenmethod == ASSIGN_ATTEMPT_REOPEN_METHOD_MANUAL;
+        $hassubmission = !empty($row->status);
+        $notreopened = $hassubmission && $row->status != ASSIGN_SUBMISSION_STATUS_REOPENED;
+        $isunlimited = $this->assignment->get_instance()->maxattempts == ASSIGN_UNLIMITED_ATTEMPTS;
+        $hasattempts = $isunlimited || $row->attemptnumber < $this->assignment->get_instance()->maxattempts - 1;
+
+        if ($ismanual && $hassubmission && $notreopened && $hasattempts) {
+            $urlparams = array('id' => $this->assignment->get_course_module()->id,
+                               'userid'=>$row->id,
+                               'action'=>'addattempt',
+                               'sesskey'=>sesskey(),
+                               'page'=>$this->currpage);
+            $url = new moodle_url('/mod/assign/view.php', $urlparams);
+            $description = get_string('addattempt', 'assign');
+            $actions[$url->out(false)] = $description;
+        }
+
         $edit .= $this->output->container_start(array('yui3-menu', 'actionmenu'), 'actionselect' . $row->id);
         $edit .= $this->output->container_start(array('yui3-menu-content'));
         $edit .= html_writer::start_tag('ul');
@@ -926,8 +970,13 @@ class assign_grading_table extends table_sql implements renderable {
                 if ($this->assignment->get_instance()->teamsubmission) {
                     $group = false;
                     $submission = false;
-                    $this->get_group_and_submission($row->id, $group, $submission);
+
+                    $this->get_group_and_submission($row->id, $group, $submission, -1);
                     if ($submission) {
+                        if ($submission->status == ASSIGN_SUBMISSION_STATUS_REOPENED) {
+                            // For a newly reopened submission - we want to show the previous submission in the table.
+                            $this->get_group_and_submission($row->id, $group, $submission, $submission->attemptnumber-1);
+                        }
                         if (isset($field)) {
                             return $plugin->get_editor_text($field, $submission->id);
                         }
@@ -937,15 +986,21 @@ class assign_grading_table extends table_sql implements renderable {
                                                                       array());
                     }
                 } else if ($row->submissionid) {
-                    if (isset($field)) {
-                        return $plugin->get_editor_text($field, $row->submissionid);
+                    if ($row->status == ASSIGN_SUBMISSION_STATUS_REOPENED) {
+                        // For a newly reopened submission - we want to show the previous submission in the table.
+                        $submission = $this->assignment->get_user_submission($row->userid, false, $row->attemptnumber - 1);
+                    } else {
+                        $submission = new stdClass();
+                        $submission->id = $row->submissionid;
+                        $submission->timecreated = $row->firstsubmission;
+                        $submission->timemodified = $row->timesubmitted;
+                        $submission->assignment = $this->assignment->get_instance()->id;
+                        $submission->userid = $row->userid;
                     }
-                    $submission = new stdClass();
-                    $submission->id = $row->submissionid;
-                    $submission->timecreated = $row->firstsubmission;
-                    $submission->timemodified = $row->timesubmitted;
-                    $submission->assignment = $this->assignment->get_instance()->id;
-                    $submission->userid = $row->userid;
+                    // Field is used for only for import/export and refers the the fieldname for the text editor.
+                    if (isset($field)) {
+                        return $plugin->get_editor_text($field, $submission->id);
+                    }
                     return $this->format_plugin_summary_with_link($plugin,
                                                                   $submission,
                                                                   'grading',

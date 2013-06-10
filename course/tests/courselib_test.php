@@ -467,6 +467,7 @@ class courselib_testcase extends advanced_testcase {
         $moduleinfo->completionview = COMPLETION_VIEW_REQUIRED;
         $moduleinfo->completiongradeitemnumber = 1;
         $moduleinfo->completionexpected = time() + (7 * 24 * 3600);
+        $moduleinfo->completionunlocked = 1;
 
         // Conditional activity.
         $moduleinfo->availablefrom = time();
@@ -582,12 +583,12 @@ class courselib_testcase extends advanced_testcase {
         $course->newsitems = 0;
         $course->numsections = 5;
         $course->category = $defaultcategory;
+        $original = (array) $course;
 
         $created = create_course($course);
         $context = context_course::instance($created->id);
 
         // Compare original and created.
-        $original = (array) $course;
         $this->assertEquals($original, array_intersect_key((array) $created, $original));
 
         // Ensure default section is created.
@@ -783,54 +784,6 @@ class courselib_testcase extends advanced_testcase {
 
         $CFG->courselistshortnames = 1;
         $this->assertEquals('FROG101 Introduction to pond life', get_course_display_name_for_list($course));
-    }
-
-    public function test_create_course_category() {
-        global $CFG, $DB;
-        $this->resetAfterTest(true);
-
-        // Create the category
-        $data = new stdClass();
-        $data->name = 'aaa';
-        $data->description = 'aaa';
-        $data->idnumber = '';
-
-        $category1 = create_course_category($data);
-
-        // Initially confirm that base data was inserted correctly
-        $this->assertEquals($data->name, $category1->name);
-        $this->assertEquals($data->description, $category1->description);
-        $this->assertEquals($data->idnumber, $category1->idnumber);
-
-        // sortorder should be blank initially
-        $this->assertEmpty($category1->sortorder);
-
-        // Calling fix_course_sortorder() should provide a new sortorder
-        fix_course_sortorder();
-        $category1 = $DB->get_record('course_categories', array('id' => $category1->id));
-
-        $this->assertGreaterThanOrEqual(1, $category1->sortorder);
-
-        // Create two more categories and test the sortorder worked correctly
-        $data->name = 'ccc';
-        $category2 = create_course_category($data);
-        $this->assertEmpty($category2->sortorder);
-
-        $data->name = 'bbb';
-        $category3 = create_course_category($data);
-        $this->assertEmpty($category3->sortorder);
-
-        // Calling fix_course_sortorder() should provide a new sortorder to give category1,
-        // category2, category3. New course categories are ordered by id not name
-        fix_course_sortorder();
-
-        $category1 = $DB->get_record('course_categories', array('id' => $category1->id));
-        $category2 = $DB->get_record('course_categories', array('id' => $category2->id));
-        $category3 = $DB->get_record('course_categories', array('id' => $category3->id));
-
-        $this->assertGreaterThanOrEqual($category1->sortorder, $category2->sortorder);
-        $this->assertGreaterThanOrEqual($category2->sortorder, $category3->sortorder);
-        $this->assertGreaterThanOrEqual($category1->sortorder, $category3->sortorder);
     }
 
     public function test_move_module_in_course() {
@@ -1071,5 +1024,226 @@ class courselib_testcase extends advanced_testcase {
         // Calls made from generate_page_type_patterns() may provide null values.
         $pagetypelist = course_page_type_list($pagetype, null, null);
         $this->assertEquals($pagetypelist, $testpagetypelist1);
+    }
+
+    public function test_compare_activities_by_time_desc() {
+
+        // Let's create some test data.
+        $activitiesivities = array();
+        $x = new stdClass();
+        $x->timestamp = null;
+        $activities[] = $x;
+
+        $x = new stdClass();
+        $x->timestamp = 1;
+        $activities[] = $x;
+
+        $x = new stdClass();
+        $x->timestamp = 3;
+        $activities[] = $x;
+
+        $x = new stdClass();
+        $x->timestamp = 0;
+        $activities[] = $x;
+
+        $x = new stdClass();
+        $x->timestamp = 5;
+        $activities[] = $x;
+
+        $x = new stdClass();
+        $activities[] = $x;
+
+        $x = new stdClass();
+        $x->timestamp = 5;
+        $activities[] = $x;
+
+        // Do the sorting.
+        usort($activities, 'compare_activities_by_time_desc');
+
+        // Let's check the result.
+        $last = 10;
+        foreach($activities as $activity) {
+            if (empty($activity->timestamp)) {
+                $activity->timestamp = 0;
+            }
+            $this->assertLessThanOrEqual($last, $activity->timestamp);
+        }
+    }
+
+    public function test_compare_activities_by_time_asc() {
+
+        // Let's create some test data.
+        $activities = array();
+        $x = new stdClass();
+        $x->timestamp = null;
+        $activities[] = $x;
+
+        $x = new stdClass();
+        $x->timestamp = 1;
+        $activities[] = $x;
+
+        $x = new stdClass();
+        $x->timestamp = 3;
+        $activities[] = $x;
+
+        $x = new stdClass();
+        $x->timestamp = 0;
+        $activities[] = $x;
+
+        $x = new stdClass();
+        $x->timestamp = 5;
+        $activities[] = $x;
+
+        $x = new stdClass();
+        $activities[] = $x;
+
+        $x = new stdClass();
+        $x->timestamp = 5;
+        $activities[] = $x;
+
+        // Do the sorting.
+        usort($activities, 'compare_activities_by_time_asc');
+
+        // Let's check the result.
+        $last = 0;
+        foreach($activities as $activity) {
+            if (empty($activity->timestamp)) {
+                $activity->timestamp = 0;
+            }
+            $this->assertGreaterThanOrEqual($last, $activity->timestamp);
+        }
+    }
+
+    /**
+     * Tests moving a module between hidden/visible sections and
+     * verifies that the course/module visiblity seettings are
+     * retained.
+     */
+    public function test_moveto_module_between_hidden_sections() {
+        global $DB;
+
+        $this->resetAfterTest(true);
+
+        $course = $this->getDataGenerator()->create_course(array('numsections' => 4), array('createsections' => true));
+        $forum = $this->getDataGenerator()->create_module('forum', array('course' => $course->id));
+        $page = $this->getDataGenerator()->create_module('page', array('course' => $course->id));
+        $quiz= $this->getDataGenerator()->create_module('quiz', array('course' => $course->id));
+
+        // Set the page as hidden
+        set_coursemodule_visible($page->cmid, 0);
+
+        // Set sections 3 as hidden.
+        set_section_visible($course->id, 3, 0);
+
+        $modinfo = get_fast_modinfo($course);
+
+        $hiddensection = $modinfo->get_section_info(3);
+        // New section is definitely not visible:
+        $this->assertEquals($hiddensection->visible, 0);
+
+        $forumcm = $modinfo->cms[$forum->cmid];
+        $pagecm = $modinfo->cms[$page->cmid];
+
+        // Move the forum and the page to a hidden section.
+        moveto_module($forumcm, $hiddensection);
+        moveto_module($pagecm, $hiddensection);
+
+        // Reset modinfo cache.
+        get_fast_modinfo(0, 0, true);
+
+        $modinfo = get_fast_modinfo($course);
+
+        // Verify that forum and page have been moved to the hidden section and quiz has not.
+        $this->assertContains($forum->cmid, $modinfo->sections[3]);
+        $this->assertContains($page->cmid, $modinfo->sections[3]);
+        $this->assertNotContains($quiz->cmid, $modinfo->sections[3]);
+
+        // Verify that forum has been made invisible.
+        $forumcm = $modinfo->cms[$forum->cmid];
+        $this->assertEquals($forumcm->visible, 0);
+        // Verify that old state has been retained.
+        $this->assertEquals($forumcm->visibleold, 1);
+
+        // Verify that page has stayed invisible.
+        $pagecm = $modinfo->cms[$page->cmid];
+        $this->assertEquals($pagecm->visible, 0);
+        // Verify that old state has been retained.
+        $this->assertEquals($pagecm->visibleold, 0);
+
+        // Verify that quiz has been unaffected.
+        $quizcm = $modinfo->cms[$quiz->cmid];
+        $this->assertEquals($quizcm->visible, 1);
+
+        // Move forum and page back to visible section.
+        $visiblesection = $modinfo->get_section_info(2);
+        moveto_module($forumcm, $visiblesection);
+        moveto_module($pagecm, $visiblesection);
+
+        // Reset modinfo cache.
+        get_fast_modinfo(0, 0, true);
+        $modinfo = get_fast_modinfo($course);
+
+        // Verify that forum has been made visible.
+        $forumcm = $modinfo->cms[$forum->cmid];
+        $this->assertEquals($forumcm->visible, 1);
+
+        // Verify that page has stayed invisible.
+        $pagecm = $modinfo->cms[$page->cmid];
+        $this->assertEquals($pagecm->visible, 0);
+
+        // Move the page in the same section (this is what mod duplicate does_
+        moveto_module($pagecm, $visiblesection, $forumcm);
+
+        // Reset modinfo cache.
+        get_fast_modinfo(0, 0, true);
+
+        // Verify that the the page is still hidden
+        $modinfo = get_fast_modinfo($course);
+        $pagecm = $modinfo->cms[$page->cmid];
+        $this->assertEquals($pagecm->visible, 0);
+    }
+
+    /**
+     * Tests moving a module around in the same section. moveto_module()
+     * is called this way in modduplicate.
+     */
+    public function test_moveto_module_in_same_section() {
+        global $DB;
+
+        $this->resetAfterTest(true);
+
+        $course = $this->getDataGenerator()->create_course(array('numsections' => 3), array('createsections' => true));
+        $page = $this->getDataGenerator()->create_module('page', array('course' => $course->id));
+        $forum = $this->getDataGenerator()->create_module('forum', array('course' => $course->id));
+
+        // Simulate inconsistent visible/visibleold values (MDL-38713).
+        $cm = $DB->get_record('course_modules', array('id' => $page->cmid), '*', MUST_EXIST);
+        $cm->visible = 0;
+        $cm->visibleold = 1;
+        $DB->update_record('course_modules', $cm);
+
+        $modinfo = get_fast_modinfo($course);
+        $forumcm = $modinfo->cms[$forum->cmid];
+        $pagecm = $modinfo->cms[$page->cmid];
+
+        // Verify that page is hidden.
+        $this->assertEquals($pagecm->visible, 0);
+
+        // Verify section 0 is where all mods added.
+        $section = $modinfo->get_section_info(0);
+        $this->assertEquals($section->id, $forumcm->section);
+        $this->assertEquals($section->id, $pagecm->section);
+
+
+        // Move the forum and the page to a hidden section.
+        moveto_module($pagecm, $section, $forumcm);
+
+        // Reset modinfo cache.
+        get_fast_modinfo(0, 0, true);
+
+        // Verify that the the page is still hidden
+        $modinfo = get_fast_modinfo($course);
+        $pagecm = $modinfo->cms[$page->cmid];
+        $this->assertEquals($pagecm->visible, 0);
     }
 }

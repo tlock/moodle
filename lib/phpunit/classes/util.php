@@ -83,10 +83,13 @@ class phpunit_util extends testing_util {
      * Note: this is relatively slow (cca 2 seconds for pg and 7 for mysql) - please use with care!
      *
      * @static
-     * @param bool $logchanges log changes in global state and database in error log
+     * @param bool $detectchanges
+     *      true  - changes in global state and database are reported as errors
+     *      false - no errors reported
+     *      null  - only critical problems are reported as errors
      * @return void
      */
-    public static function reset_all_data($logchanges = false) {
+    public static function reset_all_data($detectchanges = false) {
         global $DB, $CFG, $USER, $SITE, $COURSE, $PAGE, $OUTPUT, $SESSION;
 
         // Stop any message redirection.
@@ -110,7 +113,7 @@ class phpunit_util extends testing_util {
         $resetdb = self::reset_database();
         $warnings = array();
 
-        if ($logchanges) {
+        if ($detectchanges === true) {
             if ($resetdb) {
                 $warnings[] = 'Warning: unexpected database modification, resetting DB state';
             }
@@ -139,6 +142,18 @@ class phpunit_util extends testing_util {
             if ($COURSE->id != $oldsite->id) {
                 $warnings[] = 'Warning: unexpected change of $COURSE';
             }
+
+        }
+
+        if (ini_get('max_execution_time') != 0) {
+            // This is special warning for all resets because we do not want any
+            // libraries to mess with timeouts unintentionally.
+            // Our PHPUnit integration is not supposed to change it either.
+
+            if ($detectchanges !== false) {
+                $warnings[] = 'Warning: max_execution_time was changed to '.ini_get('max_execution_time');
+            }
+            set_time_limit(0);
         }
 
         // restore original globals
@@ -233,6 +248,72 @@ class phpunit_util extends testing_util {
 
         // refresh data in all tables, clear caches, etc.
         phpunit_util::reset_all_data();
+    }
+
+    /**
+     * Print some Moodle related info to console.
+     * @internal
+     * @static
+     * @return void
+     */
+    public static function bootstrap_moodle_info() {
+        global $CFG;
+
+        // All developers have to understand English, do not localise!
+
+        $release = null;
+        require("$CFG->dirroot/version.php");
+
+        echo "Moodle $release, $CFG->dbtype";
+        if ($hash = self::get_git_hash()) {
+            echo ", $hash";
+        }
+        echo "\n";
+    }
+
+    /**
+     * Try to get current git hash of the Moodle in $CFG->dirroot.
+     * @return string null if unknown, sha1 hash if known
+     */
+    public static function get_git_hash() {
+        global $CFG;
+
+        // This is a bit naive, but it should mostly work for all platforms.
+
+        if (!file_exists("$CFG->dirroot/.git/HEAD")) {
+            return null;
+        }
+
+        $ref = file_get_contents("$CFG->dirroot/.git/HEAD");
+        if ($ref === false) {
+            return null;
+        }
+
+        $ref = trim($ref);
+
+        if (strpos($ref, 'ref: ') !== 0) {
+            return null;
+        }
+
+        $ref = substr($ref, 5);
+
+        if (!file_exists("$CFG->dirroot/.git/$ref")) {
+            return null;
+        }
+
+        $hash = file_get_contents("$CFG->dirroot/.git/$ref");
+
+        if ($hash === false) {
+            return null;
+        }
+
+        $hash = trim($hash);
+
+        if (strlen($hash) != 40) {
+            return null;
+        }
+
+        return $hash;
     }
 
     /**

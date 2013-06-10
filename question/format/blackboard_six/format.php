@@ -78,10 +78,10 @@ class qformat_blackboard_six extends qformat_blackboard_six_base {
             // For now we will do that searching for a required tag.
             // This is certainly not bullet-proof but works for all usual files.
             $fileobj->text = file_get_contents($filename);
-            if (strpos($text, '<questestinterop>')) {
+            if (strpos($fileobj->text, '<questestinterop>')) {
                 $fileobj->filetype = self::FILETYPE_QTI;
             }
-            if (strpos($text, '<POOL>')) {
+            if (strpos($fileobj->text, '<POOL>')) {
                 $fileobj->filetype = self::FILETYPE_POOL;
             }
             // In all other cases we are not able to handle this question file.
@@ -99,7 +99,8 @@ class qformat_blackboard_six extends qformat_blackboard_six_base {
                 fulldelete($this->tempdir);
                 return false;
             }
-            if (unzip_file($this->tempdir . '/bboard.zip', '', false)) {
+            $packer = get_file_packer('application/zip');
+            if ($packer->extract_to_pathname($this->tempdir . '/bboard.zip', $this->tempdir)) {
                 $dom = new DomDocument();
 
                 if (!$dom->load($this->tempdir . '/imsmanifest.xml')) {
@@ -183,6 +184,14 @@ class qformat_blackboard_six extends qformat_blackboard_six_base {
             }
             $importer->set_filebase($fileobj->filebase);
             $questions = array_merge($questions, $importer->readquestions($fileobj->text));
+        }
+
+        // Give any unnamed categories generated names.
+        $unnamedcount = 0;
+        foreach ($questions as $question) {
+            if ($question->qtype == 'category' && $question->category == '') {
+                $question->category = get_string('importedcategory', 'qformat_blackboard_six', ++$unnamedcount);
+            }
         }
 
         return $questions;

@@ -35,6 +35,24 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class core_test_generator_testcase extends advanced_testcase {
+    public function test_get_plugin_generator_good_case() {
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $this->assertInstanceOf('core_question_generator', $generator);
+    }
+
+    public function test_get_plugin_generator_sloppy_name() {
+        $generator = $this->getDataGenerator()->get_plugin_generator('quiz');
+        $this->assertDebuggingCalled('Please specify the component you want a generator for as ' .
+                    'mod_quiz, not quiz.', DEBUG_DEVELOPER);
+        $this->assertInstanceOf('mod_quiz_generator', $generator);
+    }
+
+    public function test_get_plugin_generator_no_component_dir() {
+        $this->setExpectedException('coding_exception', 'Component core_completion does not support ' .
+                    'generators yet. Missing tests/generator/lib.php.');
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_completion');
+    }
+
     public function test_create() {
         global $DB;
 
@@ -202,81 +220,5 @@ class core_test_generator_testcase extends advanced_testcase {
         $result = $this->getDataGenerator()->enrol_user($user2->id, $course3->id, null, 'self');
         $this->assertFalse($result);
 
-    }
-
-    /**
-     * Test create_forum_discussion.
-     */
-    public function test_create_forum_discussion() {
-        global $DB;
-
-        $this->resetAfterTest(true);
-
-        // User that will create the forum.
-        $user = self::getDataGenerator()->create_user();
-
-        // Create course to add the forum to.
-        $course = self::getDataGenerator()->create_course();
-
-        // The forum.
-        $record = new stdClass();
-        $record->course = $course->id;
-        $forum = self::getDataGenerator()->create_module('forum', $record);
-
-        // Add a few discussions.
-        $record = array();
-        $record['course'] = $course->id;
-        $record['forum'] = $forum->id;
-        $record['userid'] = $user->id;
-        self::getDataGenerator()->create_forum_discussion($record);
-        self::getDataGenerator()->create_forum_discussion($record);
-        self::getDataGenerator()->create_forum_discussion($record);
-
-        // Check the discussions were correctly created.
-        $this->assertEquals(3, $DB->count_records_select('forum_discussions', 'forum = :forum',
-                array('forum' => $forum->id)));
-    }
-
-    /**
-     * Test create_forum_post.
-     */
-    public function test_create_forum_post() {
-        global $DB;
-
-        $this->resetAfterTest(true);
-
-        // Create a bunch of users
-        $user1 = self::getDataGenerator()->create_user();
-        $user2 = self::getDataGenerator()->create_user();
-        $user3 = self::getDataGenerator()->create_user();
-        $user4 = self::getDataGenerator()->create_user();
-
-        // Create course to add the forum.
-        $course = self::getDataGenerator()->create_course();
-
-        // The forum.
-        $record = new stdClass();
-        $record->course = $course->id;
-        $forum = self::getDataGenerator()->create_module('forum', $record);
-
-        // Add a discussion.
-        $record->forum = $forum->id;
-        $record->userid = $user1->id;
-        $discussion = self::getDataGenerator()->create_forum_discussion($record);
-
-        // Add a bunch of replies, changing the userid.
-        $record = new stdClass();
-        $record->discussion = $discussion->id;
-        $record->userid = $user2->id;
-        self::getDataGenerator()->create_forum_post($record);
-        $record->userid = $user3->id;
-        self::getDataGenerator()->create_forum_post($record);
-        $record->userid = $user4->id;
-        self::getDataGenerator()->create_forum_post($record);
-
-        // Check the posts were correctly created, remember, when creating a discussion a post
-        // is generated as well, so we should have 4 posts, not 3.
-        $this->assertEquals(4, $DB->count_records_select('forum_posts', 'discussion = :discussion',
-                array('discussion' => $discussion->id)));
     }
 }

@@ -453,6 +453,9 @@ function cron_run() {
         mtrace('done.');
     }
 
+    mtrace('Running cache cron routines');
+    cache_helper::cron();
+    mtrace('done.');
 
     // Run automated backups if required - these may take a long time to execute
     require_once($CFG->dirroot.'/backup/util/includes/backup_includes.php');
@@ -482,6 +485,11 @@ function cron_run() {
         }
     }
 
+    // Run badges review cron.
+    mtrace("Starting badges cron...");
+    require_once($CFG->dirroot . '/badges/cron.php');
+    badge_cron();
+    mtrace('done.');
 
     // cleanup file trash - not very important
     $fs = get_file_storage();

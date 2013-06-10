@@ -35,6 +35,7 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class cache_config_phpunittest extends cache_config_writer {
+
     /**
      * Adds a definition to the stack
      * @param string $area
@@ -55,6 +56,14 @@ class cache_config_phpunittest extends cache_config_writer {
             }
         }
         $this->configdefinitions[$area] = $properties;
+    }
+
+    /**
+     * Removes a definition.
+     * @param string $name
+     */
+    public function phpunit_remove_definition($name) {
+        unset($this->configdefinitions[$name]);
     }
 
     /**

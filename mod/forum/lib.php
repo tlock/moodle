@@ -3737,7 +3737,7 @@ function forum_print_discussion_header(&$post, $forum, $group=-1, $datestring=""
     echo "</td>\n";
 
     // User name
-    $fullname = fullname($post, has_capability('moodle/site:viewfullnames', $modcontext));
+    $fullname = fullname($postuser, has_capability('moodle/site:viewfullnames', $modcontext));
     echo '<td class="author">';
     echo '<a href="'.$CFG->wwwroot.'/user/view.php?id='.$post->userid.'&amp;course='.$forum->course.'">'.$fullname.'</a>';
     echo "</td>\n";
@@ -7082,50 +7082,49 @@ function forum_get_post_actions() {
 }
 
 /**
- * @global object
- * @global object
- * @global object
- * @param object $forum
- * @param object $cm
- * @return bool
+ * Returns a warning object if a user has reached the number of posts equal to
+ * the warning/blocking setting, or false if there is no warning to show.
+ *
+ * @param int|stdClass $forum the forum id or the forum object
+ * @param stdClass $cm the course module
+ * @return stdClass|bool returns an object with the warning information, else
+ *         returns false if no warning is required.
  */
-function forum_check_throttling($forum, $cm=null) {
-    global $USER, $CFG, $DB, $OUTPUT;
+function forum_check_throttling($forum, $cm = null) {
+    global $CFG, $DB, $USER;
 
     if (is_numeric($forum)) {
-        $forum = $DB->get_record('forum',array('id'=>$forum));
+        $forum = $DB->get_record('forum', array('id' => $forum), '*', MUST_EXIST);
     }
+
     if (!is_object($forum)) {
-        return false;  // this is broken.
-    }
-
-    if (empty($forum->blockafter)) {
-        return true;
-    }
-
-    if (empty($forum->blockperiod)) {
-        return true;
+        return false; // This is broken.
     }
 
     if (!$cm) {
-        if (!$cm = get_coursemodule_from_instance('forum', $forum->id, $forum->course)) {
-            print_error('invalidcoursemodule');
-        }
+        $cm = get_coursemodule_from_instance('forum', $forum->id, $forum->course, false, MUST_EXIST);
+    }
+
+    if (empty($forum->blockafter)) {
+        return false;
+    }
+
+    if (empty($forum->blockperiod)) {
+        return false;
     }
 
     $modcontext = context_module::instance($cm->id);
-    if(has_capability('mod/forum:postwithoutthrottling', $modcontext)) {
-        return true;
+    if (has_capability('mod/forum:postwithoutthrottling', $modcontext)) {
+        return false;
     }
 
-    // get the number of posts in the last period we care about
+    // Get the number of posts in the last period we care about.
     $timenow = time();
     $timeafter = $timenow - $forum->blockperiod;
-
-    $numposts = $DB->count_records_sql('SELECT COUNT(p.id) FROM {forum_posts} p'
-                                      .' JOIN {forum_discussions} d'
-                                      .' ON p.discussion = d.id WHERE d.forum = ?'
-                                      .' AND p.userid = ? AND p.created > ?', array($forum->id, $USER->id, $timeafter));
+    $numposts = $DB->count_records_sql('SELECT COUNT(p.id) FROM {forum_posts} p
+                                        JOIN {forum_discussions} d
+                                        ON p.discussion = d.id WHERE d.forum = ?
+                                        AND p.userid = ? AND p.created > ?', array($forum->id, $USER->id, $timeafter));
 
     $a = new stdClass();
     $a->blockafter = $forum->blockafter;
@@ -7133,13 +7132,44 @@ function forum_check_throttling($forum, $cm=null) {
     $a->blockperiod = get_string('secondstotime'.$forum->blockperiod);
 
     if ($forum->blockafter <= $numposts) {
-        print_error('forumblockingtoomanyposts', 'error', $CFG->wwwroot.'/mod/forum/view.php?f='.$forum->id, $a);
+        $warning = new stdClass();
+        $warning->canpost = false;
+        $warning->errorcode = 'forumblockingtoomanyposts';
+        $warning->module = 'error';
+        $warning->additional = $a;
+        $warning->link = $CFG->wwwroot . '/mod/forum/view.php?f=' . $forum->id;
+
+        return $warning;
     }
+
     if ($forum->warnafter <= $numposts) {
-        echo $OUTPUT->notification(get_string('forumblockingalmosttoomanyposts','forum',$a));
+        $warning = new stdClass();
+        $warning->canpost = true;
+        $warning->errorcode = 'forumblockingalmosttoomanyposts';
+        $warning->module = 'forum';
+        $warning->additional = $a;
+        $warning->link = null;
+
+        return $warning;
     }
+}
 
-
+/**
+ * Throws an error if the user is no longer allowed to post due to having reached
+ * or exceeded the number of posts specified in 'Post threshold for blocking'
+ * setting.
+ *
+ * @since Moodle 2.5
+ * @param stdClass $thresholdwarning the warning information returned
+ *        from the function forum_check_throttling.
+ */
+function forum_check_blocking_threshold($thresholdwarning) {
+    if (!empty($thresholdwarning) && !$thresholdwarning->canpost) {
+        print_error($thresholdwarning->errorcode,
+                    $thresholdwarning->module,
+                    $thresholdwarning->link,
+                    $thresholdwarning->additional);
+    }
 }
 
 

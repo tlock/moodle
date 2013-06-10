@@ -107,22 +107,32 @@ if (!empty($CFG->behat_switchcompletely)) {
 // Test environment is enabled if:
 // * User has previously enabled through admin/tool/behat/cli/util.php --enable.
 // Both are required to switch to test mode
-if (!empty($CFG->behat_dataroot) && !empty($CFG->behat_prefix) && file_exists($CFG->behat_dataroot)) {
+if (!defined('BEHAT_SITE_RUNNING') && !empty($CFG->behat_dataroot) &&
+        !empty($CFG->behat_prefix) && file_exists($CFG->behat_dataroot)) {
 
     $CFG->behat_dataroot = realpath($CFG->behat_dataroot);
 
     $switchcompletely = !empty($CFG->behat_switchcompletely) && php_sapi_name() !== 'cli';
     $builtinserver = php_sapi_name() === 'cli-server';
-    $behatrunning = defined('BEHAT_RUNNING');
+    $behatrunning = defined('BEHAT_TEST');
     $testenvironmentrequested = $switchcompletely || $builtinserver || $behatrunning;
 
     // Only switch to test environment if it has been enabled.
     $testenvironmentenabled = file_exists($CFG->behat_dataroot . '/behat/test_environment_enabled.txt');
 
     if ($testenvironmentenabled && $testenvironmentrequested) {
+
+        // Constant used to inform that the behat test site is being used,
+        // this includes all the processes executed by the behat CLI command like
+        // the site reset, the steps executed by the browser drivers when simulating
+        // a user session and a real session when browsing manually to $CFG->behat_wwwroot
+        // like the browser driver does automatically.
+        // Different from BEHAT_TEST as only this last one can perform CLI
+        // actions like reset the site or use data generators.
+        define('BEHAT_SITE_RUNNING', true);
+
         $CFG->wwwroot = $CFG->behat_wwwroot;
         $CFG->passwordsaltmain = 'moodle';
-        $CFG->originaldataroot = $CFG->dataroot;
         $CFG->prefix = $CFG->behat_prefix;
         $CFG->dataroot = $CFG->behat_dataroot;
     }
@@ -260,10 +270,10 @@ if (file_exists("$CFG->dataroot/climaintenance.html")) {
 
 if (CLI_SCRIPT) {
     // sometimes people use different PHP binary for web and CLI, make 100% sure they have the supported PHP version
-    if (version_compare(phpversion(), '5.3.2') < 0) {
+    if (version_compare(phpversion(), '5.3.3') < 0) {
         $phpversion = phpversion();
         // do NOT localise - lang strings would not work here and we CAN NOT move it to later place
-        echo "Moodle 2.1 or later requires at least PHP 5.3.2 (currently using version $phpversion).\n";
+        echo "Moodle 2.5 or later requires at least PHP 5.3.3 (currently using version $phpversion).\n";
         echo "Some servers may have multiple PHP versions installed, are you using the correct executable?\n";
         exit(1);
     }
@@ -286,7 +296,7 @@ umask(0000);
 
 // exact version of currently used yui2 and 3 library
 $CFG->yui2version = '2.9.0';
-$CFG->yui3version = '3.9.0';
+$CFG->yui3version = '3.9.1';
 
 
 // special support for highly optimised scripts that do not need libraries and DB connection
@@ -462,6 +472,13 @@ $OUTPUT = new bootstrap_renderer();
 if (!PHPUNIT_TEST or PHPUNIT_UTIL) {
     set_exception_handler('default_exception_handler');
     set_error_handler('default_error_handler', E_ALL | E_STRICT);
+}
+
+// Acceptance tests needs special output to capture the errors,
+// but not necessary for behat CLI command.
+if (defined('BEHAT_SITE_RUNNING') && !defined('BEHAT_TEST')) {
+    require_once(__DIR__ . '/behat/lib.php');
+    set_error_handler('behat_error_handler', E_ALL | E_STRICT);
 }
 
 // If there are any errors in the standard libraries we want to know!
@@ -724,6 +741,7 @@ try {
     if (empty($CFG->version)) {
         $SITE = new stdClass();
         $SITE->id = 1;
+        $SITE->shortname = null;
     } else {
         throw $e;
     }

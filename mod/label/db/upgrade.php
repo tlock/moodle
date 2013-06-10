@@ -70,14 +70,17 @@ function xmldb_label_upgrade($oldversion) {
             $courses = $DB->get_fieldset_sql('SELECT DISTINCT course '.
                 'FROM {course_modules} WHERE module=?', array($modid));
             foreach ($courses as $courseid) {
-                $DB->execute('UPDATE {course} set modinfo = ?, sectioncache = ? '.
-                        'WHERE id = ?', array(null, null, $courseid));
+                rebuild_course_cache($courseid, true);
             }
         }
 
         // label savepoint reached
         upgrade_mod_savepoint(true, 2013021400, 'label');
     }
+
+    // Moodle v2.5.0 release upgrade line.
+    // Put any upgrade step following this.
+
 
     return true;
 }

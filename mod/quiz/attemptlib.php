@@ -1192,7 +1192,7 @@ class quiz_attempt {
      */
     public function render_question_at_step($slot, $seq, $reviewing, $thispageurl = '') {
         return $this->quba->render_question_at_step($slot, $seq,
-                $this->get_display_options($reviewing),
+                $this->get_display_options_with_edit_link($reviewing, $slot, $thispageurl),
                 $this->get_question_number($slot));
     }
 
@@ -1354,6 +1354,23 @@ class quiz_attempt {
         if (!$this->is_preview() && $this->attempt->state == self::FINISHED) {
             quiz_save_best_grade($this->get_quiz(), $this->get_userid());
         }
+
+        $transaction->allow_commit();
+    }
+
+    /**
+     * Process all the autosaved data that was part of the current request.
+     *
+     * @param int $timestamp the timestamp that should be stored as the modifed
+     * time in the database for these actions. If null, will use the current time.
+     */
+    public function process_auto_save($timestamp) {
+        global $DB;
+
+        $transaction = $DB->start_delegated_transaction();
+
+        $this->quba->process_all_autosaves($timestamp);
+        question_engine::save_questions_usage_by_activity($this->quba);
 
         $transaction->allow_commit();
     }

@@ -338,6 +338,8 @@ function upgrade_stale_php_files_present() {
 
     $someexamplesofremovedfiles = array(
         // removed in 2.5dev
+        '/backup/lib.php',
+        '/backup/bb/README.txt',
         '/lib/excel/test.php',
         // removed in 2.4dev
         '/admin/tool/unittest/simpletestlib.php',
@@ -484,7 +486,7 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
                 message_update_processors($plug);
             }
             upgrade_plugin_mnet_functions($component);
-
+            cache_helper::purge_all(true);
             purge_all_caches();
             $endcallback($component, true, $verbose);
 
@@ -517,7 +519,7 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
                 message_update_processors($plug);
             }
             upgrade_plugin_mnet_functions($component);
-
+            cache_helper::purge_all(true);
             purge_all_caches();
             $endcallback($component, false, $verbose);
 
@@ -1297,6 +1299,12 @@ function upgrade_finished($continueurl=null) {
 
     if (!empty($CFG->upgraderunning)) {
         unset_config('upgraderunning');
+        // We have to forcefully purge the caches using the writer here.
+        // This has to be done after we unset the config var. If someone hits the site while this is set they will
+        // cause the config values to propogate to the caches.
+        // Caches are purged after the last step in an upgrade but there is several code routines that exceute between
+        // then and now that leaving a window for things to fall out of sync.
+        cache_helper::purge_all(true);
         upgrade_setup_debug(false);
         ignore_user_abort(false);
         if ($continueurl) {
@@ -1456,11 +1464,15 @@ function upgrade_language_pack($lang = null) {
 function install_core($version, $verbose) {
     global $CFG, $DB;
 
-    try {
-        // Disable the use of cache stores here. We will reset the factory after we've performed the installation.
-        // This ensures that we don't permanently cache anything during installation.
-        cache_factory::disable_stores();
+    // We can not call purge_all_caches() yet, make sure the temp and cache dirs exist and are empty.
+    make_cache_directory('', true);
+    remove_dir($CFG->cachedir.'', true);
+    make_temp_directory('', true);
+    remove_dir($CFG->tempdir.'', true);
+    make_writable_directory($CFG->dataroot.'/muc', true);
+    remove_dir($CFG->dataroot.'/muc', true);
 
+    try {
         set_time_limit(600);
         print_upgrade_part_start('moodle', true, $verbose); // does not store upgrade running flag
 
@@ -1509,9 +1521,7 @@ function upgrade_core($version, $verbose) {
     try {
         // Reset caches before any output
         purge_all_caches();
-        // Disable the use of cache stores here. We will reset the factory after we've performed the installation.
-        // This ensures that we don't permanently cache anything during installation.
-        cache_factory::disable_stores();
+        cache_helper::purge_all(true);
 
         // Upgrade current language pack if we can
         upgrade_language_pack();
@@ -1542,10 +1552,9 @@ function upgrade_core($version, $verbose) {
         // Update core definitions.
         cache_helper::update_definitions(true);
 
-        // Reset the cache, this returns it to a normal operation state.
-        cache_factory::reset();
         // Purge caches again, just to be sure we arn't holding onto old stuff now.
         purge_all_caches();
+        cache_helper::purge_all(true);
 
         // Clean up contexts - more and more stuff depends on existence of paths and contexts
         context_helper::cleanup_instances();
@@ -1572,10 +1581,6 @@ function upgrade_noncore($verbose) {
 
     // upgrade all plugins types
     try {
-        // Disable the use of cache stores here.
-        // We don't reset this, the site can live without proper caching for life of this request.
-        cache_factory::disable_stores();
-
         $plugintypes = get_plugin_types();
         foreach ($plugintypes as $type=>$location) {
             upgrade_plugins($type, 'print_upgrade_part_start', 'print_upgrade_part_end', $verbose);
@@ -1589,12 +1594,16 @@ function upgrade_noncore($verbose) {
 
 /**
  * Checks if the main tables have been installed yet or not.
+ *
+ * Note: we can not use caches here because they might be stale,
+ *       use with care!
+ *
  * @return bool
  */
 function core_tables_exist() {
     global $DB;
 
-    if (!$tables = $DB->get_tables() ) {    // No tables yet at all.
+    if (!$tables = $DB->get_tables(false) ) {    // No tables yet at all.
         return false;
 
     } else {                                 // Check for missing main tables

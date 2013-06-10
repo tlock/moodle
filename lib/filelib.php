@@ -726,6 +726,9 @@ function file_get_submitted_draft_itemid($elname) {
 /**
  * Restore the original source field from draft files
  *
+ * Do not use this function because it makes field files.source inconsistent
+ * for draft area files. This function will be deprecated in 2.6
+ *
  * @param stored_file $storedfile This only works with draft files
  * @return stored_file
  */
@@ -796,58 +799,37 @@ function file_save_draft_area_files($draftitemid, $contextid, $component, $filea
     $draftfiles = $fs->get_area_files($usercontext->id, 'user', 'draft', $draftitemid, 'id');
     $oldfiles   = $fs->get_area_files($contextid, $component, $filearea, $itemid, 'id');
 
-    if (count($draftfiles) < 2) {
-        // means there are no files - one file means root dir only ;-)
-        $fs->delete_area_files($contextid, $component, $filearea, $itemid);
-
-    } else if (count($oldfiles) < 2) {
-        $filecount = 0;
-        // there were no files before - one file means root dir only ;-)
-        foreach ($draftfiles as $file) {
-            $file_record = array('contextid'=>$contextid, 'component'=>$component, 'filearea'=>$filearea, 'itemid'=>$itemid);
-            if (!$options['subdirs']) {
-                if ($file->get_filepath() !== '/' or $file->is_directory()) {
-                    continue;
-                }
-            }
-            if ($options['maxbytes'] and $options['maxbytes'] < $file->get_filesize()) {
-                // oversized file - should not get here at all
-                continue;
-            }
-            if ($options['maxfiles'] != -1 and $options['maxfiles'] <= $filecount) {
-                // more files - should not get here at all
-                break;
-            }
-            if (!$file->is_directory()) {
-                $filecount++;
-            }
-
-            if ($file->is_external_file()) {
-                if (!$allowreferences) {
-                    continue;
-                }
-                $repoid = $file->get_repository_id();
-                if (!empty($repoid)) {
-                    $file_record['repositoryid'] = $repoid;
-                    $file_record['reference'] = $file->get_reference();
-                }
-            }
-            file_restore_source_field_from_draft_file($file);
-
-            $fs->create_file_from_storedfile($file_record, $file);
-        }
-
-    } else {
+    // One file in filearea means it is empty (it has only top-level directory '.').
+    if (count($draftfiles) > 1 || count($oldfiles) > 1) {
         // we have to merge old and new files - we want to keep file ids for files that were not changed
         // we change time modified for all new and changed files, we keep time created as is
 
         $newhashes = array();
+        $filecount = 0;
         foreach ($draftfiles as $file) {
+            if (!$options['subdirs'] && ($file->get_filepath() !== '/' or $file->is_directory())) {
+                continue;
+            }
+            if (!$allowreferences && $file->is_external_file()) {
+                continue;
+            }
+            if (!$file->is_directory()) {
+                if ($options['maxbytes'] and $options['maxbytes'] < $file->get_filesize()) {
+                    // oversized file - should not get here at all
+                    continue;
+                }
+                if ($options['maxfiles'] != -1 and $options['maxfiles'] <= $filecount) {
+                    // more files - should not get here at all
+                    continue;
+                }
+                $filecount++;
+            }
             $newhash = $fs->get_pathname_hash($contextid, $component, $filearea, $itemid, $file->get_filepath(), $file->get_filename());
-            file_restore_source_field_from_draft_file($file);
             $newhashes[$newhash] = $file;
         }
-        $filecount = 0;
+
+        // Loop through oldfiles and decide which we need to delete and which to update.
+        // After this cycle the array $newhashes will only contain the files that need to be added.
         foreach ($oldfiles as $oldfile) {
             $oldhash = $oldfile->get_pathnamehash();
             if (!isset($newhashes[$oldhash])) {
@@ -857,6 +839,25 @@ function file_save_draft_area_files($draftitemid, $contextid, $component, $filea
             }
 
             $newfile = $newhashes[$oldhash];
+            // Now we know that we have $oldfile and $newfile for the same path.
+            // Let's check if we can update this file or we need to delete and create.
+            if ($newfile->is_directory()) {
+                // Directories are always ok to just update.
+            } else if (($source = @unserialize($newfile->get_source())) && isset($source->original)) {
+                // File has the 'original' - we need to update the file (it may even have not been changed at all).
+                $original = file_storage::unpack_reference($source->original);
+                if ($original['filename'] !== $oldfile->get_filename() || $original['filepath'] !== $oldfile->get_filepath()) {
+                    // Very odd, original points to another file. Delete and create file.
+                    $oldfile->delete();
+                    continue;
+                }
+            } else {
+                // The same file name but absence of 'original' means that file was deteled and uploaded again.
+                // By deleting and creating new file we properly manage all existing references.
+                $oldfile->delete();
+                continue;
+            }
+
             // status changed, we delete old file, and create a new one
             if ($oldfile->get_status() != $newfile->get_status()) {
                 // file was changed, use updated with new timemodified data
@@ -875,8 +876,14 @@ function file_save_draft_area_files($draftitemid, $contextid, $component, $filea
             }
 
             // Updated file source
-            if ($oldfile->get_source() != $newfile->get_source()) {
-                $oldfile->set_source($newfile->get_source());
+            // Field files.source for draftarea files contains serialised object with source and original information.
+            // We only store the source part of it for non-draft file area.
+            $newsource = $newfile->get_source();
+            if ($source = @unserialize($newfile->get_source())) {
+                $newsource = $source->source;
+            }
+            if ($oldfile->get_source() !== $newsource) {
+                $oldfile->set_source($newsource);
             }
 
             // Updated sort order
@@ -890,44 +897,31 @@ function file_save_draft_area_files($draftitemid, $contextid, $component, $filea
             }
 
             // Replaced file content
-            if ($oldfile->get_contenthash() != $newfile->get_contenthash() || $oldfile->get_filesize() != $newfile->get_filesize()) {
-                $oldfile->replace_content_with($newfile);
+            if (!$oldfile->is_directory() &&
+                    ($oldfile->get_contenthash() != $newfile->get_contenthash() ||
+                    $oldfile->get_filesize() != $newfile->get_filesize() ||
+                    $oldfile->get_referencefileid() != $newfile->get_referencefileid() ||
+                    $oldfile->get_userid() != $newfile->get_userid())) {
+                $oldfile->replace_file_with($newfile);
                 // push changes to all local files that are referencing this file
                 $fs->update_references_to_storedfile($oldfile);
             }
 
             // unchanged file or directory - we keep it as is
             unset($newhashes[$oldhash]);
-            if (!$oldfile->is_directory()) {
-                $filecount++;
-            }
         }
 
         // Add fresh file or the file which has changed status
         // the size and subdirectory tests are extra safety only, the UI should prevent it
         foreach ($newhashes as $file) {
             $file_record = array('contextid'=>$contextid, 'component'=>$component, 'filearea'=>$filearea, 'itemid'=>$itemid, 'timemodified'=>time());
-            if (!$options['subdirs']) {
-                if ($file->get_filepath() !== '/' or $file->is_directory()) {
-                    continue;
-                }
-            }
-            if ($options['maxbytes'] and $options['maxbytes'] < $file->get_filesize()) {
-                // oversized file - should not get here at all
-                continue;
-            }
-            if ($options['maxfiles'] != -1 and $options['maxfiles'] <= $filecount) {
-                // more files - should not get here at all
-                break;
-            }
-            if (!$file->is_directory()) {
-                $filecount++;
+            if ($source = @unserialize($file->get_source())) {
+                // Field files.source for draftarea files contains serialised object with source and original information.
+                // We only store the source part of it for non-draft file area.
+                $file_record['source'] = $source->source;
             }
 
             if ($file->is_external_file()) {
-                if (!$allowreferences) {
-                    continue;
-                }
                 $repoid = $file->get_repository_id();
                 if (!empty($repoid)) {
                     $file_record['repositoryid'] = $repoid;
@@ -1208,6 +1202,10 @@ function download_file_content($url, $headers=null, $postdata=null, $fullrespons
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HEADER, false);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $connecttimeout);
+
+    if ($cacert = curl::get_cacert()) {
+        curl_setopt($ch, CURLOPT_CAINFO, $cacert);
+    }
 
     if (!ini_get('open_basedir') and !ini_get('safe_mode')) {
         // TODO: add version test for '7.10.5'
@@ -1506,6 +1504,8 @@ function &get_mimetypes_array() {
         'm'    => array ('type'=>'text/plain', 'icon'=>'sourcecode'),
         'mbz'  => array ('type'=>'application/vnd.moodle.backup', 'icon'=>'moodle'),
         'mdb'  => array ('type'=>'application/x-msaccess', 'icon'=>'base'),
+        'mht'  => array ('type'=>'message/rfc822', 'icon'=>'archive'),
+        'mhtml'=> array ('type'=>'message/rfc822', 'icon'=>'archive'),
         'mov'  => array ('type'=>'video/quicktime', 'icon'=>'quicktime', 'groups'=>array('video','web_video'), 'string'=>'video'),
         'movie'=> array ('type'=>'video/x-sgi-movie', 'icon'=>'quicktime', 'groups'=>array('video'), 'string'=>'video'),
         'm3u'  => array ('type'=>'audio/x-mpegurl', 'icon'=>'mp3', 'groups'=>array('audio'), 'string'=>'audio'),
@@ -2021,7 +2021,11 @@ function readfile_accel($file, $mimetype, $accelerate) {
     header('Last-Modified: '. gmdate('D, d M Y H:i:s', $lastmodified) .' GMT');
 
     if (is_object($file)) {
-        header('ETag: ' . $file->get_contenthash());
+        if (empty($_SERVER['HTTP_RANGE'])) {
+            // Use Etag only when not byteserving,
+            // is it tag of this range or whole file?
+            header('Etag: ' . $file->get_contenthash());
+        }
         if (isset($_SERVER['HTTP_IF_NONE_MATCH']) and $_SERVER['HTTP_IF_NONE_MATCH'] === $file->get_contenthash()) {
             header('HTTP/1.1 304 Not Modified');
             return;
@@ -2671,6 +2675,10 @@ function byteserving_send_file($handle, $mimetype, $ranges, $filesize) {
     // better turn off any kind of compression and buffering
     @ini_set('zlib.output_compression', 'Off');
 
+    // Remove Etag because is is not strictly defined for byteserving,
+    // is it tag of this range or whole file?
+    header_remove('Etag');
+
     $chunksize = 1*(1024*1024); // 1MB chunks - must be less than 2MB!
     if ($handle === false) {
         die;
@@ -2928,6 +2936,39 @@ class curl {
         $this->options['CURLOPT_SSL_VERIFYPEER']    = 0;
         $this->options['CURLOPT_SSL_VERIFYHOST']    = 2;
         $this->options['CURLOPT_CONNECTTIMEOUT']    = 30;
+
+        if ($cacert = self::get_cacert()) {
+            $this->options['CURLOPT_CAINFO'] = $cacert;
+        }
+    }
+
+    /**
+     * Get the location of ca certificates.
+     * @return string absolute file path or empty if default used
+     */
+    public static function get_cacert() {
+        global $CFG;
+
+        // Bundle in dataroot always wins.
+        if (is_readable("$CFG->dataroot/moodleorgca.crt")) {
+            return realpath("$CFG->dataroot/moodleorgca.crt");
+        }
+
+        // Next comes the default from php.ini
+        $cacert = ini_get('curl.cainfo');
+        if (!empty($cacert) and is_readable($cacert)) {
+            return realpath($cacert);
+        }
+
+        // Windows PHP does not have any certs, we need to use something.
+        if ($CFG->ostype === 'WINDOWS') {
+            if (is_readable("$CFG->libdir/cacert.pem")) {
+                return realpath("$CFG->libdir/cacert.pem");
+            }
+        }
+
+        // Use default, this should work fine on all properly configured *nix systems.
+        return null;
     }
 
     /**
@@ -3024,7 +3065,6 @@ class curl {
      */
     private function formatHeader($ch, $header)
     {
-        $this->count++;
         if (strlen($header) > 2) {
             list($key, $value) = explode(" ", rtrim($header, "\r\n"), 2);
             $key = rtrim($key, ':');
@@ -3756,7 +3796,32 @@ function file_pluginfile($relativepath, $forcedownload, $preview = null) {
         } else {
             send_file_not_found();
         }
+    // ========================================================================================================================
+    } else if ($component === 'badges') {
+        require_once($CFG->libdir . '/badgeslib.php');
 
+        $badgeid = (int)array_shift($args);
+        $badge = new badge($badgeid);
+        $filename = array_pop($args);
+
+        if ($filearea === 'badgeimage') {
+            if ($filename !== 'f1' && $filename !== 'f2') {
+                send_file_not_found();
+            }
+            if (!$file = $fs->get_file($context->id, 'badges', 'badgeimage', $badge->id, '/', $filename.'.png')) {
+                send_file_not_found();
+            }
+
+            session_get_instance()->write_close();
+            send_stored_file($file, 60*60, 0, $forcedownload, array('preview' => $preview));
+        } else if ($filearea === 'userbadge'  and $context->contextlevel == CONTEXT_USER) {
+            if (!$file = $fs->get_file($context->id, 'badges', 'userbadge', $badge->id, '/', $filename.'.png')) {
+                send_file_not_found();
+            }
+
+            session_get_instance()->write_close();
+            send_stored_file($file, 60*60, 0, true, array('preview' => $preview));
+        }
     // ========================================================================================================================
     } else if ($component === 'calendar') {
         if ($filearea === 'event_description'  and $context->contextlevel == CONTEXT_SYSTEM) {
@@ -4073,14 +4138,14 @@ function file_pluginfile($relativepath, $forcedownload, $preview = null) {
             send_file_not_found();
         }
 
-        if ($filearea === 'summary') {
+        if ($filearea === 'summary' || $filearea === 'overviewfiles') {
             if ($CFG->forcelogin) {
                 require_login();
             }
 
             $filename = array_pop($args);
             $filepath = $args ? '/'.implode('/', $args).'/' : '/';
-            if (!$file = $fs->get_file($context->id, 'course', 'summary', 0, $filepath, $filename) or $file->is_directory()) {
+            if (!$file = $fs->get_file($context->id, 'course', $filearea, 0, $filepath, $filename) or $file->is_directory()) {
                 send_file_not_found();
             }
 

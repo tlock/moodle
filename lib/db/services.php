@@ -35,6 +35,71 @@
 
 $functions = array(
 
+    // Cohort related functions.
+
+    'core_cohort_create_cohorts' => array(
+        'classname'   => 'core_cohort_external',
+        'methodname'  => 'create_cohorts',
+        'classpath'   => 'cohort/externallib.php',
+        'description' => 'Creates new cohorts.',
+        'type'        => 'write',
+        'capabilities'=> 'moodle/cohort:manage',
+    ),
+
+    'core_cohort_delete_cohorts' => array(
+        'classname'   => 'core_cohort_external',
+        'methodname'  => 'delete_cohorts',
+        'classpath'   => 'cohort/externallib.php',
+        'description' => 'Deletes all specified cohorts.',
+        'type'        => 'delete',
+        'capabilities'=> 'moodle/cohort:manage',
+    ),
+
+    'core_cohort_get_cohorts' => array(
+        'classname'   => 'core_cohort_external',
+        'methodname'  => 'get_cohorts',
+        'classpath'   => 'cohort/externallib.php',
+        'description' => 'Returns cohort details.',
+        'type'        => 'read',
+        'capabilities'=> 'moodle/cohort:view',
+    ),
+
+    'core_cohort_update_cohorts' => array(
+        'classname'   => 'core_cohort_external',
+        'methodname'  => 'update_cohorts',
+        'classpath'   => 'cohort/externallib.php',
+        'description' => 'Updates existing cohorts.',
+        'type'        => 'write',
+        'capabilities'=> 'moodle/cohort:manage',
+    ),
+
+    'core_cohort_add_cohort_members' => array(
+        'classname'   => 'core_cohort_external',
+        'methodname'  => 'add_cohort_members',
+        'classpath'   => 'cohort/externallib.php',
+        'description' => 'Adds cohort members.',
+        'type'        => 'write',
+        'capabilities'=> 'moodle/cohort:assign',
+    ),
+
+    'core_cohort_delete_cohort_members' => array(
+        'classname'   => 'core_cohort_external',
+        'methodname'  => 'delete_cohort_members',
+        'classpath'   => 'cohort/externallib.php',
+        'description' => 'Deletes cohort members.',
+        'type'        => 'delete',
+        'capabilities'=> 'moodle/cohort:assign',
+    ),
+
+    'core_cohort_get_cohort_members' => array(
+        'classname'   => 'core_cohort_external',
+        'methodname'  => 'get_cohort_members',
+        'classpath'   => 'cohort/externallib.php',
+        'description' => 'Returns cohort members.',
+        'type'        => 'read',
+        'capabilities'=> 'moodle/cohort:view',
+    ),
+
     // === group related functions ===
 
     'moodle_group_create_groups' => array(
@@ -304,7 +369,7 @@ $functions = array(
         'classname'   => 'core_user_external',
         'methodname'  => 'get_users_by_id',
         'classpath'   => 'user/externallib.php',
-        'description' => 'Get users by id.',
+        'description' => 'DEPRECATED: this deprecated function will be removed in a future version. This function has been replaced by core_user_get_users_by_field()',
         'type'        => 'read',
         'capabilities'=> 'moodle/user:viewdetails, moodle/user:viewhiddendetails, moodle/course:useremail, moodle/user:update',
     ),
@@ -707,6 +772,16 @@ $functions = array(
         'description' => 'Update notes',
         'type'        => 'write',
         'capabilities'=> 'moodle/notes:manage',
+    ),
+
+    // === grade related functions ===
+
+    'core_grade_get_definitions' => array(
+        'classname'   => 'core_grade_external',
+        'methodname'  => 'get_definitions',
+        'classpath'   => 'grade/externallib.php',
+        'description' => 'Get grading definitions',
+        'type'        => 'read'
     ),
 
     // === webservice related functions ===

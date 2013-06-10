@@ -24,13 +24,27 @@
 
 require_once("../config.php");
 require_once($CFG->dirroot.'/course/lib.php');
+require_once($CFG->libdir.'/coursecatlib.php');
 
 // Category id.
-$id = optional_param('id', 0, PARAM_INT);
+$id = optional_param('categoryid', 0, PARAM_INT);
 // Which page to show.
 $page = optional_param('page', 0, PARAM_INT);
 // How many per page.
 $perpage = optional_param('perpage', $CFG->coursesperpage, PARAM_INT);
+
+$search    = optional_param('search', '', PARAM_RAW);  // search words
+$blocklist = optional_param('blocklist', 0, PARAM_INT);
+$modulelist= optional_param('modulelist', '', PARAM_PLUGIN);
+if (!$id && !empty($search)) {
+    $searchcriteria = array('search' => $search);
+} else if (!$id && !empty($blocklist)) {
+    $searchcriteria = array('blocklist' => $blocklist);
+} else if (!$id && !empty($modulelist)) {
+    $searchcriteria = array('modulelist' => $modulelist);
+} else {
+    $searchcriteria = array();
+}
 
 // Actions to manage courses.
 $hide = optional_param('hide', 0, PARAM_INT);
@@ -51,18 +65,17 @@ $movedowncat = optional_param('movedowncat', 0, PARAM_INT);
 
 require_login();
 
+// Retrieve coursecat object
+// This will also make sure that category is accessible and create default category if missing
+$coursecat = coursecat::get($id);
+
 if ($id) {
     $PAGE->set_category_by_id($id);
-    $PAGE->set_url(new moodle_url('/course/manage.php', array('id' => $id)));
+    $PAGE->set_url(new moodle_url('/course/manage.php', array('categoryid' => $id)));
     // This is sure to be the category context.
     $context = $PAGE->context;
-    // And the object has been loaded for us no need for another DB call.
-    $category = $PAGE->category;
-    if (!can_edit_in_category($category->id)) {
-        redirect(new moodle_url('/course/category.php', array('id' => $category->id)));
-    }
-    if (!$category->visible) {
-        require_capability('moodle/category:viewhiddencategories', $context);
+    if (!can_edit_in_category($coursecat->id)) {
+        redirect(new moodle_url('/course/index.php', array('categoryid' => $coursecat->id)));
     }
 } else {
     $context = context_system::instance();
@@ -75,26 +88,10 @@ if ($id) {
 
 $canmanage = has_capability('moodle/category:manage', $context);
 
-// Check the default category exists.
-if (!$id && !$DB->record_exists('course_categories', array('parent' => 0))) {
-    // No category yet! Try and make one.
-    $tempcat = new stdClass;
-    $tempcat->name = get_string('miscellaneous');
-    $tempcat->id = $DB->insert_record('course_categories', $tempcat);
-    // Fetch the context to ensure it is created.
-    context_coursecat::instance($tempcat->id);
-    mark_context_dirty('/'.SYSCONTEXTID);
-    // Required to build course_categories.depth and categories.path.
-    fix_course_sortorder();
-    set_config('defaultrequestcategory', $tempcat->id);
-    // Unset the temp category. We no longer need it.
-    unset($tempcat);
-}
-
 // Process any category actions.
 if (!empty($deletecat) and confirm_sesskey()) {
     // Delete a category.
-    $cattodelete = $DB->get_record('course_categories', array('id' => $deletecat), '*', MUST_EXIST);
+    $cattodelete = coursecat::get($deletecat);
     $context = context_coursecat::instance($deletecat);
     require_capability('moodle/category:manage', $context);
     require_capability('moodle/category:manage', get_category_or_system_context($cattodelete->parent));
@@ -103,7 +100,6 @@ if (!empty($deletecat) and confirm_sesskey()) {
 
     require_once($CFG->dirroot.'/course/delete_category_form.php');
     $mform = new delete_category_form(null, $cattodelete);
-    $mform->set_data(array('deletecat' => $deletecat));
     if ($mform->is_cancelled()) {
         redirect(new moodle_url('/course/manage.php'));
     }
@@ -114,25 +110,24 @@ if (!empty($deletecat) and confirm_sesskey()) {
 
     if ($data = $mform->get_data()) {
         // The form has been submit handle it.
-        if ($data->fulldelete) {
-            $deletedcourses = category_delete_full($cattodelete, true);
+        if ($data->fulldelete == 1 && $cattodelete->can_delete_full()) {
+            $cattodeletename = $cattodelete->get_formatted_name();
+            $deletedcourses = $cattodelete->delete_full(true);
             foreach ($deletedcourses as $course) {
                 echo $OUTPUT->notification(get_string('coursedeleted', '', $course->shortname), 'notifysuccess');
             }
-            $cattodeletename = format_string($cattodelete->name, true, array('context' => $context));
             echo $OUTPUT->notification(get_string('coursecategorydeleted', '', $cattodeletename), 'notifysuccess');
+            echo $OUTPUT->continue_button(new moodle_url('/course/manage.php'));
 
+        } else if ($data->fulldelete == 0 && $cattodelete->can_move_content_to($data->newparent)) {
+            $cattodelete->delete_move($data->newparent, true);
+            echo $OUTPUT->continue_button(new moodle_url('/course/manage.php'));
         } else {
-            category_delete_move($cattodelete, $data->newparent, true);
+            // Some error in parameters (user is cheating?)
+            $mform->display();
         }
-        if ($deletecat == $CFG->defaultrequestcategory) {
-            // If we deleted $CFG->defaultrequestcategory, make it point somewhere else.
-            set_config('defaultrequestcategory', $DB->get_field('course_categories', 'MIN(id)', array('parent' => 0)));
-        }
-        echo $OUTPUT->continue_button(new moodle_url('/course/manage.php'));
     } else {
         // Display the form.
-        require_once($CFG->libdir . '/questionlib.php');
         $mform->display();
     }
     // Finish output and exit.
@@ -142,31 +137,25 @@ if (!empty($deletecat) and confirm_sesskey()) {
 
 if (!empty($movecat) and ($movetocat >= 0) and confirm_sesskey()) {
     // Move a category to a new parent if required.
-    if ($cattomove = $DB->get_record('course_categories', array('id' => $movecat))) {
-        require_capability('moodle/category:manage', get_category_or_system_context($cattomove->parent));
-        if ($cattomove->parent != $movetocat) {
-            $newparent = $DB->get_record('course_categories', array('id' => $movetocat));
-            require_capability('moodle/category:manage', get_category_or_system_context($movetocat));
-            move_category($cattomove, $newparent);
+    $cattomove = coursecat::get($movecat);
+    if ($cattomove->parent != $movetocat) {
+        if ($cattomove->can_change_parent($movetocat)) {
+            $cattomove->change_parent($movetocat);
+        } else {
+            print_error('cannotmovecategory');
         }
     }
 }
 
 // Hide or show a category.
 if ($hidecat and confirm_sesskey()) {
-    if ($tempcat = $DB->get_record('course_categories', array('id' => $hidecat))) {
-        require_capability('moodle/category:manage', get_category_or_system_context($tempcat->parent));
-        if ($tempcat->visible == 1) {
-            course_category_hide($tempcat);
-        }
-    }
+    $cattohide = coursecat::get($hidecat);
+    require_capability('moodle/category:manage', get_category_or_system_context($cattohide->parent));
+    $cattohide->hide();
 } else if ($showcat and confirm_sesskey()) {
-    if ($tempcat = $DB->get_record('course_categories', array('id' => $showcat))) {
-        require_capability('moodle/category:manage', get_category_or_system_context($tempcat->parent));
-        if ($tempcat->visible == 0) {
-            course_category_show($tempcat);
-        }
-    }
+    $cattoshow = coursecat::get($showcat);
+    require_capability('moodle/category:manage', get_category_or_system_context($cattoshow->parent));
+    $cattoshow->show();
 }
 
 if ((!empty($moveupcat) or !empty($movedowncat)) and confirm_sesskey()) {
@@ -194,6 +183,7 @@ if ((!empty($moveupcat) or !empty($movedowncat)) and confirm_sesskey()) {
     if ($swapcategory and $movecategory) {
         $DB->set_field('course_categories', 'sortorder', $swapcategory->sortorder, array('id' => $movecategory->id));
         $DB->set_field('course_categories', 'sortorder', $movecategory->sortorder, array('id' => $swapcategory->id));
+        cache_helper::purge_by_event('changesincoursecat');
         add_to_log(SITEID, "category", "move", "editcategory.php?id=$movecategory->id", $movecategory->id);
     }
 
@@ -201,17 +191,18 @@ if ((!empty($moveupcat) or !empty($movedowncat)) and confirm_sesskey()) {
     fix_course_sortorder();
 }
 
-if (isset($category) && $canmanage && $resort && confirm_sesskey()) {
+if ($coursecat->id && $canmanage && $resort && confirm_sesskey()) {
     // Resort the category.
-    if ($courses = get_courses($category->id, '', 'c.id,c.fullname,c.sortorder')) {
+    if ($courses = get_courses($coursecat->id, '', 'c.id,c.fullname,c.sortorder')) {
         collatorlib::asort_objects_by_property($courses, 'fullname', collatorlib::SORT_NATURAL);
         $i = 1;
         foreach ($courses as $course) {
-            $DB->set_field('course', 'sortorder', $category->sortorder + $i, array('id' => $course->id));
+            $DB->set_field('course', 'sortorder', $coursecat->sortorder + $i, array('id' => $course->id));
             $i++;
         }
         // This should not be needed but we do it just to be safe.
         fix_course_sortorder();
+        cache_helper::purge_by_event('changesincourse');
     }
 }
 
@@ -232,7 +223,7 @@ if (!empty($moveto) && ($data = data_submitted()) && confirm_sesskey()) {
             array_push($courses, $courseid);
             // Check this course's category.
             if ($movingcourse = $DB->get_record('course', array('id' => $courseid))) {
-                if ($movingcourse->category != $id ) {
+                if ($id && $movingcourse->category != $id ) {
                     print_error('coursedoesnotbelongtocategory');
                 }
             } else {
@@ -257,6 +248,7 @@ if ((!empty($hide) or !empty($show)) && confirm_sesskey()) {
     // Set the visibility of the course. we set the old flag when user manually changes visibility of course.
     $params = array('id' => $course->id, 'visible' => $visible, 'visibleold' => $visible, 'timemodified' => time());
     $DB->update_record('course', $params);
+    cache_helper::purge_by_event('changesincourse');
     add_to_log($course->id, "course", ($visible ? 'show' : 'hide'), "edit.php?id=$course->id", $course->id);
 }
 
@@ -284,27 +276,30 @@ if ((!empty($moveup) or !empty($movedown)) && confirm_sesskey()) {
         }
         $DB->set_field('course', 'sortorder', $swapcourse->sortorder, array('id' => $movecourse->id));
         $DB->set_field('course', 'sortorder', $movecourse->sortorder, array('id' => $swapcourse->id));
+        cache_helper::purge_by_event('changesincourse');
         add_to_log($movecourse->id, "course", "move", "edit.php?id=$movecourse->id", $movecourse->id);
     }
 }
 
 // Prepare the standard URL params for this page. We'll need them later.
-$urlparams = array('id' => $id);
+$urlparams = array('categoryid' => $id);
 if ($page) {
     $urlparams['page'] = $page;
 }
 if ($perpage) {
     $urlparams['perpage'] = $perpage;
 }
+$urlparams += $searchcriteria;
 
 $PAGE->set_pagelayout('coursecategory');
+$courserenderer = $PAGE->get_renderer('core', 'course');
 
 if (can_edit_in_category()) {
     // Integrate into the admin tree only if the user can edit categories at the top level,
     // otherwise the admin block does not appear to this user, and you get an error.
     require_once($CFG->libdir . '/adminlib.php');
     if ($id) {
-        navigation_node::override_active_url(new moodle_url('/course/category.php', array('id' => $id)));
+        navigation_node::override_active_url(new moodle_url('/course/index.php', array('categoryid' => $id)));
     }
     admin_externalpage_setup('coursemgmt', '', $urlparams, $CFG->wwwroot . '/course/manage.php');
     $settingsnode = $PAGE->settingsnav->find_active_node();
@@ -314,24 +309,18 @@ if (can_edit_in_category()) {
         $PAGE->navbar->add($settingsnode->text, $settingsnode->action);
     }
 } else {
-    // If we get here then they must have arrived here using a specific category
-    // within which they can manage.
-    // We can safetly assume $category is set.
     $site = get_site();
-    $PAGE->set_title("$site->shortname: $category->name");
+    $PAGE->set_title("$site->shortname: $coursecat->name");
     $PAGE->set_heading($site->fullname);
-    $PAGE->set_button(print_course_search('', true, 'navbar'));
+    $PAGE->set_button($courserenderer->course_search_form('', 'navbar'));
 }
-
-$parentlist = array();
-$displaylist = array();
-make_categories_list($displaylist, $parentlist);
-$displaylist[0] = get_string('top');
 
 // Start output.
 echo $OUTPUT->header();
 
-if (!isset($category)) {
+if (!empty($searchcriteria)) {
+    echo $OUTPUT->heading(new lang_string('searchresults'));
+} else if (!$coursecat->id) {
     // Print out the categories with all the knobs.
     $table = new html_table;
     $table->id = 'coursecategories';
@@ -350,12 +339,13 @@ if (!isset($category)) {
     );
     $table->data = array();
 
-    print_category_edit($table, null, $displaylist, $parentlist);
+    print_category_edit($table, $coursecat);
 
     echo html_writer::table($table);
 } else {
     // Print the category selector.
-    $select = new single_select(new moodle_url('/course/manage.php'), 'id', $displaylist, $category->id, null, 'switchcategory');
+    $displaylist = coursecat::make_categories_list();
+    $select = new single_select(new moodle_url('/course/manage.php'), 'categoryid', $displaylist, $coursecat->id, null, 'switchcategory');
     $select->set_label(get_string('categories').':');
 
     echo html_writer::start_tag('div', array('class' => 'categorypicker'));
@@ -363,7 +353,7 @@ if (!isset($category)) {
     echo html_writer::end_tag('div');
 }
 
-if ($canmanage) {
+if ($canmanage && empty($searchcriteria)) {
     echo $OUTPUT->container_start('buttons');
     // Print button to update this category.
     if ($id) {
@@ -382,7 +372,12 @@ if ($canmanage) {
     echo $OUTPUT->container_end();
 }
 
-if (isset($category)) {
+if (!empty($searchcriteria)) {
+    $courses = coursecat::get(0)->search_courses($searchcriteria, array('recursive' => true,
+        'offset' => $page * $perpage, 'limit' => $perpage, 'sort' => array('fullname' => 1)));
+    $numcourses = count($courses);
+    $totalcount = coursecat::get(0)->search_courses_count($searchcriteria, array('recursive' => true));
+} else if ($coursecat->id) {
     // Print out all the sub-categories (plain mode).
     // In order to view hidden subcategories the user must have the viewhiddencategories.
     // capability in the current category..
@@ -401,7 +396,7 @@ if (isset($category)) {
                    ctx.contextlevel = :contextlevel
                    $categorywhere
           ORDER BY cc.sortorder ASC";
-    $subcategories = $DB->get_recordset_sql($sql, array('parentid' => $category->id, 'contextlevel' => CONTEXT_COURSECAT));
+    $subcategories = $DB->get_recordset_sql($sql, array('parentid' => $coursecat->id, 'contextlevel' => CONTEXT_COURSECAT));
     // Prepare a table to display the sub categories.
     $table = new html_table;
     $table->attributes = array(
@@ -421,7 +416,7 @@ if (isset($category)) {
         $attributes = $subcategory->visible ? array() : array('class' => 'dimmed');
         $text = format_string($subcategory->name, true, array('context' => $context));
         // Add the subcategory to the table.
-        $baseurl->param('id', $subcategory->id);
+        $baseurl->param('categoryid', $subcategory->id);
         $table->data[] = array(html_writer::link($baseurl, $text, $attributes));
     }
 
@@ -430,7 +425,7 @@ if (isset($category)) {
         echo html_writer::table($table);
     }
 
-    $courses = get_courses_page($category->id, 'c.sortorder ASC',
+    $courses = get_courses_page($coursecat->id, 'c.sortorder ASC',
             'c.id,c.sortorder,c.shortname,c.fullname,c.summary,c.visible',
             $totalcount, $page*$perpage, $perpage);
     $numcourses = count($courses);
@@ -455,6 +450,11 @@ if (!$courses) {
         get_string('select')
     );
     $table->colclasses = array(null, null, 'mdl-align');
+    if (!empty($searchcriteria)) {
+        // add 'Category' column
+        array_splice($table->head, 1, 0, array(get_string('category')));
+        array_splice($table->colclasses, 1, 0, array(null));
+    }
     $table->data = array();
 
     $count = 0;
@@ -533,11 +533,11 @@ if (!$courses) {
         }
 
         if ($canmanage) {
-            if ($up) {
+            if ($up && empty($searchcriteria)) {
                 $url = new moodle_url($baseurl, array('moveup' => $acourse->id));
                 $icons[] = $OUTPUT->action_icon($url, new pix_icon('t/up', get_string('moveup')));
             }
-            if ($down) {
+            if ($down && empty($searchcriteria)) {
                 $url = new moodle_url($baseurl, array('movedown' => $acourse->id));
                 $icons[] = $OUTPUT->action_icon($url, new pix_icon('t/down', get_string('movedown')));
             }
@@ -549,20 +549,26 @@ if (!$courses) {
             new html_table_cell(join('', $icons)),
             new html_table_cell(html_writer::empty_tag('input', array('type' => 'checkbox', 'name' => 'c'.$acourse->id)))
         ));
+
+        if (!empty($searchcriteria)) {
+            // add 'Category' column
+            $category = coursecat::get($acourse->category, IGNORE_MISSING, true);
+            $cell = new html_table_cell($category->get_formatted_name());
+            $cell->attributes['class'] = $category->visible ? '' : 'dimmed_text';
+            array_splice($table->data[count($table->data) - 1]->cells, 1, 0, array($cell));
+        }
     }
 
     if ($abletomovecourses) {
-        $movetocategories = array();
-        $notused = array();
-        make_categories_list($movetocategories, $notused, 'moodle/category:manage');
+        $movetocategories = coursecat::make_categories_list('moodle/category:manage');
         $movetocategories[$id] = get_string('moveselectedcoursesto');
 
         $cell = new html_table_cell();
         $cell->colspan = 3;
         $cell->attributes['class'] = 'mdl-right';
         $cell->text = html_writer::label(get_string('moveselectedcoursesto'), 'movetoid', false, array('class' => 'accesshide'));
-        $cell->text .= html_writer::select($movetocategories, 'moveto', $id, null, array('id'=>'movetoid', 'class' => 'autosubmit'));
-        $cell->text .= html_writer::empty_tag('input', array('type' => 'hidden', 'name' => 'id', 'value' => $id));
+        $cell->text .= html_writer::select($movetocategories, 'moveto', $id, null, array('id' => 'movetoid', 'class' => 'autosubmit'));
+        $cell->text .= html_writer::empty_tag('input', array('type' => 'hidden', 'name' => 'categoryid', 'value' => $id));
         $PAGE->requires->yui_module('moodle-core-formautosubmit',
             'M.core.init_formautosubmit',
             array(array('selectid' => 'movetoid', 'nothing' => $id))
@@ -571,12 +577,15 @@ if (!$courses) {
     }
 
     $actionurl = new moodle_url('/course/manage.php');
-    $pagingurl = new moodle_url('/course/manage.php', array('id' => $id, 'perpage' => $perpage));
+    $pagingurl = new moodle_url('/course/manage.php', array('categoryid' => $id, 'perpage' => $perpage) + $searchcriteria);
 
     echo $OUTPUT->paging_bar($totalcount, $page, $perpage, $pagingurl);
     echo html_writer::start_tag('form', array('id' => 'movecourses', 'action' => $actionurl, 'method' => 'post'));
     echo html_writer::start_tag('div');
     echo html_writer::empty_tag('input', array('type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()));
+    foreach ($searchcriteria as $key => $value) {
+        echo html_writer::empty_tag('input', array('type' => 'hidden', 'name' => $key, 'value' => $value));
+    }
     echo html_writer::table($table);
     echo html_writer::end_tag('div');
     echo html_writer::end_tag('form');
@@ -584,17 +593,17 @@ if (!$courses) {
 }
 
 echo html_writer::start_tag('div', array('class' => 'buttons'));
-if ($canmanage and $numcourses > 1) {
+if ($canmanage and $numcourses > 1 && empty($searchcriteria)) {
     // Print button to re-sort courses by name.
-    $url = new moodle_url('/course/manage.php', array('id' => $id, 'resort' => 'name', 'sesskey' => sesskey()));
+    $url = new moodle_url('/course/manage.php', array('categoryid' => $id, 'resort' => 'name', 'sesskey' => sesskey()));
     echo $OUTPUT->single_button($url, get_string('resortcoursesbyname'), 'get');
 }
 
-if (has_capability('moodle/course:create', $context)) {
+if (has_capability('moodle/course:create', $context) && empty($searchcriteria)) {
     // Print button to create a new course.
     $url = new moodle_url('/course/edit.php');
-    if (isset($category)) {
-        $url->params(array('category' => $category->id, 'returnto' => 'catmanage'));
+    if ($coursecat->id) {
+        $url->params(array('category' => $coursecat->id, 'returnto' => 'catmanage'));
     } else {
         $url->params(array('category' => $CFG->defaultrequestcategory, 'returnto' => 'topcatmanage'));
     }
@@ -606,7 +615,7 @@ if (!empty($CFG->enablecourserequests) && $id == $CFG->defaultrequestcategory) {
 }
 echo html_writer::end_tag('div');
 
-print_course_search();
+echo $courserenderer->course_search_form();
 
 echo $OUTPUT->footer();
 
@@ -614,14 +623,12 @@ echo $OUTPUT->footer();
  * Recursive function to print all the categories ready for editing.
  *
  * @param html_table $table The table to add data to.
- * @param stdClass $category The category to render
- * @param array $displaylist The categories this can be moved to.
- * @param array $parentslist An array of categories.
+ * @param coursecat $category The category to render
  * @param int $depth The depth of the category.
  * @param bool $up True if this category can be moved up.
  * @param bool $down True if this category can be moved down.
  */
-function print_category_edit(html_table $table, $category, $displaylist, $parentslist, $depth=-1, $up=false, $down=false) {
+function print_category_edit(html_table $table, coursecat $category, $depth = -1, $up = false, $down = false) {
     global $OUTPUT;
 
     static $str = null;
@@ -639,22 +646,20 @@ function print_category_edit(html_table $table, $category, $displaylist, $parent
         $str->spacer = $OUTPUT->spacer().' ';
     }
 
-    if (!empty($category)) {
+    if ($category->id) {
 
-        if (!isset($category->context)) {
-            $category->context = context_coursecat::instance($category->id);
-        }
+        $categorycontext = context_coursecat::instance($category->id);
 
         $attributes = array();
         $attributes['class'] = $category->visible ? '' : 'dimmed';
         $attributes['title'] = $str->edit;
-        $categoryurl = new moodle_url('/course/manage.php', array('id' => $category->id, 'sesskey' => sesskey()));
-        $categoryname = format_string($category->name, true, array('context' => $category->context));
+        $categoryurl = new moodle_url('/course/manage.php', array('categoryid' => $category->id, 'sesskey' => sesskey()));
+        $categoryname = $category->get_formatted_name();
         $categorypadding = str_repeat('&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;', $depth);
         $categoryname = $categorypadding . html_writer::link($categoryurl, $categoryname, $attributes);
 
         $icons = array();
-        if (has_capability('moodle/category:manage', $category->context)) {
+        if (has_capability('moodle/category:manage', $categorycontext)) {
             // Edit category.
             $icons[] = $OUTPUT->action_icon(
                 new moodle_url('/course/editcategory.php', array('id' => $category->id)),
@@ -682,9 +687,9 @@ function print_category_edit(html_table $table, $category, $displaylist, $parent
                 );
             }
             // Cohorts.
-            if (has_any_capability(array('moodle/cohort:manage', 'moodle/cohort:view'), $category->context)) {
+            if (has_any_capability(array('moodle/cohort:manage', 'moodle/cohort:view'), $categorycontext)) {
                 $icons[] = $OUTPUT->action_icon(
-                    new moodle_url('/cohort/index.php', array('contextid' => $category->context->id)),
+                    new moodle_url('/cohort/index.php', array('contextid' => $categorycontext->id)),
                     new pix_icon('t/cohort', $str->cohorts, 'moodle', array('class' => 'iconsmall')),
                     null, array('title' => $str->cohorts)
                 );
@@ -711,15 +716,9 @@ function print_category_edit(html_table $table, $category, $displaylist, $parent
         }
 
         $actions = '';
-        if (has_capability('moodle/category:manage', $category->context)) {
-            $tempdisplaylist = $displaylist;
-            unset($tempdisplaylist[$category->id]);
-            foreach ($parentslist as $key => $parents) {
-                if (in_array($category->id, $parents)) {
-                    unset($tempdisplaylist[$key]);
-                }
-            }
-            $popupurl = new moodle_url("manage.php?movecat=$category->id&sesskey=".sesskey());
+        if (has_capability('moodle/category:manage', $categorycontext)) {
+            $popupurl = new moodle_url('/course/manage.php', array('movecat' => $category->id, 'sesskey' => sesskey()));
+            $tempdisplaylist = array(0 => get_string('top')) + coursecat::make_categories_list('moodle/category:manage', $category->id);
             $select = new single_select($popupurl, 'movetocat', $tempdisplaylist, $category->parent, null, "moveform$category->id");
             $select->set_label(get_string('frontpagecategorynames'), array('class' => 'accesshide'));
             $actions = $OUTPUT->render($select);
@@ -735,14 +734,9 @@ function print_category_edit(html_table $table, $category, $displaylist, $parent
             // Actions.
             new html_table_cell($actions)
         ));
-
-        // Get the subcategories to be printed.
-        $categories = get_categories($category->id);
-    } else {
-        $categories = get_categories(0);
     }
 
-    if ($categories) {
+    if ($categories = $category->get_children()) {
         // Print all the children recursively.
         $countcats = count($categories);
         $count = 0;
@@ -757,7 +751,7 @@ function print_category_edit(html_table $table, $category, $displaylist, $parent
             $down = $last ? false : true;
             $first = false;
 
-            print_category_edit($table, $cat, $displaylist, $parentslist, $depth+1, $up, $down);
+            print_category_edit($table, $cat, $depth+1, $up, $down);
         }
     }
 }

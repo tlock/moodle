@@ -221,10 +221,6 @@ $CFG->admin = 'admin';
 // RewriteRule (^.*/theme/yui_combo\.php)(/.*) $1?file=$2
 //
 //
-// This setting will prevent the 'My Courses' page being displayed when a student
-// logs in. The site front page will always show the same (logged-out) view.
-//     $CFG->disablemycourses = true;
-//
 // By default all user sessions should be using locking, uncomment
 // the following setting to prevent locking for guests and not-logged-in
 // accounts. This may improve performance significantly.
@@ -438,6 +434,16 @@ $CFG->admin = 'admin';
 //
 //      $CFG->disableupdatenotifications = true;
 //
+// Use the following flag to completely disable the Automatic updates deployment
+// feature and hide it from the server administration UI.
+//
+//      $CFG->disableupdateautodeploy = true;
+//
+// Use the following flag to completely disable the On-click add-on installation
+// feature and hide it from the server administration UI.
+//
+//      $CFG->disableonclickaddoninstall = true;
+//
 // As of version 2.4 Moodle serves icons as SVG images if the users browser appears
 // to support SVG.
 // For those wanting to control the serving of SVG images the following setting can
@@ -449,6 +455,12 @@ $CFG->admin = 'admin';
 //
 // To ensure they are never used even when available:
 //      $CFG->svgicons = false;
+//
+// Some administration options allow setting the path to executable files. This can
+// potentially cause a security risk. Set this option to true to disable editing
+// those config settings via the web. They will need to be set explicitly in the
+// config.php file
+//      $CFG->preventexecpath = true;
 //
 //=========================================================================
 // 7. SETTINGS FOR DEVELOPMENT SERVERS - not intended for production use!!!
@@ -542,6 +554,11 @@ $CFG->admin = 'admin';
 //=========================================================================
 // 11. BEHAT SUPPORT
 //=========================================================================
+// Behat needs a separate data directory and unique database prefix:
+//
+// $CFG->behat_prefix = 'bht_';
+// $CFG->behat_dataroot = '/home/example/bht_moodledata';
+//
 // Behat uses http://localhost:8000 as default URL to run
 // the acceptance tests, you can override this value.
 // Example:
@@ -562,6 +579,32 @@ $CFG->admin = 'admin';
 //                   'verbose' => false
 //               )
 //           )
+//       ),
+//       'Mac-Firefox' => array(
+//           'extensions' => array(
+//               'Behat\MinkExtension\Extension' => array(
+//                   'selenium2' => array(
+//                       'browser' => 'firefox',
+//                       'capabilities' => array(
+//                           'platform' => 'OS X 10.6',
+//                           'version' => 20
+//                       )
+//                   )
+//               )
+//           )
+//       ),
+//       'Mac-Safari' => array(
+//           'extensions' => array(
+//               'Behat\MinkExtension\Extension' => array(
+//                   'selenium2' => array(
+//                       'browser' => 'safari',
+//                       'capabilities' => array(
+//                           'platform' => 'OS X 10.8',
+//                           'version' => 6
+//                       )
+//                   )
+//               )
+//           )
 //       )
 //   );
 //
@@ -574,6 +617,13 @@ $CFG->admin = 'admin';
 // value will be the regular $CFG->wwwroot value.
 // Example:
 //   $CFG->behat_switchcompletely = true;
+//
+// You can force the browser session (not user's sessions) to restart after N seconds. This could
+// be useful if you are using a cloud-based service with time restrictions in the browser side.
+// Setting this value the browser session that Behat is using will be restarted. Set the time in
+// seconds. Is not recommended to use this setting if you don't explicitly need it.
+// Example:
+//   $CFG->behat_restart_browser_after = 7200;     // Restarts the browser session after 2 hours
 //
 
 //=========================================================================

@@ -31,6 +31,51 @@
 defined('MOODLE_INTERNAL') || die();
 
 /**
+ * Hack to find out the GD version by parsing phpinfo output
+ *
+ * @return int GD version (1, 2, or 0)
+ */
+function check_gd_version() {
+    // TODO: delete function in Moodle 2.7
+    debugging('check_gd_version() is deprecated, GD extension is always available now');
+
+    $gdversion = 0;
+
+    if (function_exists('gd_info')){
+        $gd_info = gd_info();
+        if (substr_count($gd_info['GD Version'], '2.')) {
+            $gdversion = 2;
+        } else if (substr_count($gd_info['GD Version'], '1.')) {
+            $gdversion = 1;
+        }
+
+    } else {
+        ob_start();
+        phpinfo(INFO_MODULES);
+        $phpinfo = ob_get_contents();
+        ob_end_clean();
+
+        $phpinfo = explode("\n", $phpinfo);
+
+
+        foreach ($phpinfo as $text) {
+            $parts = explode('</td>', $text);
+            foreach ($parts as $key => $val) {
+                $parts[$key] = trim(strip_tags($val));
+            }
+            if ($parts[0] == 'GD Version') {
+                if (substr_count($parts[1], '2.0')) {
+                    $parts[1] = '2.0';
+                }
+                $gdversion = intval($parts[1]);
+            }
+        }
+    }
+
+    return $gdversion;   // 1, 2 or 0
+}
+
+/**
  * Not used any more, the account lockout handling is now
  * part of authenticate_user_login().
  * @deprecated
@@ -1864,7 +1909,7 @@ function print_textarea($usehtmleditor, $rows, $cols, $width, $height, $name, $v
         $editorclass = '';
     }
 
-    $str .= "\n".'<textarea class="form-textarea" id="'. $id .'" name="'. $name .'" rows="'. $rows .'" cols="'. $cols .'">'."\n";
+    $str .= "\n".'<textarea class="form-textarea" id="'. $id .'" name="'. $name .'" rows="'. $rows .'" cols="'. $cols .'" spellcheck="true">'."\n";
     if ($usehtmleditor) {
         $str .= htmlspecialchars($value); // needed for editing of cleaned text!
     } else {
@@ -3424,4 +3469,1210 @@ function update_category_button($categoryid = 0) {
         $page = 'index.php';
     }
     return $OUTPUT->single_button(new moodle_url('/course/' . $page, $options), $label, 'get');
+}
+
+/**
+ * This function recursively travels the categories, building up a nice list
+ * for display. It also makes an array that list all the parents for each
+ * category.
+ *
+ * For example, if you have a tree of categories like:
+ *   Miscellaneous (id = 1)
+ *      Subcategory (id = 2)
+ *         Sub-subcategory (id = 4)
+ *   Other category (id = 3)
+ * Then after calling this function you will have
+ * $list = array(1 => 'Miscellaneous', 2 => 'Miscellaneous / Subcategory',
+ *      4 => 'Miscellaneous / Subcategory / Sub-subcategory',
+ *      3 => 'Other category');
+ * $parents = array(2 => array(1), 4 => array(1, 2));
+ *
+ * If you specify $requiredcapability, then only categories where the current
+ * user has that capability will be added to $list, although all categories
+ * will still be added to $parents, and if you only have $requiredcapability
+ * in a child category, not the parent, then the child catgegory will still be
+ * included.
+ *
+ * If you specify the option $excluded, then that category, and all its children,
+ * are omitted from the tree. This is useful when you are doing something like
+ * moving categories, where you do not want to allow people to move a category
+ * to be the child of itself.
+ *
+ * This function is deprecated! For list of categories use
+ * coursecat::make_all_categories($requiredcapability, $excludeid, $separator)
+ * For parents of one particular category use
+ * coursecat::get($id)->get_parents()
+ *
+ * @deprecated since 2.5
+ *
+ * @param array $list For output, accumulates an array categoryid => full category path name
+ * @param array $parents For output, accumulates an array categoryid => list of parent category ids.
+ * @param string/array $requiredcapability if given, only categories where the current
+ *      user has this capability will be added to $list. Can also be an array of capabilities,
+ *      in which case they are all required.
+ * @param integer $excludeid Omit this category and its children from the lists built.
+ * @param object $category Not used
+ * @param string $path Not used
+ */
+function make_categories_list(&$list, &$parents, $requiredcapability = '',
+        $excludeid = 0, $category = NULL, $path = "") {
+    global $CFG, $DB;
+    require_once($CFG->libdir.'/coursecatlib.php');
+
+    debugging('Global function make_categories_list() is deprecated. Please use '.
+            'coursecat::make_categories_list() and coursecat::get_parents()',
+            DEBUG_DEVELOPER);
+
+    // For categories list use just this one function:
+    if (empty($list)) {
+        $list = array();
+    }
+    $list += coursecat::make_categories_list($requiredcapability, $excludeid);
+
+    // Building the list of all parents of all categories in the system is highly undesirable and hardly ever needed.
+    // Usually user needs only parents for one particular category, in which case should be used:
+    // coursecat::get($categoryid)->get_parents()
+    if (empty($parents)) {
+        $parents = array();
+    }
+    $all = $DB->get_records_sql('SELECT id, parent FROM {course_categories} ORDER BY sortorder');
+    foreach ($all as $record) {
+        if ($record->parent) {
+            $parents[$record->id] = array_merge($parents[$record->parent], array($record->parent));
+        } else {
+            $parents[$record->id] = array();
+        }
+    }
+}
+
+/**
+ * Delete category, but move contents to another category.
+ *
+ * This function is deprecated. Please use
+ * coursecat::get($category->id)->delete_move($newparentid, $showfeedback);
+ *
+ * @see coursecat::delete_move()
+ * @deprecated since 2.5
+ *
+ * @param object $category
+ * @param int $newparentid category id
+ * @return bool status
+ */
+function category_delete_move($category, $newparentid, $showfeedback=true) {
+    global $CFG;
+    require_once($CFG->libdir.'/coursecatlib.php');
+
+    debugging('Function category_delete_move() is deprecated. Please use coursecat::delete_move() instead.');
+
+    return coursecat::get($category->id)->delete_move($newparentid, $showfeedback);
+}
+
+/**
+ * Recursively delete category including all subcategories and courses.
+ *
+ * This function is deprecated. Please use
+ * coursecat::get($category->id)->delete_full($showfeedback);
+ *
+ * @see coursecat::delete_full()
+ * @deprecated since 2.5
+ *
+ * @param stdClass $category
+ * @param boolean $showfeedback display some notices
+ * @return array return deleted courses
+ */
+function category_delete_full($category, $showfeedback=true) {
+    global $CFG, $DB;
+    require_once($CFG->libdir.'/coursecatlib.php');
+
+    debugging('Function category_delete_full() is deprecated. Please use coursecat::delete_full() instead.');
+
+    return coursecat::get($category->id)->delete_full($showfeedback);
+}
+
+/**
+ * Efficiently moves a category - NOTE that this can have
+ * a huge impact access-control-wise...
+ *
+ * This function is deprecated. Please use
+ * $coursecat = coursecat::get($category->id);
+ * if ($coursecat->can_change_parent($newparentcat->id)) {
+ *     $coursecat->change_parent($newparentcat->id);
+ * }
+ *
+ * Alternatively you can use
+ * $coursecat->update(array('parent' => $newparentcat->id));
+ *
+ * Function update() also updates field course_categories.timemodified
+ *
+ * @see coursecat::change_parent()
+ * @see coursecat::update()
+ * @deprecated since 2.5
+ *
+ * @param stdClass|coursecat $category
+ * @param stdClass|coursecat $newparentcat
+ */
+function move_category($category, $newparentcat) {
+    global $CFG;
+    require_once($CFG->libdir.'/coursecatlib.php');
+
+    debugging('Function move_category() is deprecated. Please use coursecat::change_parent() instead.');
+
+    return coursecat::get($category->id)->change_parent($newparentcat->id);
+}
+
+/**
+ * Hide course category and child course and subcategories
+ *
+ * This function is deprecated. Please use
+ * coursecat::get($category->id)->hide();
+ *
+ * @see coursecat::hide()
+ * @deprecated since 2.5
+ *
+ * @param stdClass $category
+ * @return void
+ */
+function course_category_hide($category) {
+    global $CFG;
+    require_once($CFG->libdir.'/coursecatlib.php');
+
+    debugging('Function course_category_hide() is deprecated. Please use coursecat::hide() instead.');
+
+    coursecat::get($category->id)->hide();
+}
+
+/**
+ * Show course category and child course and subcategories
+ *
+ * This function is deprecated. Please use
+ * coursecat::get($category->id)->show();
+ *
+ * @see coursecat::show()
+ * @deprecated since 2.5
+ *
+ * @param stdClass $category
+ * @return void
+ */
+function course_category_show($category) {
+    global $CFG;
+    require_once($CFG->libdir.'/coursecatlib.php');
+
+    debugging('Function course_category_show() is deprecated. Please use coursecat::show() instead.');
+
+    coursecat::get($category->id)->show();
+}
+
+/**
+ * Return specified category, default if given does not exist
+ *
+ * This function is deprecated.
+ * To get the category with the specified it please use:
+ * coursecat::get($catid, IGNORE_MISSING);
+ * or
+ * coursecat::get($catid, MUST_EXIST);
+ *
+ * To get the first available category please use
+ * coursecat::get_default();
+ *
+ * class coursecat will also make sure that at least one category exists in DB
+ *
+ * @deprecated since 2.5
+ * @see coursecat::get()
+ * @see coursecat::get_default()
+ *
+ * @param int $catid course category id
+ * @return object caregory
+ */
+function get_course_category($catid=0) {
+    global $DB;
+
+    debugging('Function get_course_category() is deprecated. Please use coursecat::get(), see phpdocs for more details');
+
+    $category = false;
+
+    if (!empty($catid)) {
+        $category = $DB->get_record('course_categories', array('id'=>$catid));
+    }
+
+    if (!$category) {
+        // the first category is considered default for now
+        if ($category = $DB->get_records('course_categories', null, 'sortorder', '*', 0, 1)) {
+            $category = reset($category);
+
+        } else {
+            $cat = new stdClass();
+            $cat->name         = get_string('miscellaneous');
+            $cat->depth        = 1;
+            $cat->sortorder    = MAX_COURSES_IN_CATEGORY;
+            $cat->timemodified = time();
+            $catid = $DB->insert_record('course_categories', $cat);
+            // make sure category context exists
+            context_coursecat::instance($catid);
+            mark_context_dirty('/'.SYSCONTEXTID);
+            fix_course_sortorder(); // Required to build course_categories.depth and .path.
+            $category = $DB->get_record('course_categories', array('id'=>$catid));
+        }
+    }
+
+    return $category;
+}
+
+/**
+ * Create a new course category and marks the context as dirty
+ *
+ * This function does not set the sortorder for the new category and
+ * {@link fix_course_sortorder()} should be called after creating a new course
+ * category
+ *
+ * Please note that this function does not verify access control.
+ *
+ * This function is deprecated. It is replaced with the method create() in class coursecat.
+ * {@link coursecat::create()} also verifies the data, fixes sortorder and logs the action
+ *
+ * @deprecated since 2.5
+ *
+ * @param object $category All of the data required for an entry in the course_categories table
+ * @return object new course category
+ */
+function create_course_category($category) {
+    global $DB;
+
+    debugging('Function create_course_category() is deprecated. Please use coursecat::create(), see phpdocs for more details', DEBUG_DEVELOPER);
+
+    $category->timemodified = time();
+    $category->id = $DB->insert_record('course_categories', $category);
+    $category = $DB->get_record('course_categories', array('id' => $category->id));
+
+    // We should mark the context as dirty
+    $category->context = context_coursecat::instance($category->id);
+    $category->context->mark_dirty();
+
+    return $category;
+}
+
+/**
+ * Returns an array of category ids of all the subcategories for a given
+ * category.
+ *
+ * This function is deprecated.
+ *
+ * To get visible children categories of the given category use:
+ * coursecat::get($categoryid)->get_children();
+ * This function will return the array or coursecat objects, on each of them
+ * you can call get_children() again
+ *
+ * @see coursecat::get()
+ * @see coursecat::get_children()
+ *
+ * @deprecated since 2.5
+ *
+ * @global object
+ * @param int $catid - The id of the category whose subcategories we want to find.
+ * @return array of category ids.
+ */
+function get_all_subcategories($catid) {
+    global $DB;
+
+    debugging('Function get_all_subcategories() is deprecated. Please use appropriate methods() of coursecat class. See phpdocs for more details',
+            DEBUG_DEVELOPER);
+
+    $subcats = array();
+
+    if ($categories = $DB->get_records('course_categories', array('parent' => $catid))) {
+        foreach ($categories as $cat) {
+            array_push($subcats, $cat->id);
+            $subcats = array_merge($subcats, get_all_subcategories($cat->id));
+        }
+    }
+    return $subcats;
+}
+
+/**
+ * Gets the child categories of a given courses category
+ *
+ * This function is deprecated. Please use functions in class coursecat:
+ * - coursecat::get($parentid)->has_children()
+ * tells if the category has children (visible or not to the current user)
+ *
+ * - coursecat::get($parentid)->get_children()
+ * returns an array of coursecat objects, each of them represents a children category visible
+ * to the current user (i.e. visible=1 or user has capability to view hidden categories)
+ *
+ * - coursecat::get($parentid)->get_children_count()
+ * returns number of children categories visible to the current user
+ *
+ * - coursecat::count_all()
+ * returns total count of all categories in the system (both visible and not)
+ *
+ * - coursecat::get_default()
+ * returns the first category (usually to be used if count_all() == 1)
+ *
+ * @deprecated since 2.5
+ *
+ * @param int $parentid the id of a course category.
+ * @return array all the child course categories.
+ */
+function get_child_categories($parentid) {
+    global $DB;
+    debugging('Function get_child_categories() is deprecated. Use coursecat::get_children() or see phpdocs for more details.',
+            DEBUG_DEVELOPER);
+
+    $rv = array();
+    $sql = context_helper::get_preload_record_columns_sql('ctx');
+    $records = $DB->get_records_sql("SELECT c.*, $sql FROM {course_categories} c ".
+            "JOIN {context} ctx on ctx.instanceid = c.id AND ctx.contextlevel = ? WHERE c.parent = ? ORDER BY c.sortorder",
+            array(CONTEXT_COURSECAT, $parentid));
+    foreach ($records as $category) {
+        context_helper::preload_from_record($category);
+        if (!$category->visible && !has_capability('moodle/category:viewhiddencategories', context_coursecat::instance($category->id))) {
+            continue;
+        }
+        $rv[] = $category;
+    }
+    return $rv;
+}
+
+/**
+ * Returns a sorted list of categories.
+ *
+ * When asking for $parent='none' it will return all the categories, regardless
+ * of depth. Wheen asking for a specific parent, the default is to return
+ * a "shallow" resultset. Pass false to $shallow and it will return all
+ * the child categories as well.
+ *
+ * @deprecated since 2.5
+ *
+ * This function is deprecated. Use appropriate functions from class coursecat.
+ * Examples:
+ *
+ * coursecat::get($categoryid)->get_children()
+ * - returns all children of the specified category as instances of class
+ * coursecat, which means on each of them method get_children() can be called again
+ *
+ * coursecat::get($categoryid)->get_children(array('recursive' => true))
+ * - returns all children of the specified category and all subcategories
+ *
+ * coursecat::get(0)->get_children(array('recursive' => true))
+ * - returns all categories defined in the system
+ *
+ * Sort fields can be specified, see phpdocs to {@link coursecat::get_children()}
+ *
+ * Also see functions {@link coursecat::get_children_count()}, {@link coursecat::count_all()},
+ * {@link coursecat::get_default()}
+ *
+ * The code of this deprecated function is left as it is because coursecat::get_children()
+ * returns categories as instances of coursecat and not stdClass
+ *
+ * @param string $parent The parent category if any
+ * @param string $sort the sortorder
+ * @param bool   $shallow - set to false to get the children too
+ * @return array of categories
+ */
+function get_categories($parent='none', $sort=NULL, $shallow=true) {
+    global $DB;
+
+    debugging('Function get_categories() is deprecated. Please use coursecat::get_children(). See phpdocs for more details',
+            DEBUG_DEVELOPER);
+
+    if ($sort === NULL) {
+        $sort = 'ORDER BY cc.sortorder ASC';
+    } elseif ($sort ==='') {
+        // leave it as empty
+    } else {
+        $sort = "ORDER BY $sort";
+    }
+
+    list($ccselect, $ccjoin) = context_instance_preload_sql('cc.id', CONTEXT_COURSECAT, 'ctx');
+
+    if ($parent === 'none') {
+        $sql = "SELECT cc.* $ccselect
+                  FROM {course_categories} cc
+               $ccjoin
+                $sort";
+        $params = array();
+
+    } elseif ($shallow) {
+        $sql = "SELECT cc.* $ccselect
+                  FROM {course_categories} cc
+               $ccjoin
+                 WHERE cc.parent=?
+                $sort";
+        $params = array($parent);
+
+    } else {
+        $sql = "SELECT cc.* $ccselect
+                  FROM {course_categories} cc
+               $ccjoin
+                  JOIN {course_categories} ccp
+                       ON ((cc.parent = ccp.id) OR (cc.path LIKE ".$DB->sql_concat('ccp.path',"'/%'")."))
+                 WHERE ccp.id=?
+                $sort";
+        $params = array($parent);
+    }
+    $categories = array();
+
+    $rs = $DB->get_recordset_sql($sql, $params);
+    foreach($rs as $cat) {
+        context_instance_preload($cat);
+        $catcontext = context_coursecat::instance($cat->id);
+        if ($cat->visible || has_capability('moodle/category:viewhiddencategories', $catcontext)) {
+            $categories[$cat->id] = $cat;
+        }
+    }
+    $rs->close();
+    return $categories;
+}
+
+/**
+* Displays a course search form
+*
+* This function is deprecated, please use course renderer:
+* $renderer = $PAGE->get_renderer('core', 'course');
+* echo $renderer->course_search_form($value, $format);
+*
+* @deprecated since 2.5
+*
+* @param string $value default value to populate the search field
+* @param bool $return if true returns the value, if false - outputs
+* @param string $format display format - 'plain' (default), 'short' or 'navbar'
+* @return null|string
+*/
+function print_course_search($value="", $return=false, $format="plain") {
+    global $PAGE;
+    debugging('Function print_course_search() is deprecated, please use course renderer', DEBUG_DEVELOPER);
+    $renderer = $PAGE->get_renderer('core', 'course');
+    if ($return) {
+        return $renderer->course_search_form($value, $format);
+    } else {
+        echo $renderer->course_search_form($value, $format);
+    }
+}
+
+/**
+ * Prints custom user information on the home page
+ *
+ * This function is deprecated, please use:
+ * $renderer = $PAGE->get_renderer('core', 'course');
+ * echo $renderer->frontpage_my_courses()
+ *
+ * @deprecated since 2.5
+ */
+function print_my_moodle() {
+    global $PAGE;
+    debugging('Function print_my_moodle() is deprecated, please use course renderer function frontpage_my_courses()', DEBUG_DEVELOPER);
+
+    $renderer = $PAGE->get_renderer('core', 'course');
+    echo $renderer->frontpage_my_courses();
+}
+
+/**
+ * Prints information about one remote course
+ *
+ * This function is deprecated, it is replaced with protected function
+ * {@link core_course_renderer::frontpage_remote_course()}
+ * It is only used from function {@link core_course_renderer::frontpage_my_courses()}
+ *
+ * @deprecated since 2.5
+ */
+function print_remote_course($course, $width="100%") {
+    global $CFG, $USER;
+    debugging('Function print_remote_course() is deprecated, please use course renderer', DEBUG_DEVELOPER);
+
+    $linkcss = '';
+
+    $url = "{$CFG->wwwroot}/auth/mnet/jump.php?hostid={$course->hostid}&amp;wantsurl=/course/view.php?id={$course->remoteid}";
+
+    echo '<div class="coursebox remotecoursebox clearfix">';
+    echo '<div class="info">';
+    echo '<div class="name"><a title="'.get_string('entercourse').'"'.
+         $linkcss.' href="'.$url.'">'
+        .  format_string($course->fullname) .'</a><br />'
+        . format_string($course->hostname) . ' : '
+        . format_string($course->cat_name) . ' : '
+        . format_string($course->shortname). '</div>';
+    echo '</div><div class="summary">';
+    $options = new stdClass();
+    $options->noclean = true;
+    $options->para = false;
+    $options->overflowdiv = true;
+    echo format_text($course->summary, $course->summaryformat, $options);
+    echo '</div>';
+    echo '</div>';
+}
+
+/**
+ * Prints information about one remote host
+ *
+ * This function is deprecated, it is replaced with protected function
+ * {@link core_course_renderer::frontpage_remote_host()}
+ * It is only used from function {@link core_course_renderer::frontpage_my_courses()}
+ *
+ * @deprecated since 2.5
+ */
+function print_remote_host($host, $width="100%") {
+    global $OUTPUT;
+    debugging('Function print_remote_host() is deprecated, please use course renderer', DEBUG_DEVELOPER);
+
+    $linkcss = '';
+
+    echo '<div class="coursebox clearfix">';
+    echo '<div class="info">';
+    echo '<div class="name">';
+    echo '<img src="'.$OUTPUT->pix_url('i/mnethost') . '" class="icon" alt="'.get_string('course').'" />';
+    echo '<a title="'.s($host['name']).'" href="'.s($host['url']).'">'
+        . s($host['name']).'</a> - ';
+    echo $host['count'] . ' ' . get_string('courses');
+    echo '</div>';
+    echo '</div>';
+    echo '</div>';
+}
+
+/**
+ * Recursive function to print out all the categories in a nice format
+ * with or without courses included
+ *
+ * @deprecated since 2.5
+ *
+ * See http://docs.moodle.org/dev/Courses_lists_upgrade_to_2.5
+ */
+function print_whole_category_list($category=NULL, $displaylist=NULL, $parentslist=NULL, $depth=-1, $showcourses = true, $categorycourses=NULL) {
+    global $PAGE;
+    debugging('Function print_whole_category_list() is deprecated, please use course renderer', DEBUG_DEVELOPER);
+
+    $renderer = $PAGE->get_renderer('core', 'course');
+    if ($showcourses && $category) {
+        echo $renderer->course_category($category);
+    } else if ($showcourses) {
+        echo $renderer->frontpage_combo_list();
+    } else {
+        echo $renderer->frontpage_categories_list();
+    }
+}
+
+/**
+ * Prints the category information.
+ *
+ * @deprecated since 2.5
+ *
+ * This function was only used by {@link print_whole_category_list()} but now
+ * all course category rendering is moved to core_course_renderer.
+ *
+ * @param stdClass $category
+ * @param int $depth The depth of the category.
+ * @param bool $showcourses If set to true course information will also be printed.
+ * @param array|null $courses An array of courses belonging to the category, or null if you don't have it yet.
+ */
+function print_category_info($category, $depth = 0, $showcourses = false, array $courses = null) {
+    global $PAGE;
+    debugging('Function print_category_info() is deprecated, please use course renderer', DEBUG_DEVELOPER);
+
+    $renderer = $PAGE->get_renderer('core', 'course');
+    echo $renderer->course_category($category);
+}
+
+/**
+ * This function generates a structured array of courses and categories.
+ *
+ * @deprecated since 2.5
+ *
+ * This function is not used any more in moodle core and course renderer does not have render function for it.
+ * Combo list on the front page is displayed as:
+ * $renderer = $PAGE->get_renderer('core', 'course');
+ * echo $renderer->frontpage_combo_list()
+ *
+ * The new class {@link coursecat} stores the information about course category tree
+ * To get children categories use:
+ * coursecat::get($id)->get_children()
+ * To get list of courses use:
+ * coursecat::get($id)->get_courses()
+ *
+ * See http://docs.moodle.org/dev/Courses_lists_upgrade_to_2.5
+ *
+ * @param int $id
+ * @param int $depth
+ */
+function get_course_category_tree($id = 0, $depth = 0) {
+    global $DB, $CFG;
+    if (!$depth) {
+        debugging('Function get_course_category_tree() is deprecated, please use course renderer or coursecat class, see function phpdocs for more info', DEBUG_DEVELOPER);
+    }
+
+    $categories = array();
+    $categoryids = array();
+    $sql = context_helper::get_preload_record_columns_sql('ctx');
+    $records = $DB->get_records_sql("SELECT c.*, $sql FROM {course_categories} c ".
+            "JOIN {context} ctx on ctx.instanceid = c.id AND ctx.contextlevel = ? WHERE c.parent = ? ORDER BY c.sortorder",
+            array(CONTEXT_COURSECAT, $id));
+    foreach ($records as $category) {
+        context_helper::preload_from_record($category);
+        if (!$category->visible && !has_capability('moodle/category:viewhiddencategories', context_coursecat::instance($category->id))) {
+            continue;
+        }
+        $categories[] = $category;
+        $categoryids[$category->id] = $category;
+        if (empty($CFG->maxcategorydepth) || $depth <= $CFG->maxcategorydepth) {
+            list($category->categories, $subcategories) = get_course_category_tree($category->id, $depth+1);
+            foreach ($subcategories as $subid=>$subcat) {
+                $categoryids[$subid] = $subcat;
+            }
+            $category->courses = array();
+        }
+    }
+
+    if ($depth > 0) {
+        // This is a recursive call so return the required array
+        return array($categories, $categoryids);
+    }
+
+    if (empty($categoryids)) {
+        // No categories available (probably all hidden).
+        return array();
+    }
+
+    // The depth is 0 this function has just been called so we can finish it off
+
+    list($ccselect, $ccjoin) = context_instance_preload_sql('c.id', CONTEXT_COURSE, 'ctx');
+    list($catsql, $catparams) = $DB->get_in_or_equal(array_keys($categoryids));
+    $sql = "SELECT
+            c.id,c.sortorder,c.visible,c.fullname,c.shortname,c.summary,c.category
+            $ccselect
+            FROM {course} c
+            $ccjoin
+            WHERE c.category $catsql ORDER BY c.sortorder ASC";
+    if ($courses = $DB->get_records_sql($sql, $catparams)) {
+        // loop throught them
+        foreach ($courses as $course) {
+            if ($course->id == SITEID) {
+                continue;
+            }
+            context_instance_preload($course);
+            if (!empty($course->visible) || has_capability('moodle/course:viewhiddencourses', context_course::instance($course->id))) {
+                $categoryids[$course->category]->courses[$course->id] = $course;
+            }
+        }
+    }
+    return $categories;
+}
+
+/**
+ * Print courses in category. If category is 0 then all courses are printed.
+ *
+ * @deprecated since 2.5
+ *
+ * To print a generic list of courses use:
+ * $renderer = $PAGE->get_renderer('core', 'course');
+ * echo $renderer->courses_list($courses);
+ *
+ * To print list of all courses:
+ * $renderer = $PAGE->get_renderer('core', 'course');
+ * echo $renderer->frontpage_available_courses();
+ *
+ * To print list of courses inside category:
+ * $renderer = $PAGE->get_renderer('core', 'course');
+ * echo $renderer->course_category($category); // this will also print subcategories
+ *
+ * @param int|stdClass $category category object or id.
+ * @return bool true if courses found and printed, else false.
+ */
+function print_courses($category) {
+    global $CFG, $OUTPUT, $PAGE;
+    require_once($CFG->libdir. '/coursecatlib.php');
+    debugging('Function print_courses() is deprecated, please use course renderer', DEBUG_DEVELOPER);
+
+    if (!is_object($category) && $category==0) {
+        $courses = coursecat::get(0)->get_courses(array('recursive' => true, 'summary' => true, 'coursecontacts' => true));
+    } else {
+        $courses = coursecat::get($category->id)->get_courses(array('summary' => true, 'coursecontacts' => true));
+    }
+
+    if ($courses) {
+        $renderer = $PAGE->get_renderer('core', 'course');
+        echo $renderer->courses_list($courses);
+    } else {
+        echo $OUTPUT->heading(get_string("nocoursesyet"));
+        $context = context_system::instance();
+        if (has_capability('moodle/course:create', $context)) {
+            $options = array();
+            if (!empty($category->id)) {
+                $options['category'] = $category->id;
+            } else {
+                $options['category'] = $CFG->defaultrequestcategory;
+            }
+            echo html_writer::start_tag('div', array('class'=>'addcoursebutton'));
+            echo $OUTPUT->single_button(new moodle_url('/course/edit.php', $options), get_string("addnewcourse"));
+            echo html_writer::end_tag('div');
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Print a description of a course, suitable for browsing in a list.
+ *
+ * @deprecated since 2.5
+ *
+ * Please use course renderer to display a course information box.
+ * $renderer = $PAGE->get_renderer('core', 'course');
+ * echo $renderer->courses_list($courses); // will print list of courses
+ * echo $renderer->course_info_box($course); // will print one course wrapped in div.generalbox
+ *
+ * @param object $course the course object.
+ * @param string $highlightterms Ignored in this deprecated function!
+ */
+function print_course($course, $highlightterms = '') {
+    global $PAGE;
+
+    debugging('Function print_course() is deprecated, please use course renderer', DEBUG_DEVELOPER);
+    $renderer = $PAGE->get_renderer('core', 'course');
+    // Please note, correct would be to use $renderer->coursecat_coursebox() but this function is protected.
+    // To print list of courses use $renderer->courses_list();
+    echo $renderer->course_info_box($course);
+}
+
+/**
+ * Gets an array whose keys are category ids and whose values are arrays of courses in the corresponding category.
+ *
+ * @deprecated since 2.5
+ *
+ * This function is not used any more in moodle core and course renderer does not have render function for it.
+ * Combo list on the front page is displayed as:
+ * $renderer = $PAGE->get_renderer('core', 'course');
+ * echo $renderer->frontpage_combo_list()
+ *
+ * The new class {@link coursecat} stores the information about course category tree
+ * To get children categories use:
+ * coursecat::get($id)->get_children()
+ * To get list of courses use:
+ * coursecat::get($id)->get_courses()
+ *
+ * See http://docs.moodle.org/dev/Courses_lists_upgrade_to_2.5
+ *
+ * @param int $categoryid
+ * @return array
+ */
+function get_category_courses_array($categoryid = 0) {
+    debugging('Function get_category_courses_array() is deprecated, please use methods of coursecat class', DEBUG_DEVELOPER);
+    $tree = get_course_category_tree($categoryid);
+    $flattened = array();
+    foreach ($tree as $category) {
+        get_category_courses_array_recursively($flattened, $category);
+    }
+    return $flattened;
+}
+
+/**
+ * Recursive function to help flatten the course category tree.
+ *
+ * @deprecated since 2.5
+ *
+ * Was intended to be called from {@link get_category_courses_array()}
+ *
+ * @param array &$flattened An array passed by reference in which to store courses for each category.
+ * @param stdClass $category The category to get courses for.
+ */
+function get_category_courses_array_recursively(array &$flattened, $category) {
+    debugging('Function get_category_courses_array_recursively() is deprecated, please use methods of coursecat class', DEBUG_DEVELOPER);
+    $flattened[$category->id] = $category->courses;
+    foreach ($category->categories as $childcategory) {
+        get_category_courses_array_recursively($flattened, $childcategory);
+    }
+}
+
+/**
+ * Returns a URL based on the context of the current page.
+ * This URL points to blog/index.php and includes filter parameters appropriate for the current page.
+ *
+ * @param stdclass $context
+ * @deprecated since Moodle 2.5 MDL-27814 - please do not use this function any more.
+ * @todo Remove this in 2.7
+ * @return string
+ */
+function blog_get_context_url($context=null) {
+    global $CFG;
+
+    debugging('Function  blog_get_context_url() is deprecated, getting params from context is not reliable for blogs.', DEBUG_DEVELOPER);
+    $viewblogentriesurl = new moodle_url('/blog/index.php');
+
+    if (empty($context)) {
+        global $PAGE;
+        $context = $PAGE->context;
+    }
+
+    // Change contextlevel to SYSTEM if viewing the site course
+    if ($context->contextlevel == CONTEXT_COURSE && $context->instanceid == SITEID) {
+        $context = context_system::instance();
+    }
+
+    $filterparam = '';
+    $strlevel = '';
+
+    switch ($context->contextlevel) {
+        case CONTEXT_SYSTEM:
+        case CONTEXT_BLOCK:
+        case CONTEXT_COURSECAT:
+            break;
+        case CONTEXT_COURSE:
+            $filterparam = 'courseid';
+            $strlevel = get_string('course');
+            break;
+        case CONTEXT_MODULE:
+            $filterparam = 'modid';
+            $strlevel = print_context_name($context);
+            break;
+        case CONTEXT_USER:
+            $filterparam = 'userid';
+            $strlevel = get_string('user');
+            break;
+    }
+
+    if (!empty($filterparam)) {
+        $viewblogentriesurl->param($filterparam, $context->instanceid);
+    }
+
+    return $viewblogentriesurl;
+}
+
+/**
+ * Retrieve course records with the course managers and other related records
+ * that we need for print_course(). This allows print_courses() to do its job
+ * in a constant number of DB queries, regardless of the number of courses,
+ * role assignments, etc.
+ *
+ * The returned array is indexed on c.id, and each course will have
+ * - $course->managers - array containing RA objects that include a $user obj
+ *                       with the minimal fields needed for fullname()
+ *
+ * @deprecated since 2.5
+ *
+ * To get list of all courses with course contacts ('managers') use
+ * coursecat::get(0)->get_courses(array('recursive' => true, 'coursecontacts' => true));
+ *
+ * To get list of courses inside particular category use
+ * coursecat::get($id)->get_courses(array('coursecontacts' => true));
+ *
+ * Additionally you can specify sort order, offset and maximum number of courses,
+ * see {@link coursecat::get_courses()}
+ *
+ * Please note that code of this function is not changed to use coursecat class because
+ * coursecat::get_courses() returns result in slightly different format. Also note that
+ * get_courses_wmanagers() DOES NOT check that users are enrolled in the course and
+ * coursecat::get_courses() does.
+ *
+ * @global object
+ * @global object
+ * @global object
+ * @uses CONTEXT_COURSE
+ * @uses CONTEXT_SYSTEM
+ * @uses CONTEXT_COURSECAT
+ * @uses SITEID
+ * @param int|string $categoryid Either the categoryid for the courses or 'all'
+ * @param string $sort A SQL sort field and direction
+ * @param array $fields An array of additional fields to fetch
+ * @return array
+ */
+function get_courses_wmanagers($categoryid=0, $sort="c.sortorder ASC", $fields=array()) {
+    /*
+     * The plan is to
+     *
+     * - Grab the courses JOINed w/context
+     *
+     * - Grab the interesting course-manager RAs
+     *   JOINed with a base user obj and add them to each course
+     *
+     * So as to do all the work in 2 DB queries. The RA+user JOIN
+     * ends up being pretty expensive if it happens over _all_
+     * courses on a large site. (Are we surprised!?)
+     *
+     * So this should _never_ get called with 'all' on a large site.
+     *
+     */
+    global $USER, $CFG, $DB;
+    debugging('Function get_courses_wmanagers() is deprecated, please use coursecat::get_courses()', DEBUG_DEVELOPER);
+
+    $params = array();
+    $allcats = false; // bool flag
+    if ($categoryid === 'all') {
+        $categoryclause   = '';
+        $allcats = true;
+    } elseif (is_numeric($categoryid)) {
+        $categoryclause = "c.category = :catid";
+        $params['catid'] = $categoryid;
+    } else {
+        debugging("Could not recognise categoryid = $categoryid");
+        $categoryclause = '';
+    }
+
+    $basefields = array('id', 'category', 'sortorder',
+                        'shortname', 'fullname', 'idnumber',
+                        'startdate', 'visible',
+                        'newsitems', 'groupmode', 'groupmodeforce');
+
+    if (!is_null($fields) && is_string($fields)) {
+        if (empty($fields)) {
+            $fields = $basefields;
+        } else {
+            // turn the fields from a string to an array that
+            // get_user_courses_bycap() will like...
+            $fields = explode(',',$fields);
+            $fields = array_map('trim', $fields);
+            $fields = array_unique(array_merge($basefields, $fields));
+        }
+    } elseif (is_array($fields)) {
+        $fields = array_merge($basefields,$fields);
+    }
+    $coursefields = 'c.' .join(',c.', $fields);
+
+    if (empty($sort)) {
+        $sortstatement = "";
+    } else {
+        $sortstatement = "ORDER BY $sort";
+    }
+
+    $where = 'WHERE c.id != ' . SITEID;
+    if ($categoryclause !== ''){
+        $where = "$where AND $categoryclause";
+    }
+
+    // pull out all courses matching the cat
+    list($ccselect, $ccjoin) = context_instance_preload_sql('c.id', CONTEXT_COURSE, 'ctx');
+    $sql = "SELECT $coursefields $ccselect
+              FROM {course} c
+           $ccjoin
+               $where
+               $sortstatement";
+
+    $catpaths = array();
+    $catpath  = NULL;
+    if ($courses = $DB->get_records_sql($sql, $params)) {
+        // loop on courses materialising
+        // the context, and prepping data to fetch the
+        // managers efficiently later...
+        foreach ($courses as $k => $course) {
+            context_instance_preload($course);
+            $coursecontext = context_course::instance($course->id);
+            $courses[$k] = $course;
+            $courses[$k]->managers = array();
+            if ($allcats === false) {
+                // single cat, so take just the first one...
+                if ($catpath === NULL) {
+                    $catpath = preg_replace(':/\d+$:', '', $coursecontext->path);
+                }
+            } else {
+                // chop off the contextid of the course itself
+                // like dirname() does...
+                $catpaths[] = preg_replace(':/\d+$:', '', $coursecontext->path);
+            }
+        }
+    } else {
+        return array(); // no courses!
+    }
+
+    $CFG->coursecontact = trim($CFG->coursecontact);
+    if (empty($CFG->coursecontact)) {
+        return $courses;
+    }
+
+    $managerroles = explode(',', $CFG->coursecontact);
+    $catctxids = '';
+    if (count($managerroles)) {
+        if ($allcats === true) {
+            $catpaths  = array_unique($catpaths);
+            $ctxids = array();
+            foreach ($catpaths as $cpath) {
+                $ctxids = array_merge($ctxids, explode('/',substr($cpath,1)));
+            }
+            $ctxids = array_unique($ctxids);
+            $catctxids = implode( ',' , $ctxids);
+            unset($catpaths);
+            unset($cpath);
+        } else {
+            // take the ctx path from the first course
+            // as all categories will be the same...
+            $catpath = substr($catpath,1);
+            $catpath = preg_replace(':/\d+$:','',$catpath);
+            $catctxids = str_replace('/',',',$catpath);
+        }
+        if ($categoryclause !== '') {
+            $categoryclause = "AND $categoryclause";
+        }
+        /*
+         * Note: Here we use a LEFT OUTER JOIN that can
+         * "optionally" match to avoid passing a ton of context
+         * ids in an IN() clause. Perhaps a subselect is faster.
+         *
+         * In any case, this SQL is not-so-nice over large sets of
+         * courses with no $categoryclause.
+         *
+         */
+        $sql = "SELECT ctx.path, ctx.instanceid, ctx.contextlevel,
+                       r.id AS roleid, r.name AS rolename, r.shortname AS roleshortname,
+                       rn.name AS rolecoursealias, u.id AS userid, u.firstname, u.lastname
+                  FROM {role_assignments} ra
+                  JOIN {context} ctx ON ra.contextid = ctx.id
+                  JOIN {user} u ON ra.userid = u.id
+                  JOIN {role} r ON ra.roleid = r.id
+             LEFT JOIN {role_names} rn ON (rn.contextid = ctx.id AND rn.roleid = r.id)
+                  LEFT OUTER JOIN {course} c
+                       ON (ctx.instanceid=c.id AND ctx.contextlevel=".CONTEXT_COURSE.")
+                WHERE ( c.id IS NOT NULL";
+        // under certain conditions, $catctxids is NULL
+        if($catctxids == NULL){
+            $sql .= ") ";
+        }else{
+            $sql .= " OR ra.contextid  IN ($catctxids) )";
+        }
+
+        $sql .= "AND ra.roleid IN ({$CFG->coursecontact})
+                      $categoryclause
+                ORDER BY r.sortorder ASC, ctx.contextlevel ASC, ra.sortorder ASC";
+        $rs = $DB->get_recordset_sql($sql, $params);
+
+        // This loop is fairly stupid as it stands - might get better
+        // results doing an initial pass clustering RAs by path.
+        foreach($rs as $ra) {
+            $user = new stdClass;
+            $user->id        = $ra->userid;    unset($ra->userid);
+            $user->firstname = $ra->firstname; unset($ra->firstname);
+            $user->lastname  = $ra->lastname;  unset($ra->lastname);
+            $ra->user = $user;
+            if ($ra->contextlevel == CONTEXT_SYSTEM) {
+                foreach ($courses as $k => $course) {
+                    $courses[$k]->managers[] = $ra;
+                }
+            } else if ($ra->contextlevel == CONTEXT_COURSECAT) {
+                if ($allcats === false) {
+                    // It always applies
+                    foreach ($courses as $k => $course) {
+                        $courses[$k]->managers[] = $ra;
+                    }
+                } else {
+                    foreach ($courses as $k => $course) {
+                        $coursecontext = context_course::instance($course->id);
+                        // Note that strpos() returns 0 as "matched at pos 0"
+                        if (strpos($coursecontext->path, $ra->path.'/') === 0) {
+                            // Only add it to subpaths
+                            $courses[$k]->managers[] = $ra;
+                        }
+                    }
+                }
+            } else { // course-level
+                if (!array_key_exists($ra->instanceid, $courses)) {
+                    //this course is not in a list, probably a frontpage course
+                    continue;
+                }
+                $courses[$ra->instanceid]->managers[] = $ra;
+            }
+        }
+        $rs->close();
+    }
+
+    return $courses;
+}
+
+/**
+ * Converts a nested array tree into HTML ul:li [recursive]
+ *
+ * @deprecated since 2.5
+ *
+ * @param array $tree A tree array to convert
+ * @param int $row Used in identifying the iteration level and in ul classes
+ * @return string HTML structure
+ */
+function convert_tree_to_html($tree, $row=0) {
+    debugging('Function convert_tree_to_html() is deprecated since Moodle 2.5. Consider using class tabtree and core_renderer::render_tabtree()', DEBUG_DEVELOPER);
+
+    $str = "\n".'<ul class="tabrow'.$row.'">'."\n";
+
+    $first = true;
+    $count = count($tree);
+
+    foreach ($tree as $tab) {
+        $count--;   // countdown to zero
+
+        $liclass = '';
+
+        if ($first && ($count == 0)) {   // Just one in the row
+            $liclass = 'first last';
+            $first = false;
+        } else if ($first) {
+            $liclass = 'first';
+            $first = false;
+        } else if ($count == 0) {
+            $liclass = 'last';
+        }
+
+        if ((empty($tab->subtree)) && (!empty($tab->selected))) {
+            $liclass .= (empty($liclass)) ? 'onerow' : ' onerow';
+        }
+
+        if ($tab->inactive || $tab->active || $tab->selected) {
+            if ($tab->selected) {
+                $liclass .= (empty($liclass)) ? 'here selected' : ' here selected';
+            } else if ($tab->active) {
+                $liclass .= (empty($liclass)) ? 'here active' : ' here active';
+            }
+        }
+
+        $str .= (!empty($liclass)) ? '<li class="'.$liclass.'">' : '<li>';
+
+        if ($tab->inactive || $tab->active || ($tab->selected && !$tab->linkedwhenselected)) {
+            // The a tag is used for styling
+            $str .= '<a class="nolink"><span>'.$tab->text.'</span></a>';
+        } else {
+            $str .= '<a href="'.$tab->link.'" title="'.$tab->title.'"><span>'.$tab->text.'</span></a>';
+        }
+
+        if (!empty($tab->subtree)) {
+            $str .= convert_tree_to_html($tab->subtree, $row+1);
+        } else if ($tab->selected) {
+            $str .= '<div class="tabrow'.($row+1).' empty">&nbsp;</div>'."\n";
+        }
+
+        $str .= ' </li>'."\n";
+    }
+    $str .= '</ul>'."\n";
+
+    return $str;
+}
+
+/**
+ * Convert nested tabrows to a nested array
+ *
+ * @deprecated since 2.5
+ *
+ * @param array $tabrows A [nested] array of tab row objects
+ * @param string $selected The tabrow to select (by id)
+ * @param array $inactive An array of tabrow id's to make inactive
+ * @param array $activated An array of tabrow id's to make active
+ * @return array The nested array
+ */
+function convert_tabrows_to_tree($tabrows, $selected, $inactive, $activated) {
+
+    debugging('Function convert_tabrows_to_tree() is deprecated since Moodle 2.5. Consider using class tabtree', DEBUG_DEVELOPER);
+
+    // Work backwards through the rows (bottom to top) collecting the tree as we go.
+    $tabrows = array_reverse($tabrows);
+
+    $subtree = array();
+
+    foreach ($tabrows as $row) {
+        $tree = array();
+
+        foreach ($row as $tab) {
+            $tab->inactive = in_array((string)$tab->id, $inactive);
+            $tab->active = in_array((string)$tab->id, $activated);
+            $tab->selected = (string)$tab->id == $selected;
+
+            if ($tab->active || $tab->selected) {
+                if ($subtree) {
+                    $tab->subtree = $subtree;
+                }
+            }
+            $tree[] = $tab;
+        }
+        $subtree = $tree;
+    }
+
+    return $subtree;
 }

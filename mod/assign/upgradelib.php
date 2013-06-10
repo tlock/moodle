@@ -99,6 +99,8 @@ class assign_upgrade_manager {
         $data->requireallteammemberssubmit = 0;
         $data->teamsubmissiongroupingid = 0;
         $data->blindmarking = 0;
+        $data->attemptreopenmethod = 'none';
+        $data->maxattempts = ASSIGN_UNLIMITED_ATTEMPTS;
 
         $newassignment = new assign(null, null, null);
 
@@ -247,7 +249,14 @@ class assign_upgrade_manager {
                     $grade->timemodified = $oldsubmission->timemarked;
                     $grade->timecreated = $oldsubmission->timecreated;
                     $grade->grade = $oldsubmission->grade;
-                    $grade->mailed = $oldsubmission->mailed;
+                    if ($oldsubmission->mailed) {
+                        // The mailed flag goes in the flags table.
+                        $flags = new stdClass();
+                        $flags->userid = $oldsubmission->userid;
+                        $flags->assignment = $newassignment->get_instance()->id;
+                        $flags->mailed = 1;
+                        $DB->insert_record('assign_user_flags', $flags);
+                    }
                     $grade->id = $DB->insert_record('assign_grades', $grade);
                     if (!$grade->id) {
                         $log .= get_string('couldnotinsertgrade', 'mod_assign', $grade->userid);
@@ -292,7 +301,7 @@ class assign_upgrade_manager {
 
         } catch (Exception $exception) {
             $rollback = true;
-            $log .= get_string('conversionexception', 'mod_assign', $exception->error);
+            $log .= get_string('conversionexception', 'mod_assign', $exception->getMessage());
         }
 
         if ($rollback) {
@@ -396,7 +405,7 @@ class assign_upgrade_manager {
             return false;
         }
 
-        $newcm->section = course_add_cm_to_section($newcm->course, $newcm->id, $section->section);
+        $newcm->section = course_add_cm_to_section($newcm->course, $newcm->id, $section->section, $cm->id);
 
         // Make sure visibility is set correctly (in particular in calendar).
         // Note: Allow them to set it even without moodle/course:activityvisibility.

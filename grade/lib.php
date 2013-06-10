@@ -22,7 +22,8 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once $CFG->libdir.'/gradelib.php';
+require_once($CFG->libdir . '/gradelib.php');
+require_once($CFG->dirroot . '/grade/export/lib.php');
 
 /**
  * This class iterates over all users that are graded in a course.
@@ -94,6 +95,12 @@ class graded_users_iterator {
     protected $allowusercustomfields = false;
 
     /**
+     * List of suspended users in course. This includes users whose enrolment status is suspended
+     * or enrolment has expired or not started.
+     */
+    protected $suspendedusers = array();
+
+    /**
      * Constructor
      *
      * @param object $course A course object
@@ -128,7 +135,7 @@ class graded_users_iterator {
 
         $this->close();
 
-        grade_regrade_final_grades($this->course->id);
+        export_verify_grades($this->course->id);
         $course_item = grade_item::fetch_course_item($this->course->id);
         if ($course_item->needsupdate) {
             // can not calculate all final grades - sorry
@@ -207,6 +214,13 @@ class graded_users_iterator {
                              $groupwheresql
                     ORDER BY $order";
         $this->users_rs = $DB->get_recordset_sql($users_sql, $params);
+
+        if (!$this->onlyactive) {
+            $context = context_course::instance($this->course->id);
+            $this->suspendedusers = get_suspended_userids($context);
+        } else {
+            $this->suspendedusers = array();
+        }
 
         if (!empty($this->grade_items)) {
             $itemids = array_keys($this->grade_items);
@@ -300,6 +314,8 @@ class graded_users_iterator {
             }
         }
 
+        // Set user suspended status.
+        $user->suspendedenrolment = isset($this->suspendedusers[$user->id]);
         $result = new stdClass();
         $result->user      = $user;
         $result->grades    = $grades;
@@ -407,9 +423,14 @@ function grade_get_graded_users_select($report, $course, $userid, $groupid, $inc
     if (is_null($userid)) {
         $userid = $USER->id;
     }
-
+    $coursecontext = context_course::instance($course->id);
+    $defaultgradeshowactiveenrol = !empty($CFG->grade_report_showonlyactiveenrol);
+    $showonlyactiveenrol = get_user_preferences('grade_report_showonlyactiveenrol', $defaultgradeshowactiveenrol);
+    $showonlyactiveenrol = $showonlyactiveenrol || !has_capability('moodle/course:viewsuspendedusers', $coursecontext);
     $menu = array(); // Will be a list of userid => user name
+    $menususpendedusers = array(); // Suspended users go to a separate optgroup.
     $gui = new graded_users_iterator($course, null, $groupid);
+    $gui->require_active_enrolment($showonlyactiveenrol);
     $gui->init();
     $label = get_string('selectauser', 'grades');
     if ($includeall) {
@@ -418,12 +439,21 @@ function grade_get_graded_users_select($report, $course, $userid, $groupid, $inc
     }
     while ($userdata = $gui->next_user()) {
         $user = $userdata->user;
-        $menu[$user->id] = fullname($user);
+        $userfullname = fullname($user);
+        if ($user->suspendedenrolment) {
+            $menususpendedusers[$user->id] = $userfullname;
+        } else {
+            $menu[$user->id] = $userfullname;
+        }
     }
     $gui->close();
 
     if ($includeall) {
-        $menu[0] .= " (" . (count($menu) - 1) . ")";
+        $menu[0] .= " (" . (count($menu) + count($menususpendedusers) - 1) . ")";
+    }
+
+    if (!empty($menususpendedusers)) {
+        $menu[] = array(get_string('suspendedusers') => $menususpendedusers);
     }
     $select = new single_select(new moodle_url('/grade/report/'.$report.'/index.php', array('id'=>$course->id)), 'userid', $menu, $userid);
     $select->label = $label;
@@ -2461,7 +2491,7 @@ abstract class grade_helper {
             return self::$managesetting;
         }
         $context = context_course::instance($courseid);
-        if (has_capability('moodle/course:update', $context)) {
+        if (has_capability('moodle/grade:manage', $context)) {
             self::$managesetting = new grade_plugin_info('coursesettings', new moodle_url('/grade/edit/settings/index.php', array('id'=>$courseid)), get_string('course'));
         } else {
             self::$managesetting = false;

@@ -1,21 +1,30 @@
 <?php
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
+ * Authentication Plugin: LDAP Authentication
+ * Authentication using LDAP (Lightweight Directory Access Protocol).
+ *
+ * @package auth_ldap
  * @author Martin Dougiamas
  * @author Iñaki Arenaza
  * @license http://www.gnu.org/copyleft/gpl.html GNU Public License
- * @package moodle multiauth
- *
- * Authentication Plugin: LDAP Authentication
- *
- * Authentication using LDAP (Lightweight Directory Access Protocol).
- *
- * 2006-08-28  File created.
  */
 
-if (!defined('MOODLE_INTERNAL')) {
-    die('Direct access to this script is forbidden.');    ///  It must be included from a Moodle page
-}
+defined('MOODLE_INTERNAL') || die();
 
 // See http://support.microsoft.com/kb/305144 to interprete these values.
 if (!defined('AUTH_AD_ACCOUNTDISABLE')) {
@@ -589,6 +598,8 @@ class auth_plugin_ldap extends auth_plugin_base {
                 if ($user->firstaccess == 0) {
                     $DB->set_field('user', 'firstaccess', time(), array('id'=>$user->id));
                 }
+                $euser = $DB->get_record('user', array('id' => $user->id));
+                events_trigger('user_updated', $euser);
                 return AUTH_CONFIRM_OK;
             }
         } else {
@@ -761,6 +772,8 @@ class auth_plugin_ldap extends auth_plugin_base {
                         $updateuser->auth = 'nologin';
                         $DB->update_record('user', $updateuser);
                         echo "\t"; print_string('auth_dbsuspenduser', 'auth_db', array('name'=>$user->username, 'id'=>$user->id)); echo "\n";
+                        $euser = $DB->get_record('user', array('id' => $user->id));
+                        events_trigger('user_updated', $euser);
                     }
                 }
             } else {
@@ -786,6 +799,8 @@ class auth_plugin_ldap extends auth_plugin_base {
                     $updateuser->auth = $this->authtype;
                     $DB->update_record('user', $updateuser);
                     echo "\t"; print_string('auth_dbreviveduser', 'auth_db', array('name'=>$user->username, 'id'=>$user->id)); echo "\n";
+                    $euser = $DB->get_record('user', array('id' => $user->id));
+                    events_trigger('user_updated', $euser);
                 }
             } else {
                 print_string('nouserentriestorevive', 'auth_ldap');
@@ -899,6 +914,8 @@ class auth_plugin_ldap extends auth_plugin_base {
 
                 $id = $DB->insert_record('user', $user);
                 echo "\t"; print_string('auth_dbinsertuser', 'auth_db', array('name'=>$user->username, 'id'=>$id)); echo "\n";
+                $euser = $DB->get_record('user', array('id' => $user->id));
+                events_trigger('user_created', $euser);
                 if (!empty($this->config->forcechangepassword)) {
                     set_user_preference('auth_forcepasswordchange', 1, $id);
                 }
@@ -968,6 +985,10 @@ class auth_plugin_ldap extends auth_plugin_base {
                         $DB->set_field('user', $key, $value, array('id'=>$userid));
                     }
                 }
+            }
+            if (!empty($updatekeys)) {
+                $euser = $DB->get_record('user', array('id' => $userid));
+                events_trigger('user_updated', $euser);
             }
         } else {
             return false;

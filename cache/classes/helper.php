@@ -192,8 +192,7 @@ class cache_helper {
             if (in_array($pluginname, $ignored)) {
                 continue;
             }
-            $pluginname = clean_param($pluginname, PARAM_PLUGIN);
-            if (empty($pluginname)) {
+            if (!is_valid_plugin_name($pluginname)) {
                 // Better ignore plugins with problematic names here.
                 continue;
             }
@@ -244,10 +243,9 @@ class cache_helper {
             if ($definition->invalidates_on_event($event)) {
                 // OK at this point we know that the definition has information to invalidate on the event.
                 // There are two routes, either its an application cache in which case we can invalidate it now.
-                // or it is a session cache in which case we need to set something to the "Event invalidation" definition.
-                // No need to deal with request caches, we don't want to change data half way through a request.
-                if ($definition->get_mode() === cache_store::MODE_APPLICATION) {
-                    $cache = $factory->create_cache($definition);
+                // or it is a persistent cache that also needs to be invalidated now.
+                if ($definition->get_mode() === cache_store::MODE_APPLICATION || $definition->should_be_persistent()) {
+                    $cache = $factory->create_cache_from_definition($definition->get_component(), $definition->get_area());
                     $cache->delete_many($keys);
                 }
 
@@ -276,6 +274,11 @@ class cache_helper {
 
     /**
      * Purges the cache for a specific definition.
+     *
+     * If you need to purge a definition that requires identifiers or an aggregate and you don't
+     * know the details of those please use cache_helper::purge_stores_used_by_definition instead.
+     * It is a more aggressive purge and will purge all data within the store, not just the data
+     * belonging to the given definition.
      *
      * @todo MDL-36660: Change the signature: $aggregate must be added.
      *
@@ -411,12 +414,17 @@ class cache_helper {
      * Think twice before calling this method. It will purge **ALL** caches regardless of whether they have been used recently or
      * anything. This will involve full setup of the cache + the purge operation. On a site using caching heavily this WILL be
      * painful.
+     *
+     * @param bool $usewriter If set to true the cache_config_writer class is used. This class is special as it avoids
+     *      it is still usable when caches have been disabled.
+     *      Please use this option only if you really must. It's purpose is to allow the cache to be purged when it would be
+     *      otherwise impossible.
      */
-    public static function purge_all() {
-        $config = cache_config::instance();
-
+    public static function purge_all($usewriter = false) {
+        $factory = cache_factory::instance();
+        $config = $factory->create_config_instance($usewriter);
         foreach ($config->get_all_stores() as $store) {
-            self::purge_store($store['name']);
+            self::purge_store($store['name'], $config);
         }
     }
 
@@ -424,10 +432,13 @@ class cache_helper {
      * Purges a store given its name.
      *
      * @param string $storename
+     * @param cache_config $config
      * @return bool
      */
-    public static function purge_store($storename) {
-        $config = cache_config::instance();
+    public static function purge_store($storename, cache_config $config = null) {
+        if ($config === null) {
+            $config = cache_config::instance();
+        }
 
         $stores = $config->get_all_stores();
         if (!array_key_exists($storename, $stores)) {
@@ -447,13 +458,34 @@ class cache_helper {
 
         foreach ($config->get_definitions_by_store($storename) as $id => $definition) {
             $definition = cache_definition::load($id, $definition);
-            $instance = new $class($store['name'], $store['configuration']);
-            $instance->initialise($definition);
-            $instance->purge();
-            unset($instance);
+            $definitioninstance = clone($instance);
+            $definitioninstance->initialise($definition);
+            $definitioninstance->purge();
+            unset($definitioninstance);
         }
 
         return true;
+    }
+
+    /**
+     * Purges all of the stores used by a definition.
+     *
+     * Unlike cache_helper::purge_by_definition this purges all of the data from the stores not
+     * just the data relating to the definition.
+     * This function is useful when you must purge a definition that requires setup but you don't
+     * want to set it up.
+     *
+     * @param string $component
+     * @param string $area
+     */
+    public static function purge_stores_used_by_definition($component, $area) {
+        $factory = cache_factory::instance();
+        $config = $factory->create_config_instance();
+        $definition = $factory->create_definition($component, $area);
+        $stores = $config->get_stores_for_definition($definition);
+        foreach ($stores as $store) {
+            self::purge_store($store['name']);
+        }
     }
 
     /**
@@ -567,5 +599,65 @@ class cache_helper {
     public static function get_site_version() {
         global $CFG;
         return (string)$CFG->version;
+    }
+
+    /**
+     * Runs cron routines for MUC.
+     */
+    public static function cron() {
+        self::clean_old_session_data(true);
+    }
+
+    /**
+     * Cleans old session data from cache stores used for session based definitions.
+     *
+     * @param bool $output If set to true output will be given.
+     */
+    public static function clean_old_session_data($output = false) {
+        global $CFG;
+        if ($output) {
+            mtrace('Cleaning up stale session data from cache stores.');
+        }
+        $factory = cache_factory::instance();
+        $config = $factory->create_config_instance();
+        $definitions = $config->get_definitions();
+        $purgetime = time() - $CFG->sessiontimeout;
+        foreach ($definitions as $definitionarray) {
+            // We are only interested in session caches.
+            if (!($definitionarray['mode'] & cache_store::MODE_SESSION)) {
+                continue;
+            }
+            $definition = $factory->create_definition($definitionarray['component'], $definitionarray['area']);
+            $stores = $config->get_stores_for_definition($definition);
+            // Turn them into store instances.
+            $stores = self::initialise_cachestore_instances($stores, $definition);
+            // Initialise all of the stores used for that definition.
+            foreach ($stores as $store) {
+                // If the store doesn't support searching we can skip it.
+                if (!($store instanceof cache_is_searchable)) {
+                    debugging('Cache stores used for session definitions should ideally be searchable.', DEBUG_DEVELOPER);
+                    continue;
+                }
+                // Get all of the keys.
+                $keys = $store->find_by_prefix(cache_session::KEY_PREFIX);
+                $todelete = array();
+                foreach ($store->get_many($keys) as $key => $value) {
+                    if (strpos($key, cache_session::KEY_PREFIX) !== 0 || !is_array($value) || !isset($value['lastaccess'])) {
+                        continue;
+                    }
+                    if ((int)$value['lastaccess'] < $purgetime || true) {
+                        $todelete[] = $key;
+                    }
+                }
+                if (count($todelete)) {
+                    $outcome = (int)$store->delete_many($todelete);
+                    if ($output) {
+                        $strdef = s($definition->get_id());
+                        $strstore = s($store->my_name());
+                        mtrace("- Removed {$outcome} old {$strdef} sessions from the '{$strstore}' cache store.");
+                    }
+                }
+            }
+        }
     }
 }

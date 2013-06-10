@@ -469,6 +469,12 @@ class core_renderer extends renderer_base {
     public function standard_footer_html() {
         global $CFG, $SCRIPT;
 
+        if (during_initial_install()) {
+            // Debugging info can not work before install is finished,
+            // in any case we do not want any links during installation!
+            return '';
+        }
+
         // This function is normally called from a layout.php file in {@link core_renderer::header()}
         // but some of the content won't be known until later, so we return a placeholder
         // for now. This will be replaced with the real content in {@link core_renderer::footer()}.
@@ -563,7 +569,9 @@ class core_renderer extends renderer_base {
             $realuser = session_get_realuser();
             $fullname = fullname($realuser, true);
             if ($withlinks) {
-                $realuserinfo = " [<a href=\"$CFG->wwwroot/course/loginas.php?id=$course->id&amp;sesskey=".sesskey()."\">$fullname</a>] ";
+                $loginastitle = get_string('loginas');
+                $realuserinfo = " [<a href=\"$CFG->wwwroot/course/loginas.php?id=$course->id&amp;sesskey=".sesskey()."\"";
+                $realuserinfo .= "title =\"".$loginastitle."\">$fullname</a>] ";
             } else {
                 $realuserinfo = " [$fullname] ";
             }
@@ -582,7 +590,8 @@ class core_renderer extends renderer_base {
             $fullname = fullname($USER, true);
             // Since Moodle 2.0 this link always goes to the public profile page (not the course profile page)
             if ($withlinks) {
-                $username = "<a href=\"$CFG->wwwroot/user/profile.php?id=$USER->id\">$fullname</a>";
+                $linktitle = get_string('viewprofile');
+                $username = "<a href=\"$CFG->wwwroot/user/profile.php?id=$USER->id\" title=\"$linktitle\">$fullname</a>";
             } else {
                 $username = $fullname;
             }
@@ -756,6 +765,9 @@ class core_renderer extends renderer_base {
         if (session_is_loggedinas()) {
             $this->page->add_body_class('userloggedinas');
         }
+
+        // Give themes a chance to init/alter the page object.
+        $this->page->theme->init_page($this->page);
 
         $this->page->set_state(moodle_page::STATE_PRINTING_HEADER);
 
@@ -983,6 +995,8 @@ class core_renderer extends renderer_base {
 
     /**
      * Returns lang menu or '', this method also checks forcing of languages in courses.
+     *
+     * This function calls {@link core_renderer::render_single_select()} to actually display the language menu.
      *
      * @return string The lang menu HTML or empty string
      */
@@ -1215,13 +1229,20 @@ class core_renderer extends renderer_base {
      */
     public function blocks_for_region($region) {
         $blockcontents = $this->page->blocks->get_content_for_region($region, $this);
-
+        $blocks = $this->page->blocks->get_blocks_for_region($region);
+        $lastblock = null;
+        $zones = array();
+        foreach ($blocks as $block) {
+            $zones[] = $block->title;
+        }
         $output = '';
+
         foreach ($blockcontents as $bc) {
             if ($bc instanceof block_contents) {
                 $output .= $this->block($bc, $region);
+                $lastblock = $bc->title;
             } else if ($bc instanceof block_move_target) {
-                $output .= $this->block_move_target($bc);
+                $output .= $this->block_move_target($bc, $zones, $lastblock);
             } else {
                 throw new coding_exception('Unexpected type of thing (' . get_class($bc) . ') found in list of block contents.');
             }
@@ -1233,14 +1254,24 @@ class core_renderer extends renderer_base {
      * Output a place where the block that is currently being moved can be dropped.
      *
      * @param block_move_target $target with the necessary details.
+     * @param array $zones array of areas where the block can be moved to
+     * @param string $previous the block located before the area currently being rendered.
      * @return string the HTML to be output.
      */
-    public function block_move_target($target) {
-        return html_writer::tag('a', html_writer::tag('span', $target->text, array('class' => 'accesshide')), array('href' => $target->url, 'class' => 'blockmovetarget'));
+    public function block_move_target($target, $zones, $previous) {
+        if ($previous == null) {
+            $position = get_string('moveblockbefore', 'block', $zones[0]);
+        } else {
+            $position = get_string('moveblockafter', 'block', $previous);
+        }
+        return html_writer::tag('a', html_writer::tag('span', $position, array('class' => 'accesshide')), array('href' => $target->url, 'class' => 'blockmovetarget'));
     }
 
     /**
      * Renders a special html link with attached action
+     *
+     * Theme developers: DO NOT OVERRIDE! Please override function
+     * {@link core_renderer::render_action_link()} instead.
      *
      * @param string|moodle_url $url
      * @param string $text HTML fragment
@@ -1307,6 +1338,10 @@ class core_renderer extends renderer_base {
      * This function uses the {@link core_renderer::action_link()} method for the
      * most part. What it does different is prepare the icon as HTML and use it
      * as the link text.
+     *
+     * Theme developers: If you want to change how action links and/or icons are rendered,
+     * consider overriding function {@link core_renderer::render_action_link()} and
+     * {@link core_renderer::render_pix_icon()}.
      *
      * @param string|moodle_url $url A string URL or moodel_url
      * @param pix_icon $pixicon
@@ -1377,6 +1412,9 @@ class core_renderer extends renderer_base {
 
     /**
      * Returns a form with a single button.
+     *
+     * Theme developers: DO NOT OVERRIDE! Please override function
+     * {@link core_renderer::render_single_button()} instead.
      *
      * @param string|moodle_url $url
      * @param string $label button text
@@ -1456,6 +1494,9 @@ class core_renderer extends renderer_base {
 
     /**
      * Returns a form with a single select widget.
+     *
+     * Theme developers: DO NOT OVERRIDE! Please override function
+     * {@link core_renderer::render_single_select()} instead.
      *
      * @param moodle_url $url form action target, includes hidden fields
      * @param string $name name of selection field - the changing parameter in url
@@ -1550,6 +1591,9 @@ class core_renderer extends renderer_base {
 
     /**
      * Returns a form with a url select widget.
+     *
+     * Theme developers: DO NOT OVERRIDE! Please override function
+     * {@link core_renderer::render_url_select()} instead.
      *
      * @param array $urls list of urls - array('/course/view.php?id=1'=>'Frontpage', ....)
      * @param string $selected selected element
@@ -1707,6 +1751,9 @@ class core_renderer extends renderer_base {
 
     /**
      * Return HTML for a pix_icon.
+     *
+     * Theme developers: DO NOT OVERRIDE! Please override function
+     * {@link core_renderer::render_pix_icon()} instead.
      *
      * @param string $pix short pix name
      * @param string $alt mandatory alt attribute
@@ -1884,6 +1931,9 @@ class core_renderer extends renderer_base {
     /**
      * Returns HTML to display a help icon.
      *
+     * Theme developers: DO NOT OVERRIDE! Please override function
+     * {@link core_renderer::render_help_icon()} instead.
+     *
      * @param string $identifier The keyword that defines a help page
      * @param string $component component name
      * @param string|bool $linktext true means use $title as link text, string means link text value
@@ -1935,7 +1985,7 @@ class core_renderer extends renderer_base {
         // note: this title is displayed only if JS is disabled, otherwise the link will have the new ajax tooltip
         $title = get_string('helpprefix2', '', trim($title, ". \t"));
 
-        $attributes = array('href' => $url, 'title' => $title, 'aria-haspopup' => 'true');
+        $attributes = array('href' => $url, 'title' => $title, 'aria-haspopup' => 'true', 'target'=>'_blank');
         $output = html_writer::tag('a', $output, $attributes);
 
         // and finally span
@@ -2006,6 +2056,9 @@ class core_renderer extends renderer_base {
      * $userpic->popup = true;
      * $OUTPUT->render($userpic);
      * </pre>
+     *
+     * Theme developers: DO NOT OVERRIDE! Please override function
+     * {@link core_renderer::render_user_picture()} instead.
      *
      * @param stdClass $user Object with at least fields id, picture, imagealt, firstname, lastname
      *     If any of these are missing, the database is queried. Avoid this
@@ -2129,6 +2182,9 @@ class core_renderer extends renderer_base {
      * <pre>
      * $OUTPUT->file_picker($options);
      * </pre>
+     *
+     * Theme developers: DO NOT OVERRIDE! Please override function
+     * {@link core_renderer::render_file_picker()} instead.
      *
      * @param array $options associative array with file manager options
      *   options are:
@@ -2317,12 +2373,16 @@ EOD;
             }
             error_reporting($CFG->debug);
 
-            // Header not yet printed
-            if (isset($_SERVER['SERVER_PROTOCOL'])) {
-                // server protocol should be always present, because this render
-                // can not be used from command line or when outputting custom XML
-                @header($_SERVER['SERVER_PROTOCOL'] . ' 404 Not Found');
+            // Output not yet started.
+            $protocol = (isset($_SERVER['SERVER_PROTOCOL']) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0');
+            if (empty($_SERVER['HTTP_RANGE'])) {
+                @header($protocol . ' 404 Not Found');
+            } else {
+                // Must stop byteserving attempts somehow,
+                // this is weird but Chrome PDF viewer can be stopped only with 407!
+                @header($protocol . ' 407 Proxy Authentication Required');
             }
+
             $this->page->set_context(null); // ugly hack - make sure page context is set to something, we do not want bogus warnings here
             $this->page->set_url('/'); // no url
             //$this->page->set_pagelayout('base'); //TODO: MDL-20676 blocks on error pages are weird, unfortunately it somehow detect the pagelayout from URL :-(
@@ -2398,6 +2458,9 @@ EOD;
 
     /**
      * Returns HTML to display a single paging bar to provide access to other pages  (usually in a search)
+     *
+     * Theme developers: DO NOT OVERRIDE! Please override function
+     * {@link core_renderer::render_paging_bar()} instead.
      *
      * @param int $totalcount The total number of entries available to be paged through
      * @param int $page The page you are currently viewing
@@ -2722,6 +2785,9 @@ EOD;
      *    Settings: Administration > Appearance > Themes > Theme settings
      * and then configuring the custommenu config setting as described.
      *
+     * Theme developers: DO NOT OVERRIDE! Please override function
+     * {@link core_renderer::render_custom_menu()} instead.
+     *
      * @param string $custommenuitems - custom menuitems set by theme instead of global theme settings
      * @return string
      */
@@ -2734,7 +2800,7 @@ EOD;
             return '';
         }
         $custommenu = new custom_menu($custommenuitems, current_language());
-        return $this->render_custom_menu($custommenu);
+        return $this->render($custommenu);
     }
 
     /**
@@ -2857,6 +2923,110 @@ EOD;
         $content .= html_writer::end_tag('div');
 
         return $content;
+    }
+
+    /**
+     * Renders tabs
+     *
+     * This function replaces print_tabs() used before Moodle 2.5 but with slightly different arguments
+     *
+     * Theme developers: In order to change how tabs are displayed please override functions
+     * {@link core_renderer::render_tabtree()} and/or {@link core_renderer::render_tabobject()}
+     *
+     * @param array $tabs array of tabs, each of them may have it's own ->subtree
+     * @param string|null $selected which tab to mark as selected, all parent tabs will
+     *     automatically be marked as activated
+     * @param array|string|null $inactive list of ids of inactive tabs, regardless of
+     *     their level. Note that you can as weel specify tabobject::$inactive for separate instances
+     * @return string
+     */
+    public final function tabtree($tabs, $selected = null, $inactive = null) {
+        return $this->render(new tabtree($tabs, $selected, $inactive));
+    }
+
+    /**
+     * Renders tabtree
+     *
+     * @param tabtree $tabtree
+     * @return string
+     */
+    protected function render_tabtree(tabtree $tabtree) {
+        if (empty($tabtree->subtree)) {
+            return '';
+        }
+        $str = '';
+        $str .= html_writer::start_tag('div', array('class' => 'tabtree'));
+        $str .= $this->render_tabobject($tabtree);
+        $str .= html_writer::end_tag('div').
+                html_writer::tag('div', ' ', array('class' => 'clearer'));
+        return $str;
+    }
+
+    /**
+     * Renders tabobject (part of tabtree)
+     *
+     * This function is called from {@link core_renderer::render_tabtree()}
+     * and also it calls itself when printing the $tabobject subtree recursively.
+     *
+     * Property $tabobject->level indicates the number of row of tabs.
+     *
+     * @param tabobject $tabobject
+     * @return string HTML fragment
+     */
+    protected function render_tabobject(tabobject $tabobject) {
+        $str = '';
+
+        // Print name of the current tab.
+        if ($tabobject instanceof tabtree) {
+            // No name for tabtree root.
+        } else if ($tabobject->inactive || $tabobject->activated || ($tabobject->selected && !$tabobject->linkedwhenselected)) {
+            // Tab name without a link. The <a> tag is used for styling.
+            $str .= html_writer::tag('a', html_writer::span($tabobject->text), array('class' => 'nolink'));
+        } else {
+            // Tab name with a link.
+            if (!($tabobject->link instanceof moodle_url)) {
+                // backward compartibility when link was passed as quoted string
+                $str .= "<a href=\"$tabobject->link\" title=\"$tabobject->title\"><span>$tabobject->text</span></a>";
+            } else {
+                $str .= html_writer::link($tabobject->link, html_writer::span($tabobject->text), array('title' => $tabobject->title));
+            }
+        }
+
+        if (empty($tabobject->subtree)) {
+            if ($tabobject->selected) {
+                $str .= html_writer::tag('div', '&nbsp;', array('class' => 'tabrow'. ($tabobject->level + 1). ' empty'));
+            }
+            return $str;
+        }
+
+        // Print subtree
+        $str .= html_writer::start_tag('ul', array('class' => 'tabrow'. $tabobject->level));
+        $cnt = 0;
+        foreach ($tabobject->subtree as $tab) {
+            $liclass = '';
+            if (!$cnt) {
+                $liclass .= ' first';
+            }
+            if ($cnt == count($tabobject->subtree) - 1) {
+                $liclass .= ' last';
+            }
+            if ((empty($tab->subtree)) && (!empty($tab->selected))) {
+                $liclass .= ' onerow';
+            }
+
+            if ($tab->selected) {
+                $liclass .= ' here selected';
+            } else if ($tab->activated) {
+                $liclass .= ' here active';
+            }
+
+            // This will recursively call function render_tabobject() for each item in subtree
+            $str .= html_writer::tag('li', $this->render($tab), array('class' => trim($liclass)));
+            $cnt++;
+        }
+        $str .= html_writer::end_tag('ul');
+
+        return $str;
     }
 }
 

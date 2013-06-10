@@ -50,6 +50,9 @@ list($options, $unrecognized) = cli_get_params(
     )
 );
 
+if ($options['install'] or $options['drop']) {
+    define('CACHE_DISABLE_ALL', true);
+}
 
 // Checking util.php CLI script usage.
 $help = "
@@ -141,6 +144,9 @@ foreach ($vars as $var) {
 
 $CFG->noemailever = true;
 $CFG->passwordsaltmain = 'moodle';
+
+$CFG->themerev = 1;
+$CFG->jsrev = 1;
 
 // Unset cache and temp directories to reset them again with the new $CFG->dataroot.
 unset($CFG->cachedir);

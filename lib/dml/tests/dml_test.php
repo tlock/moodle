@@ -3796,7 +3796,7 @@ class dml_testcase extends database_driver_testcase {
         $this->assertEquals('123456', $DB->get_field_sql($sql, $params));
         // float, null and strings
         $params = array(123.45, null, 'test');
-        $this->assertNull($DB->get_field_sql($sql, $params), 'ANSI behaviour: Concatenating NULL must return NULL - But in Oracle :-(. [%s]'); // Concatenate NULL with anything result = NULL
+        $this->assertNull($DB->get_field_sql($sql, $params)); // Concatenate NULL with anything result = NULL
 
         // Testing fieldnames + values and also integer fieldnames
         $table = $this->get_test_table();
@@ -3926,6 +3926,9 @@ class dml_testcase extends database_driver_testcase {
         $table = $this->get_test_table();
         $tablename = $table->getName();
 
+        $this->assertSame('', $DB->sql_empty()); // Since 2.5 the hack is applied automatically to all bound params.
+        $this->assertDebuggingCalled();
+
         $table->add_field('id', XMLDB_TYPE_INTEGER, '10', XMLDB_UNSIGNED, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
         $table->add_field('name', XMLDB_TYPE_CHAR, '255', null, null, null, null);
         $table->add_field('namenotnull', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, 'default value');
@@ -3938,17 +3941,17 @@ class dml_testcase extends database_driver_testcase {
         $DB->insert_record($tablename, array('name'=>'lalala'));
         $DB->insert_record($tablename, array('name'=>0));
 
-        $records = $DB->get_records_sql("SELECT * FROM {{$tablename}} WHERE name = '".$DB->sql_empty()."'");
+        $records = $DB->get_records_sql("SELECT * FROM {{$tablename}} WHERE name = ?", array(''));
         $this->assertEquals(count($records), 1);
         $record = reset($records);
         $this->assertEquals($record->name, '');
 
-        $records = $DB->get_records_sql("SELECT * FROM {{$tablename}} WHERE namenotnull = '".$DB->sql_empty()."'");
+        $records = $DB->get_records_sql("SELECT * FROM {{$tablename}} WHERE namenotnull = ?", array(''));
         $this->assertEquals(count($records), 1);
         $record = reset($records);
         $this->assertEquals($record->namenotnull, '');
 
-        $records = $DB->get_records_sql("SELECT * FROM {{$tablename}} WHERE namenotnullnodeflt = '".$DB->sql_empty()."'");
+        $records = $DB->get_records_sql("SELECT * FROM {{$tablename}} WHERE namenotnullnodeflt = ?", array(''));
         $this->assertEquals(count($records), 4);
         $record = reset($records);
         $this->assertEquals($record->namenotnullnodeflt, '');
@@ -4199,6 +4202,27 @@ class dml_testcase extends database_driver_testcase {
         $DB->insert_record($tablename, array('course' => 7, 'content' => 'xx', 'name'=>'1abc'));
         $this->assertEquals(count($DB->get_records_sql($sql, array(1))), 1);
         $this->assertEquals(count($DB->get_records_sql($sql, array("1"))), 1);
+
+        // Test get_in_or_equal() with a big number of elements. Note that ideally
+        // we should be detecting and warning about any use over, say, 200 elements
+        // and recommend to change code to use subqueries and/or chunks instead.
+        $currentcount = $DB->count_records($tablename);
+        $numelements = 10000; // Verify that we can handle 10000 elements (crazy!)
+        $values = range(1, $numelements);
+
+        list($insql, $inparams) = $DB->get_in_or_equal($values, SQL_PARAMS_QM); // With QM params.
+        $sql = "SELECT *
+                  FROM {{$tablename}}
+                 WHERE id $insql";
+        $results = $DB->get_records_sql($sql, $inparams);
+        $this->assertEquals($currentcount, count($results));
+
+        list($insql, $inparams) = $DB->get_in_or_equal($values, SQL_PARAMS_NAMED); // With NAMED params.
+        $sql = "SELECT *
+                  FROM {{$tablename}}
+                 WHERE id $insql";
+        $results = $DB->get_records_sql($sql, $inparams);
+        $this->assertEquals($currentcount, count($results));
     }
 
     function test_onelevel_commit() {

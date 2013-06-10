@@ -58,11 +58,13 @@ class qtype_numerical_edit_form extends question_edit_form {
                 $repeatedoptions, $answersoption);
 
         $tolerance = $mform->createElement('text', 'tolerance',
-                get_string('acceptederror', 'qtype_numerical'));
+                get_string('answererror', 'qtype_numerical'), array('size' => 15));
         $repeatedoptions['tolerance']['type'] = PARAM_FLOAT;
         $repeatedoptions['tolerance']['default'] = 0;
-        array_splice($repeated, 3, 0, array($tolerance));
-        $repeated[1]->setSize(10);
+        $elements = $repeated[0]->getElements();
+        $elements[0]->setSize(15);
+        array_splice($elements, 1, 0, array($tolerance));
+        $repeated[0]->setElements($elements);
 
         return $repeated;
     }
@@ -143,10 +145,11 @@ class qtype_numerical_edit_form extends question_edit_form {
         $unitfields = array($mform->createElement('group', 'units',
                  get_string('unitx', 'qtype_numerical'), $this->unit_group($mform), null, false));
 
-        $repeatedoptions['unit']['disabledif'] =
-                 array('unitrole', 'eq', qtype_numerical::UNITNONE);
-        $repeatedoptions['multiplier']['disabledif'] =
-                 array('unitrole', 'eq', qtype_numerical::UNITNONE);
+        $repeatedoptions['unit']['disabledif'] = array('unitrole', 'eq', qtype_numerical::UNITNONE);
+        $repeatedoptions['unit']['type'] = PARAM_NOTAGS;
+        $repeatedoptions['multiplier']['disabledif'] = array('unitrole', 'eq', qtype_numerical::UNITNONE);
+        $repeatedoptions['multiplier']['type'] = PARAM_NUMBER;
+
         $mform->disabledIf('addunits', 'unitrole', 'eq', qtype_numerical::UNITNONE);
 
         if (isset($this->question->options->units)) {
@@ -182,12 +185,11 @@ class qtype_numerical_edit_form extends question_edit_form {
      */
     protected function unit_group($mform) {
         $grouparray = array();
-        $grouparray[] = $mform->createElement('text', 'unit', get_string('unit', 'quiz'),
-                array('type'=>PARAM_NOTAGS, 'size'=>10));
+        $grouparray[] = $mform->createElement('text', 'unit', get_string('unit', 'quiz'), array('size'=>10));
         $grouparray[] = $mform->createElement('static', '', '', ' ' .
                 get_string('multiplier', 'quiz').' ');
         $grouparray[] = $mform->createElement('text', 'multiplier',
-                get_string('multiplier', 'quiz'), array('type'=>PARAM_NUMBER, 'size'=>10));
+                get_string('multiplier', 'quiz'), array('size'=>10));
 
         return $grouparray;
     }
@@ -286,27 +288,27 @@ class qtype_numerical_edit_form extends question_edit_form {
             if ($trimmedanswer != '') {
                 $answercount++;
                 if (!$this->is_valid_answer($trimmedanswer, $data)) {
-                    $errors['answer[' . $key . ']'] = $this->valid_answer_message($trimmedanswer);
+                    $errors['answeroptions[' . $key . ']'] = $this->valid_answer_message($trimmedanswer);
                 }
                 if ($data['fraction'][$key] == 1) {
                     $maxgrade = true;
                 }
                 if ($answer !== '*' && !is_numeric($data['tolerance'][$key])) {
-                    $errors['tolerance['.$key.']'] =
+                    $errors['answeroptions['.$key.']'] =
                             get_string('xmustbenumeric', 'qtype_numerical',
                                 get_string('acceptederror', 'qtype_numerical'));
                 }
             } else if ($data['fraction'][$key] != 0 ||
                     !html_is_blank($data['feedback'][$key]['text'])) {
-                $errors['answer[' . $key . ']'] = $this->valid_answer_message($trimmedanswer);
+                $errors['answeroptions[' . $key . ']'] = $this->valid_answer_message($trimmedanswer);
                 $answercount++;
             }
         }
         if ($answercount == 0) {
-            $errors['answer[0]'] = get_string('notenoughanswers', 'qtype_numerical');
+            $errors['answeroptions[0]'] = get_string('notenoughanswers', 'qtype_numerical');
         }
         if ($maxgrade == false) {
-            $errors['fraction[0]'] = get_string('fractionsnomax', 'question');
+            $errors['answeroptions[0]'] = get_string('fractionsnomax', 'question');
         }
 
         return $errors;

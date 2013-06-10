@@ -44,11 +44,14 @@ define('COURSE_MAX_SUMMARIES_PER_PAGE', 10);
 define('COURSE_MAX_COURSES_PER_DROPDOWN',1000); //  max courses in log dropdown before switching to optional
 define('COURSE_MAX_USERS_PER_DROPDOWN',1000);   //  max users in log dropdown before switching to optional
 define('FRONTPAGENEWS',           '0');
-define('FRONTPAGECOURSELIST',     '1');
+define('FRONTPAGECOURSELIST',     '1');         // Not used. TODO MDL-38832 remove
 define('FRONTPAGECATEGORYNAMES',  '2');
-define('FRONTPAGETOPICONLY',      '3');
+define('FRONTPAGETOPICONLY',      '3');         // Not used. TODO MDL-38832 remove
 define('FRONTPAGECATEGORYCOMBO',  '4');
-define('FRONTPAGECOURSELIMIT',    200);         // maximum number of courses displayed on the frontpage
+define('FRONTPAGEENROLLEDCOURSELIST', '5');
+define('FRONTPAGEALLCOURSELIST',  '6');
+define('FRONTPAGECOURSESEARCH',   '7');
+define('FRONTPAGECOURSELIMIT',    200);         // Important! Replaced with $CFG->frontpagecourselimit - maximum number of courses displayed on the frontpage. TODO MDL-38832 remove
 define('EXCELROWS', 65535);
 define('FIRSTUSEDEXCELROW', 3);
 
@@ -1220,437 +1223,41 @@ function get_category_or_system_context($categoryid) {
 }
 
 /**
- * Gets the child categories of a given courses category. Uses a static cache
- * to make repeat calls efficient.
+ * Returns full course categories trees to be used in html_writer::select()
  *
- * @param int $parentid the id of a course category.
- * @return array all the child course categories.
- */
-function get_child_categories($parentid) {
-    static $allcategories = null;
-
-    // only fill in this variable the first time
-    if (null == $allcategories) {
-        $allcategories = array();
-
-        $categories = get_categories();
-        foreach ($categories as $category) {
-            if (empty($allcategories[$category->parent])) {
-                $allcategories[$category->parent] = array();
-            }
-            $allcategories[$category->parent][] = $category;
-        }
-    }
-
-    if (empty($allcategories[$parentid])) {
-        return array();
-    } else {
-        return $allcategories[$parentid];
-    }
-}
-
-/**
- * This function recursively travels the categories, building up a nice list
- * for display. It also makes an array that list all the parents for each
- * category.
+ * Calls {@link coursecat::make_categories_list()} to build the tree and
+ * adds whitespace to denote nesting
  *
- * For example, if you have a tree of categories like:
- *   Miscellaneous (id = 1)
- *      Subcategory (id = 2)
- *         Sub-subcategory (id = 4)
- *   Other category (id = 3)
- * Then after calling this function you will have
- * $list = array(1 => 'Miscellaneous', 2 => 'Miscellaneous / Subcategory',
- *      4 => 'Miscellaneous / Subcategory / Sub-subcategory',
- *      3 => 'Other category');
- * $parents = array(2 => array(1), 4 => array(1, 2));
- *
- * If you specify $requiredcapability, then only categories where the current
- * user has that capability will be added to $list, although all categories
- * will still be added to $parents, and if you only have $requiredcapability
- * in a child category, not the parent, then the child catgegory will still be
- * included.
- *
- * If you specify the option $excluded, then that category, and all its children,
- * are omitted from the tree. This is useful when you are doing something like
- * moving categories, where you do not want to allow people to move a category
- * to be the child of itself.
- *
- * @param array $list For output, accumulates an array categoryid => full category path name
- * @param array $parents For output, accumulates an array categoryid => list of parent category ids.
- * @param string/array $requiredcapability if given, only categories where the current
- *      user has this capability will be added to $list. Can also be an array of capabilities,
- *      in which case they are all required.
- * @param integer $excludeid Omit this category and its children from the lists built.
- * @param object $category Build the tree starting at this category - otherwise starts at the top level.
- * @param string $path For internal use, as part of recursive calls.
- */
-function make_categories_list(&$list, &$parents, $requiredcapability = '',
-        $excludeid = 0, $category = NULL, $path = "") {
-
-    // initialize the arrays if needed
-    if (!is_array($list)) {
-        $list = array();
-    }
-    if (!is_array($parents)) {
-        $parents = array();
-    }
-
-    if (empty($category)) {
-        // Start at the top level.
-        $category = new stdClass;
-        $category->id = 0;
-    } else {
-        // This is the excluded category, don't include it.
-        if ($excludeid > 0 && $excludeid == $category->id) {
-            return;
-        }
-
-        $context = context_coursecat::instance($category->id);
-        $categoryname = format_string($category->name, true, array('context' => $context));
-
-        // Update $path.
-        if ($path) {
-            $path = $path.' / '.$categoryname;
-        } else {
-            $path = $categoryname;
-        }
-
-        // Add this category to $list, if the permissions check out.
-        if (empty($requiredcapability)) {
-            $list[$category->id] = $path;
-
-        } else {
-            $requiredcapability = (array)$requiredcapability;
-            if (has_all_capabilities($requiredcapability, $context)) {
-                $list[$category->id] = $path;
-            }
-        }
-    }
-
-    // Add all the children recursively, while updating the parents array.
-    if ($categories = get_child_categories($category->id)) {
-        foreach ($categories as $cat) {
-            if (!empty($category->id)) {
-                if (isset($parents[$category->id])) {
-                    $parents[$cat->id]   = $parents[$category->id];
-                }
-                $parents[$cat->id][] = $category->id;
-            }
-            make_categories_list($list, $parents, $requiredcapability, $excludeid, $cat, $path);
-        }
-    }
-}
-
-/**
- * This function generates a structured array of courses and categories.
- *
- * The depth of categories is limited by $CFG->maxcategorydepth however there
- * is no limit on the number of courses!
- *
- * Suitable for use with the course renderers course_category_tree method:
- * $renderer = $PAGE->get_renderer('core','course');
- * echo $renderer->course_category_tree(get_course_category_tree());
- *
- * @global moodle_database $DB
- * @param int $id
- * @param int $depth
- */
-function get_course_category_tree($id = 0, $depth = 0) {
-    global $DB, $CFG;
-    $viewhiddencats = has_capability('moodle/category:viewhiddencategories', context_system::instance());
-    $categories = get_child_categories($id);
-    $categoryids = array();
-    foreach ($categories as $key => &$category) {
-        if (!$category->visible && !$viewhiddencats) {
-            unset($categories[$key]);
-            continue;
-        }
-        $categoryids[$category->id] = $category;
-        if (empty($CFG->maxcategorydepth) || $depth <= $CFG->maxcategorydepth) {
-            list($category->categories, $subcategories) = get_course_category_tree($category->id, $depth+1);
-            foreach ($subcategories as $subid=>$subcat) {
-                $categoryids[$subid] = $subcat;
-            }
-            $category->courses = array();
-        }
-    }
-
-    if ($depth > 0) {
-        // This is a recursive call so return the required array
-        return array($categories, $categoryids);
-    }
-
-    if (empty($categoryids)) {
-        // No categories available (probably all hidden).
-        return array();
-    }
-
-    // The depth is 0 this function has just been called so we can finish it off
-
-    list($ccselect, $ccjoin) = context_instance_preload_sql('c.id', CONTEXT_COURSE, 'ctx');
-    list($catsql, $catparams) = $DB->get_in_or_equal(array_keys($categoryids));
-    $sql = "SELECT
-            c.id,c.sortorder,c.visible,c.fullname,c.shortname,c.summary,c.category
-            $ccselect
-            FROM {course} c
-            $ccjoin
-            WHERE c.category $catsql ORDER BY c.sortorder ASC";
-    if ($courses = $DB->get_records_sql($sql, $catparams)) {
-        // loop throught them
-        foreach ($courses as $course) {
-            if ($course->id == SITEID) {
-                continue;
-            }
-            context_instance_preload($course);
-            if (!empty($course->visible) || has_capability('moodle/course:viewhiddencourses', context_course::instance($course->id))) {
-                $categoryids[$course->category]->courses[$course->id] = $course;
-            }
-        }
-    }
-    return $categories;
-}
-
-/**
- * Recursive function to print out all the categories in a nice format
- * with or without courses included
- */
-function print_whole_category_list($category=NULL, $displaylist=NULL, $parentslist=NULL, $depth=-1, $showcourses = true, $categorycourses=NULL) {
-    global $CFG;
-
-    // maxcategorydepth == 0 meant no limit
-    if (!empty($CFG->maxcategorydepth) && $depth >= $CFG->maxcategorydepth) {
-        return;
-    }
-
-    if (!$displaylist) {
-        make_categories_list($displaylist, $parentslist);
-    }
-
-    if (!$categorycourses) {
-        if ($category) {
-            $categorycourses = get_category_courses_array($category->id);
-        } else {
-            $categorycourses = get_category_courses_array();
-        }
-    }
-
-    if ($category) {
-        if ($category->visible or has_capability('moodle/category:viewhiddencategories', context_system::instance())) {
-            print_category_info($category, $depth, $showcourses, $categorycourses[$category->id]);
-        } else {
-            return;  // Don't bother printing children of invisible categories
-        }
-
-    } else {
-        $category = new stdClass();
-        $category->id = "0";
-    }
-
-    if ($categories = get_child_categories($category->id)) {   // Print all the children recursively
-        $countcats = count($categories);
-        $count = 0;
-        $first = true;
-        $last = false;
-        foreach ($categories as $cat) {
-            $count++;
-            if ($count == $countcats) {
-                $last = true;
-            }
-            $up = $first ? false : true;
-            $down = $last ? false : true;
-            $first = false;
-
-            print_whole_category_list($cat, $displaylist, $parentslist, $depth + 1, $showcourses, $categorycourses);
-        }
-    }
-}
-
-/**
- * Gets an array whose keys are category ids and whose values are arrays of courses in the corresponding category.
- *
- * @param int $categoryid
- * @return array
- */
-function get_category_courses_array($categoryid = 0) {
-    $tree = get_course_category_tree($categoryid);
-    $flattened = array();
-    foreach ($tree as $category) {
-        get_category_courses_array_recursively($flattened, $category);
-    }
-    return $flattened;
-}
-
-/**
- * Recursive function to help flatten the course category tree.
- *
- * Do not call this function directly, instead calll its parent function {@link get_category_courses_array}
- *
- * @param array &$flattened An array passed by reference in which to store courses for each category.
- * @param stdClass $category The category to get courses for.
- */
-function get_category_courses_array_recursively(array &$flattened, $category) {
-    $flattened[$category->id] = $category->courses;
-    foreach ($category->categories as $childcategory) {
-        get_category_courses_array_recursively($flattened, $childcategory);
-    }
-}
-
-/**
- * This function will return $options array for html_writer::select(), with whitespace to denote nesting.
+ * @return array array mapping coursecat id to the display name
  */
 function make_categories_options() {
-    make_categories_list($cats,$parents);
+    global $CFG;
+    require_once($CFG->libdir. '/coursecatlib.php');
+    $cats = coursecat::make_categories_list();
     foreach ($cats as $key => $value) {
-        if (array_key_exists($key,$parents)) {
-            if ($indent = count($parents[$key])) {
-                for ($i = 0; $i < $indent; $i++) {
-                    $cats[$key] = '&nbsp;'.$cats[$key];
-                }
-            }
-        }
+        $cats[$key] = str_repeat('&nbsp;', coursecat::get($key)->depth - 1). $value;
     }
     return $cats;
 }
 
 /**
- * Prints the category information.
- *
- * This function is only used by print_whole_category_list() above
- *
- * @param stdClass $category
- * @param int $depth The depth of the category.
- * @param bool $showcourses If set to true course information will also be printed.
- * @param array|null $courses An array of courses belonging to the category, or null if you don't have it yet.
- */
-function print_category_info($category, $depth = 0, $showcourses = false, array $courses = null) {
-    global $CFG, $DB, $OUTPUT;
-
-    $strsummary = get_string('summary');
-
-    $catlinkcss = null;
-    if (!$category->visible) {
-        $catlinkcss = array('class'=>'dimmed');
-    }
-    static $coursecount = null;
-    if (null === $coursecount) {
-        // only need to check this once
-        $coursecount = $DB->count_records('course') <= FRONTPAGECOURSELIMIT;
-    }
-
-    if ($showcourses and $coursecount) {
-        $catimage = '<img src="'.$OUTPUT->pix_url('i/course') . '" alt="" />';
-    } else {
-        $catimage = "&nbsp;";
-    }
-
-    if (is_null($courses)) {
-        $courses = get_courses($category->id, 'c.sortorder ASC', 'c.id,c.sortorder,c.visible,c.fullname,c.shortname,c.summary');
-    }
-    $context = context_coursecat::instance($category->id);
-    $fullname = format_string($category->name, true, array('context' => $context));
-
-    if ($showcourses and $coursecount) {
-        echo '<div class="categorylist clearfix">';
-        $cat = '';
-        $cat .= html_writer::tag('div', $catimage, array('class'=>'image'));
-        $catlink = html_writer::link(new moodle_url('/course/category.php', array('id'=>$category->id)), $fullname, $catlinkcss);
-        $cat .= html_writer::tag('div', $catlink, array('class'=>'name'));
-
-        $html = '';
-        if ($depth > 0) {
-            for ($i=0; $i< $depth; $i++) {
-                $html = html_writer::tag('div', $html . $cat, array('class'=>'indentation'));
-                $cat = '';
-            }
-        } else {
-            $html = $cat;
-        }
-        echo html_writer::tag('div', $html, array('class'=>'category'));
-        echo html_writer::tag('div', '', array('class'=>'clearfloat'));
-
-        // does the depth exceed maxcategorydepth
-        // maxcategorydepth == 0 or unset meant no limit
-        $limit = !(isset($CFG->maxcategorydepth) && ($depth >= $CFG->maxcategorydepth-1));
-        if ($courses && ($limit || $CFG->maxcategorydepth == 0)) {
-            foreach ($courses as $course) {
-                $linkcss = null;
-                if (!$course->visible) {
-                    $linkcss = array('class'=>'dimmed');
-                }
-
-                $coursename = get_course_display_name_for_list($course);
-                $courselink = html_writer::link(new moodle_url('/course/view.php', array('id'=>$course->id)), format_string($coursename), $linkcss);
-
-                // print enrol info
-                $courseicon = '';
-                if ($icons = enrol_get_course_info_icons($course)) {
-                    foreach ($icons as $pix_icon) {
-                        $courseicon = $OUTPUT->render($pix_icon);
-                    }
-                }
-
-                $coursecontent = html_writer::tag('div', $courseicon.$courselink, array('class'=>'name'));
-
-                if ($course->summary) {
-                    $link = new moodle_url('/course/info.php?id='.$course->id);
-                    $actionlink = $OUTPUT->action_link($link, '<img alt="'.$strsummary.'" src="'.$OUTPUT->pix_url('i/info') . '" />',
-                        new popup_action('click', $link, 'courseinfo', array('height' => 400, 'width' => 500)),
-                        array('title'=>$strsummary));
-
-                    $coursecontent .= html_writer::tag('div', $actionlink, array('class'=>'info'));
-                }
-
-                $html = '';
-                for ($i=0; $i <= $depth; $i++) {
-                    $html = html_writer::tag('div', $html . $coursecontent , array('class'=>'indentation'));
-                    $coursecontent = '';
-                }
-                echo html_writer::tag('div', $html, array('class'=>'course clearfloat'));
-            }
-        }
-        echo '</div>';
-    } else {
-        echo '<div class="categorylist">';
-        $html = '';
-        $cat = html_writer::link(new moodle_url('/course/category.php', array('id'=>$category->id)), $fullname, $catlinkcss);
-        if (count($courses) > 0) {
-            $cat .= html_writer::tag('span', ' ('.count($courses).')', array('title'=>get_string('numberofcourses'), 'class'=>'numberofcourse'));
-        }
-
-        if ($depth > 0) {
-            for ($i=0; $i< $depth; $i++) {
-                $html = html_writer::tag('div', $html .$cat, array('class'=>'indentation'));
-                $cat = '';
-            }
-        } else {
-            $html = $cat;
-        }
-
-        echo html_writer::tag('div', $html, array('class'=>'category'));
-        echo html_writer::tag('div', '', array('class'=>'clearfloat'));
-        echo '</div>';
-    }
-}
-
-/**
  * Print the buttons relating to course requests.
  *
- * @param object $systemcontext the system context.
+ * @param object $context current page context.
  */
-function print_course_request_buttons($systemcontext) {
+function print_course_request_buttons($context) {
     global $CFG, $DB, $OUTPUT;
     if (empty($CFG->enablecourserequests)) {
         return;
     }
-    if (!has_capability('moodle/course:create', $systemcontext) && has_capability('moodle/course:request', $systemcontext)) {
+    if (!has_capability('moodle/course:create', $context) && has_capability('moodle/course:request', $context)) {
     /// Print a button to request a new course
-        echo $OUTPUT->single_button('request.php', get_string('requestcourse'), 'get');
+        echo $OUTPUT->single_button(new moodle_url('/course/request.php'), get_string('requestcourse'), 'get');
     }
     /// Print a button to manage pending requests
-    if (has_capability('moodle/site:approvecourse', $systemcontext)) {
+    if ($context->contextlevel == CONTEXT_SYSTEM && has_capability('moodle/site:approvecourse', $context)) {
         $disabled = !$DB->record_exists('course_request', array());
-        echo $OUTPUT->single_button('pending.php', get_string('coursespending'), 'get', array('disabled'=>$disabled));
+        echo $OUTPUT->single_button(new moodle_url('/course/pending.php'), get_string('coursespending'), 'get', array('disabled' => $disabled));
     }
 }
 
@@ -1664,322 +1271,6 @@ function can_edit_in_category($categoryid = 0) {
     $context = get_category_or_system_context($categoryid);
     return has_any_capability(array('moodle/category:manage', 'moodle/course:create'), $context);
 }
-
-/**
- * Print courses in category. If category is 0 then all courses are printed.
- * @param int|stdClass $category category object or id.
- * @return bool true if courses found and printed, else false.
- */
-function print_courses($category) {
-    global $CFG, $OUTPUT;
-
-    if (!is_object($category) && $category==0) {
-        $categories = get_child_categories(0);  // Parent = 0   ie top-level categories only
-        if (is_array($categories) && count($categories) == 1) {
-            $category   = array_shift($categories);
-            $courses    = get_courses_wmanagers($category->id,
-                                                'c.sortorder ASC',
-                                                array('summary','summaryformat'));
-        } else {
-            $courses    = get_courses_wmanagers('all',
-                                                'c.sortorder ASC',
-                                                array('summary','summaryformat'));
-        }
-        unset($categories);
-    } else {
-        $courses    = get_courses_wmanagers($category->id,
-                                            'c.sortorder ASC',
-                                            array('summary','summaryformat'));
-    }
-
-    if ($courses) {
-        echo html_writer::start_tag('ul', array('class'=>'unlist'));
-        foreach ($courses as $course) {
-            $coursecontext = context_course::instance($course->id);
-            if ($course->visible == 1 || has_capability('moodle/course:viewhiddencourses', $coursecontext)) {
-                echo html_writer::start_tag('li');
-                print_course($course);
-                echo html_writer::end_tag('li');
-            }
-        }
-        echo html_writer::end_tag('ul');
-    } else {
-        echo $OUTPUT->heading(get_string("nocoursesyet"));
-        $context = context_system::instance();
-        if (has_capability('moodle/course:create', $context)) {
-            $options = array();
-            if (!empty($category->id)) {
-                $options['category'] = $category->id;
-            } else {
-                $options['category'] = $CFG->defaultrequestcategory;
-            }
-            echo html_writer::start_tag('div', array('class'=>'addcoursebutton'));
-            echo $OUTPUT->single_button(new moodle_url('/course/edit.php', $options), get_string("addnewcourse"));
-            echo html_writer::end_tag('div');
-            return false;
-        }
-    }
-    return true;
-}
-
-/**
- * Print a description of a course, suitable for browsing in a list.
- *
- * @param object $course the course object.
- * @param string $highlightterms (optional) some search terms that should be highlighted in the display.
- */
-function print_course($course, $highlightterms = '') {
-    global $CFG, $USER, $DB, $OUTPUT;
-
-    $context = context_course::instance($course->id);
-
-    // Rewrite file URLs so that they are correct
-    $course->summary = file_rewrite_pluginfile_urls($course->summary, 'pluginfile.php', $context->id, 'course', 'summary', NULL);
-
-    echo html_writer::start_tag('div', array('class'=>'coursebox clearfix'));
-    echo html_writer::start_tag('div', array('class'=>'info'));
-    echo html_writer::start_tag('h3', array('class'=>'name'));
-
-    $linkhref = new moodle_url('/course/view.php', array('id'=>$course->id));
-
-    $coursename = get_course_display_name_for_list($course);
-    $linktext = highlight($highlightterms, format_string($coursename));
-    $linkparams = array('title'=>get_string('entercourse'));
-    if (empty($course->visible)) {
-        $linkparams['class'] = 'dimmed';
-    }
-    echo html_writer::link($linkhref, $linktext, $linkparams);
-    echo html_writer::end_tag('h3');
-
-    /// first find all roles that are supposed to be displayed
-    if (!empty($CFG->coursecontact)) {
-        $managerroles = explode(',', $CFG->coursecontact);
-        $rusers = array();
-
-        if (!isset($course->managers)) {
-            list($sort, $sortparams) = users_order_by_sql('u');
-            $rusers = get_role_users($managerroles, $context, true,
-                'ra.id AS raid, u.id, u.username, u.firstname, u.lastname, rn.name AS rolecoursealias,
-                 r.name AS rolename, r.sortorder, r.id AS roleid, r.shortname AS roleshortname',
-                'r.sortorder ASC, ' . $sort, null, '', '', '', '', $sortparams);
-        } else {
-            //  use the managers array if we have it for perf reasosn
-            //  populate the datastructure like output of get_role_users();
-            foreach ($course->managers as $manager) {
-                $user = clone($manager->user);
-                $user->roleid = $manager->roleid;
-                $user->rolename = $manager->rolename;
-                $user->roleshortname = $manager->roleshortname;
-                $user->rolecoursealias = $manager->rolecoursealias;
-                $rusers[$user->id] = $user;
-            }
-        }
-
-        $namesarray = array();
-        $canviewfullnames = has_capability('moodle/site:viewfullnames', $context);
-        foreach ($rusers as $ra) {
-            if (isset($namesarray[$ra->id])) {
-                //  only display a user once with the higest sortorder role
-                continue;
-            }
-
-            $role = new stdClass();
-            $role->id = $ra->roleid;
-            $role->name = $ra->rolename;
-            $role->shortname = $ra->roleshortname;
-            $role->coursealias = $ra->rolecoursealias;
-            $rolename = role_get_name($role, $context, ROLENAME_ALIAS);
-
-            $fullname = fullname($ra, $canviewfullnames);
-            $namesarray[$ra->id] = $rolename.': '.
-                html_writer::link(new moodle_url('/user/view.php', array('id'=>$ra->id, 'course'=>SITEID)), $fullname);
-        }
-
-        if (!empty($namesarray)) {
-            echo html_writer::start_tag('ul', array('class'=>'teachers'));
-            foreach ($namesarray as $name) {
-                echo html_writer::tag('li', $name);
-            }
-            echo html_writer::end_tag('ul');
-        }
-    }
-    echo html_writer::end_tag('div'); // End of info div
-
-    echo html_writer::start_tag('div', array('class'=>'summary'));
-    $options = new stdClass();
-    $options->noclean = true;
-    $options->para = false;
-    $options->overflowdiv = true;
-    if (!isset($course->summaryformat)) {
-        $course->summaryformat = FORMAT_MOODLE;
-    }
-    echo highlight($highlightterms, format_text($course->summary, $course->summaryformat, $options,  $course->id));
-    if ($icons = enrol_get_course_info_icons($course)) {
-        echo html_writer::start_tag('div', array('class'=>'enrolmenticons'));
-        foreach ($icons as $icon) {
-            $icon->attributes["alt"] .= ": ". format_string($coursename, true, array('context'=>$context));
-            echo $OUTPUT->render($icon);
-        }
-        echo html_writer::end_tag('div'); // End of enrolmenticons div
-    }
-    echo html_writer::end_tag('div'); // End of summary div
-    echo html_writer::end_tag('div'); // End of coursebox div
-}
-
-/**
- * Prints custom user information on the home page.
- * Over time this can include all sorts of information
- */
-function print_my_moodle() {
-    global $USER, $CFG, $DB, $OUTPUT;
-
-    if (!isloggedin() or isguestuser()) {
-        print_error('nopermissions', '', '', 'See My Moodle');
-    }
-
-    $courses  = enrol_get_my_courses('summary', 'visible DESC,sortorder ASC');
-    $rhosts   = array();
-    $rcourses = array();
-    if (!empty($CFG->mnet_dispatcher_mode) && $CFG->mnet_dispatcher_mode==='strict') {
-        $rcourses = get_my_remotecourses($USER->id);
-        $rhosts   = get_my_remotehosts();
-    }
-
-    if (!empty($courses) || !empty($rcourses) || !empty($rhosts)) {
-
-        if (!empty($courses)) {
-            echo '<ul class="unlist">';
-            foreach ($courses as $course) {
-                if ($course->id == SITEID) {
-                    continue;
-                }
-                echo '<li>';
-                print_course($course);
-                echo "</li>\n";
-            }
-            echo "</ul>\n";
-        }
-
-        // MNET
-        if (!empty($rcourses)) {
-            // at the IDP, we know of all the remote courses
-            foreach ($rcourses as $course) {
-                print_remote_course($course, "100%");
-            }
-        } elseif (!empty($rhosts)) {
-            // non-IDP, we know of all the remote servers, but not courses
-            foreach ($rhosts as $host) {
-                print_remote_host($host, "100%");
-            }
-        }
-        unset($course);
-        unset($host);
-
-        if ($DB->count_records("course") > (count($courses) + 1) ) {  // Some courses not being displayed
-            echo "<table width=\"100%\"><tr><td align=\"center\">";
-            print_course_search("", false, "short");
-            echo "</td><td align=\"center\">";
-            echo $OUTPUT->single_button("$CFG->wwwroot/course/index.php", get_string("fulllistofcourses"), "get");
-            echo "</td></tr></table>\n";
-        }
-
-    } else {
-        if ($DB->count_records("course_categories") > 1) {
-            echo $OUTPUT->box_start("categorybox");
-            print_whole_category_list();
-            echo $OUTPUT->box_end();
-        } else {
-            print_courses(0);
-        }
-    }
-}
-
-
-function print_course_search($value="", $return=false, $format="plain") {
-    global $CFG;
-    static $count = 0;
-
-    $count++;
-
-    $id = 'coursesearch';
-
-    if ($count > 1) {
-        $id .= $count;
-    }
-
-    $strsearchcourses= get_string("searchcourses");
-
-    if ($format == 'plain') {
-        $output  = '<form id="'.$id.'" action="'.$CFG->wwwroot.'/course/search.php" method="get">';
-        $output .= '<fieldset class="coursesearchbox invisiblefieldset">';
-        $output .= '<label for="coursesearchbox">'.$strsearchcourses.': </label>';
-        $output .= '<input type="text" id="coursesearchbox" size="30" name="search" value="'.s($value).'" />';
-        $output .= '<input type="submit" value="'.get_string('go').'" />';
-        $output .= '</fieldset></form>';
-    } else if ($format == 'short') {
-        $output  = '<form id="'.$id.'" action="'.$CFG->wwwroot.'/course/search.php" method="get">';
-        $output .= '<fieldset class="coursesearchbox invisiblefieldset">';
-        $output .= '<label for="shortsearchbox">'.$strsearchcourses.': </label>';
-        $output .= '<input type="text" id="shortsearchbox" size="12" name="search" value="'.s($value).'" />';
-        $output .= '<input type="submit" value="'.get_string('go').'" />';
-        $output .= '</fieldset></form>';
-    } else if ($format == 'navbar') {
-        $output  = '<form id="coursesearchnavbar" action="'.$CFG->wwwroot.'/course/search.php" method="get">';
-        $output .= '<fieldset class="coursesearchbox invisiblefieldset">';
-        $output .= '<label for="navsearchbox">'.$strsearchcourses.': </label>';
-        $output .= '<input type="text" id="navsearchbox" size="20" name="search" value="'.s($value).'" />';
-        $output .= '<input type="submit" value="'.get_string('go').'" />';
-        $output .= '</fieldset></form>';
-    }
-
-    if ($return) {
-        return $output;
-    }
-    echo $output;
-}
-
-function print_remote_course($course, $width="100%") {
-    global $CFG, $USER;
-
-    $linkcss = '';
-
-    $url = "{$CFG->wwwroot}/auth/mnet/jump.php?hostid={$course->hostid}&amp;wantsurl=/course/view.php?id={$course->remoteid}";
-
-    echo '<div class="coursebox remotecoursebox clearfix">';
-    echo '<div class="info">';
-    echo '<div class="name"><a title="'.get_string('entercourse').'"'.
-         $linkcss.' href="'.$url.'">'
-        .  format_string($course->fullname) .'</a><br />'
-        . format_string($course->hostname) . ' : '
-        . format_string($course->cat_name) . ' : '
-        . format_string($course->shortname). '</div>';
-    echo '</div><div class="summary">';
-    $options = new stdClass();
-    $options->noclean = true;
-    $options->para = false;
-    $options->overflowdiv = true;
-    echo format_text($course->summary, $course->summaryformat, $options);
-    echo '</div>';
-    echo '</div>';
-}
-
-function print_remote_host($host, $width="100%") {
-    global $OUTPUT;
-
-    $linkcss = '';
-
-    echo '<div class="coursebox clearfix">';
-    echo '<div class="info">';
-    echo '<div class="name">';
-    echo '<img src="'.$OUTPUT->pix_url('i/mnethost') . '" class="icon" alt="'.get_string('course').'" />';
-    echo '<a title="'.s($host['name']).'" href="'.s($host['url']).'">'
-        . s($host['name']).'</a> - ';
-    echo $host['count'] . ' ' . get_string('courses');
-    echo '</div>';
-    echo '</div>';
-    echo '</div>';
-}
-
 
 /// MODULE FUNCTIONS /////////////////////////////////////////////////////////////////
 
@@ -2467,17 +1758,19 @@ function moveto_module($mod, $section, $beforemod=NULL) {
     }
 
     // if moving to a hidden section then hide module
-    if (!$section->visible && $mod->visible) {
-        // Set this in the object because it is sent as a response to ajax calls.
-        $mod->visible = 0;
-        set_coursemodule_visible($mod->id, 0);
-        // Set visibleold to 1 so module will be visible when section is made visible.
-        $DB->set_field('course_modules', 'visibleold', 1, array('id' => $mod->id));
-    }
-    if ($section->visible && !$mod->visible) {
-        set_coursemodule_visible($mod->id, $mod->visibleold);
-        // Set this in the object because it is sent as a response to ajax calls.
-        $mod->visible = $mod->visibleold;
+    if ($mod->section != $section->id) {
+        if (!$section->visible && $mod->visible) {
+            // Set this in the object because it is sent as a response to ajax calls.
+            $mod->visible = 0;
+            set_coursemodule_visible($mod->id, 0);
+            // Set visibleold to 1 so module will be visible when section is made visible.
+            $DB->set_field('course_modules', 'visibleold', 1, array('id' => $mod->id));
+        }
+        if ($section->visible && !$mod->visible) {
+            set_coursemodule_visible($mod->id, $mod->visibleold);
+            // Set this in the object because it is sent as a response to ajax calls.
+            $mod->visible = $mod->visibleold;
+        }
     }
 
 /// Add the module into the new section
@@ -2733,112 +2026,6 @@ function course_allowed_module($course, $modname) {
 }
 
 /**
- * Recursively delete category including all subcategories and courses.
- * @param stdClass $category
- * @param boolean $showfeedback display some notices
- * @return array return deleted courses
- */
-function category_delete_full($category, $showfeedback=true) {
-    global $CFG, $DB;
-    require_once($CFG->libdir.'/gradelib.php');
-    require_once($CFG->libdir.'/questionlib.php');
-    require_once($CFG->dirroot.'/cohort/lib.php');
-
-    if ($children = $DB->get_records('course_categories', array('parent'=>$category->id), 'sortorder ASC')) {
-        foreach ($children as $childcat) {
-            category_delete_full($childcat, $showfeedback);
-        }
-    }
-
-    $deletedcourses = array();
-    if ($courses = $DB->get_records('course', array('category'=>$category->id), 'sortorder ASC')) {
-        foreach ($courses as $course) {
-            if (!delete_course($course, false)) {
-                throw new moodle_exception('cannotdeletecategorycourse','','',$course->shortname);
-            }
-            $deletedcourses[] = $course;
-        }
-    }
-
-    // move or delete cohorts in this context
-    cohort_delete_category($category);
-
-    // now delete anything that may depend on course category context
-    grade_course_category_delete($category->id, 0, $showfeedback);
-    if (!question_delete_course_category($category, 0, $showfeedback)) {
-        throw new moodle_exception('cannotdeletecategoryquestions','','',$category->name);
-    }
-
-    // finally delete the category and it's context
-    $DB->delete_records('course_categories', array('id'=>$category->id));
-    delete_context(CONTEXT_COURSECAT, $category->id);
-    add_to_log(SITEID, "category", "delete", "index.php", "$category->name (ID $category->id)");
-
-    events_trigger('course_category_deleted', $category);
-
-    return $deletedcourses;
-}
-
-/**
- * Delete category, but move contents to another category.
- * @param object $ccategory
- * @param int $newparentid category id
- * @return bool status
- */
-function category_delete_move($category, $newparentid, $showfeedback=true) {
-    global $CFG, $DB, $OUTPUT;
-    require_once($CFG->libdir.'/gradelib.php');
-    require_once($CFG->libdir.'/questionlib.php');
-    require_once($CFG->dirroot.'/cohort/lib.php');
-
-    if (!$newparentcat = $DB->get_record('course_categories', array('id'=>$newparentid))) {
-        return false;
-    }
-
-    if ($children = $DB->get_records('course_categories', array('parent'=>$category->id), 'sortorder ASC')) {
-        foreach ($children as $childcat) {
-            move_category($childcat, $newparentcat);
-        }
-    }
-
-    if ($courses = $DB->get_records('course', array('category'=>$category->id), 'sortorder ASC', 'id')) {
-        if (!move_courses(array_keys($courses), $newparentid)) {
-            if ($showfeedback) {
-                echo $OUTPUT->notification("Error moving courses");
-            }
-            return false;
-        }
-        if ($showfeedback) {
-            echo $OUTPUT->notification(get_string('coursesmovedout', '', format_string($category->name)), 'notifysuccess');
-        }
-    }
-
-    // move or delete cohorts in this context
-    cohort_delete_category($category);
-
-    // now delete anything that may depend on course category context
-    grade_course_category_delete($category->id, $newparentid, $showfeedback);
-    if (!question_delete_course_category($category, $newparentcat, $showfeedback)) {
-        if ($showfeedback) {
-            echo $OUTPUT->notification(get_string('errordeletingquestionsfromcategory', 'question', $category), 'notifysuccess');
-        }
-        return false;
-    }
-
-    // finally delete the category and it's context
-    $DB->delete_records('course_categories', array('id'=>$category->id));
-    delete_context(CONTEXT_COURSECAT, $category->id);
-    add_to_log(SITEID, "category", "delete", "index.php", "$category->name (ID $category->id)");
-
-    events_trigger('course_category_deleted', $category);
-
-    if ($showfeedback) {
-        echo $OUTPUT->notification(get_string('coursecategorydeleted', '', format_string($category->name)), 'notifysuccess');
-    }
-    return true;
-}
-
-/**
  * Efficiently moves many courses around while maintaining
  * sortorder in order.
  *
@@ -2882,96 +2069,9 @@ function move_courses($courseids, $categoryid) {
         }
     }
     fix_course_sortorder();
+    cache_helper::purge_by_event('changesincourse');
 
     return true;
-}
-
-/**
- * Hide course category and child course and subcategories
- * @param stdClass $category
- * @return void
- */
-function course_category_hide($category) {
-    global $DB;
-
-    $category->visible = 0;
-    $DB->set_field('course_categories', 'visible', 0, array('id'=>$category->id));
-    $DB->set_field('course_categories', 'visibleold', 0, array('id'=>$category->id));
-    $DB->execute("UPDATE {course} SET visibleold = visible WHERE category = ?", array($category->id)); // store visible flag so that we can return to it if we immediately unhide
-    $DB->set_field('course', 'visible', 0, array('category' => $category->id));
-    // get all child categories and hide too
-    if ($subcats = $DB->get_records_select('course_categories', "path LIKE ?", array("$category->path/%"))) {
-        foreach ($subcats as $cat) {
-            $DB->set_field('course_categories', 'visibleold', $cat->visible, array('id'=>$cat->id));
-            $DB->set_field('course_categories', 'visible', 0, array('id'=>$cat->id));
-            $DB->execute("UPDATE {course} SET visibleold = visible WHERE category = ?", array($cat->id));
-            $DB->set_field('course', 'visible', 0, array('category' => $cat->id));
-        }
-    }
-    add_to_log(SITEID, "category", "hide", "editcategory.php?id=$category->id", $category->id);
-}
-
-/**
- * Show course category and child course and subcategories
- * @param stdClass $category
- * @return void
- */
-function course_category_show($category) {
-    global $DB;
-
-    $category->visible = 1;
-    $DB->set_field('course_categories', 'visible', 1, array('id'=>$category->id));
-    $DB->set_field('course_categories', 'visibleold', 1, array('id'=>$category->id));
-    $DB->execute("UPDATE {course} SET visible = visibleold WHERE category = ?", array($category->id));
-    // get all child categories and unhide too
-    if ($subcats = $DB->get_records_select('course_categories', "path LIKE ?", array("$category->path/%"))) {
-        foreach ($subcats as $cat) {
-            if ($cat->visibleold) {
-                $DB->set_field('course_categories', 'visible', 1, array('id'=>$cat->id));
-            }
-            $DB->execute("UPDATE {course} SET visible = visibleold WHERE category = ?", array($cat->id));
-        }
-    }
-    add_to_log(SITEID, "category", "show", "editcategory.php?id=$category->id", $category->id);
-}
-
-/**
- * Efficiently moves a category - NOTE that this can have
- * a huge impact access-control-wise...
- */
-function move_category($category, $newparentcat) {
-    global $CFG, $DB;
-
-    $context = context_coursecat::instance($category->id);
-
-    $hidecat = false;
-    if (empty($newparentcat->id)) {
-        $DB->set_field('course_categories', 'parent', 0, array('id' => $category->id));
-        $newparent = context_system::instance();
-    } else {
-        $DB->set_field('course_categories', 'parent', $newparentcat->id, array('id' => $category->id));
-        $newparent = context_coursecat::instance($newparentcat->id);
-
-        if (!$newparentcat->visible and $category->visible) {
-            // better hide category when moving into hidden category, teachers may unhide afterwards and the hidden children will be restored properly
-            $hidecat = true;
-        }
-    }
-
-    context_moved($context, $newparent);
-
-    // now make it last in new category
-    $DB->set_field('course_categories', 'sortorder', MAX_COURSES_IN_CATEGORY*MAX_COURSE_CATEGORIES, array('id'=>$category->id));
-
-    // Log action.
-    add_to_log(SITEID, "category", "move", "editcategory.php?id=$category->id", $category->id);
-
-    // and fix the sortorders
-    fix_course_sortorder();
-
-    if ($hidecat) {
-        course_category_hide($category);
-    }
 }
 
 /**
@@ -3080,6 +2180,53 @@ function save_local_role_names($courseid, $data) {
 }
 
 /**
+ * Returns options to use in course overviewfiles filemanager
+ *
+ * @param null|stdClass|course_in_list|int $course either object that has 'id' property or just the course id;
+ *     may be empty if course does not exist yet (course create form)
+ * @return array|null array of options such as maxfiles, maxbytes, accepted_types, etc.
+ *     or null if overviewfiles are disabled
+ */
+function course_overviewfiles_options($course) {
+    global $CFG;
+    if (empty($CFG->courseoverviewfileslimit)) {
+        return null;
+    }
+    $accepted_types = preg_split('/\s*,\s*/', trim($CFG->courseoverviewfilesext), -1, PREG_SPLIT_NO_EMPTY);
+    if (in_array('*', $accepted_types) || empty($accepted_types)) {
+        $accepted_types = '*';
+    } else {
+        // Since config for $CFG->courseoverviewfilesext is a text box, human factor must be considered.
+        // Make sure extensions are prefixed with dot unless they are valid typegroups
+        foreach ($accepted_types as $i => $type) {
+            if (substr($type, 0, 1) !== '.') {
+                require_once($CFG->libdir. '/filelib.php');
+                if (!count(file_get_typegroup('extension', $type))) {
+                    // It does not start with dot and is not a valid typegroup, this is most likely extension.
+                    $accepted_types[$i] = '.'. $type;
+                    $corrected = true;
+                }
+            }
+        }
+        if (!empty($corrected)) {
+            set_config('courseoverviewfilesext', join(',', $accepted_types));
+        }
+    }
+    $options = array(
+        'maxfiles' => $CFG->courseoverviewfileslimit,
+        'maxbytes' => $CFG->maxbytes,
+        'subdirs' => 0,
+        'accepted_types' => $accepted_types
+    );
+    if (!empty($course->id)) {
+        $options['context'] = context_course::instance($course->id);
+    } else if (is_int($course) && $course > 0) {
+        $options['context'] = context_course::instance($course);
+    }
+    return $options;
+}
+
+/**
  * Create a course and either return a $course object
  *
  * Please note this functions does not verify any access control,
@@ -3136,6 +2283,10 @@ function create_course($data, $editoroptions = NULL) {
         $DB->set_field('course', 'summary', $data->summary, array('id'=>$newcourseid));
         $DB->set_field('course', 'summaryformat', $data->summary_format, array('id'=>$newcourseid));
     }
+    if ($overviewfilesoptions = course_overviewfiles_options($newcourseid)) {
+        // Save the course overviewfiles
+        $data = file_postupdate_standard_filemanager($data, 'overviewfiles', $overviewfilesoptions, $context, 'course', 'overviewfiles', 0);
+    }
 
     // update course format options
     course_get_format($newcourseid)->update_course_format_options($data);
@@ -3149,6 +2300,8 @@ function create_course($data, $editoroptions = NULL) {
     course_create_sections_if_missing($course, 0);
 
     fix_course_sortorder();
+    // purge appropriate caches in case fix_course_sortorder() did not change anything
+    cache_helper::purge_by_event('changesincourse');
 
     // new context created - better mark it as dirty
     mark_context_dirty($context->path);
@@ -3165,32 +2318,6 @@ function create_course($data, $editoroptions = NULL) {
     events_trigger('course_created', $course);
 
     return $course;
-}
-
-/**
- * Create a new course category and marks the context as dirty
- *
- * This function does not set the sortorder for the new category and
- * @see{fix_course_sortorder} should be called after creating a new course
- * category
- *
- * Please note that this function does not verify access control.
- *
- * @param object $category All of the data required for an entry in the course_categories table
- * @return object new course category
- */
-function create_course_category($category) {
-    global $DB;
-
-    $category->timemodified = time();
-    $category->id = $DB->insert_record('course_categories', $category);
-    $category = $DB->get_record('course_categories', array('id' => $category->id));
-
-    // We should mark the context as dirty
-    $category->context = context_coursecat::instance($category->id);
-    $category->context->mark_dirty();
-
-    return $category;
 }
 
 /**
@@ -3214,12 +2341,15 @@ function update_course($data, $editoroptions = NULL) {
     if ($editoroptions) {
         $data = file_postupdate_standard_editor($data, 'summary', $editoroptions, $context, 'course', 'summary', 0);
     }
+    if ($overviewfilesoptions = course_overviewfiles_options($data->id)) {
+        $data = file_postupdate_standard_filemanager($data, 'overviewfiles', $overviewfilesoptions, $context, 'course', 'overviewfiles', 0);
+    }
 
     if (!isset($data->category) or empty($data->category)) {
         // prevent nulls and 0 in category field
         unset($data->category);
     }
-    $movecat = (isset($data->category) and $oldcourse->category != $data->category);
+    $changesincoursecat = $movecat = (isset($data->category) and $oldcourse->category != $data->category);
 
     if (!isset($data->visible)) {
         // data not from form, add missing visibility info
@@ -3229,6 +2359,7 @@ function update_course($data, $editoroptions = NULL) {
     if ($data->visible != $oldcourse->visible) {
         // reset the visibleold flag when manually hiding/unhiding course
         $data->visibleold = $data->visible;
+        $changesincoursecat = true;
     } else {
         if ($movecat) {
             $newcategory = $DB->get_record('course_categories', array('id'=>$data->category));
@@ -3255,6 +2386,11 @@ function update_course($data, $editoroptions = NULL) {
     }
 
     fix_course_sortorder();
+    // purge appropriate caches in case fix_course_sortorder() did not change anything
+    cache_helper::purge_by_event('changesincourse');
+    if ($changesincoursecat) {
+        cache_helper::purge_by_event('changesincoursecat');
+    }
 
     // Test for and remove blocks which aren't appropriate anymore
     blocks_remove_inappropriate($course);
@@ -3556,6 +2692,31 @@ class course_request {
     }
 
     /**
+     * Returns the category where this course request should be created
+     *
+     * Note that we don't check here that user has a capability to view
+     * hidden categories if he has capabilities 'moodle/site:approvecourse' and
+     * 'moodle/course:changecategory'
+     *
+     * @return coursecat
+     */
+    public function get_category() {
+        global $CFG;
+        require_once($CFG->libdir.'/coursecatlib.php');
+        // If the category is not set, if the current user does not have the rights to change the category, or if the
+        // category does not exist, we set the default category to the course to be approved.
+        // The system level is used because the capability moodle/site:approvecourse is based on a system level.
+        if (empty($this->properties->category) || !has_capability('moodle/course:changecategory', context_system::instance()) ||
+                (!$category = coursecat::get($this->properties->category, IGNORE_MISSING, true))) {
+            $category = coursecat::get($CFG->defaultrequestcategory, IGNORE_MISSING, true);
+        }
+        if (!$category) {
+            $category = coursecat::get_default();
+        }
+        return $category;
+    }
+
+    /**
      * This function approves the request turning it into a course
      *
      * This function converts the course request into a course, at the same time
@@ -3577,18 +2738,9 @@ class course_request {
         unset($data->reason);
         unset($data->requester);
 
-        // If the category is not set, if the current user does not have the rights to change the category, or if the
-        // category does not exist, we set the default category to the course to be approved.
-        // The system level is used because the capability moodle/site:approvecourse is based on a system level.
-        if (empty($data->category) || !has_capability('moodle/course:changecategory', context_system::instance()) ||
-                (!$category = get_course_category($data->category))) {
-            $category = get_course_category($CFG->defaultrequestcategory);
-        }
-
         // Set category
+        $category = $this->get_category();
         $data->category = $category->id;
-        $data->sortorder = $category->sortorder; // place as the first in category
-
         // Set misc settings
         $data->requested = 1;
 
@@ -3680,22 +2832,27 @@ class course_request {
 /**
  * Return a list of page types
  * @param string $pagetype current page type
- * @param stdClass $parentcontext Block's parent context
- * @param stdClass $currentcontext Current context of block
+ * @param context $parentcontext Block's parent context
+ * @param context $currentcontext Current context of block
+ * @return array array of page types
  */
 function course_page_type_list($pagetype, $parentcontext, $currentcontext) {
-    // $currentcontext could be null, get_context_info_array() will throw an error if this is the case.
-    if (isset($currentcontext)) {
-        // if above course context ,display all course fomats
-        list($currentcontext, $course, $cm) = get_context_info_array($currentcontext->id);
-        if ($course->id == SITEID) {
-            return array('*'=>get_string('page-x', 'pagetype'));
-        }
+    if ($pagetype === 'course-index' || $pagetype === 'course-index-category') {
+        // For courses and categories browsing pages (/course/index.php) add option to show on ANY category page
+        $pagetypes = array('*' => get_string('page-x', 'pagetype'),
+            'course-index-*' => get_string('page-course-index-x', 'pagetype'),
+        );
+    } else if ($currentcontext && (!($coursecontext = $currentcontext->get_course_context(false)) || $coursecontext->instanceid == SITEID)) {
+        // We know for sure that despite pagetype starts with 'course-' this is not a page in course context (i.e. /course/search.php, etc.)
+        $pagetypes = array('*' => get_string('page-x', 'pagetype'));
+    } else {
+        // Otherwise consider it a page inside a course even if $currentcontext is null
+        $pagetypes = array('*' => get_string('page-x', 'pagetype'),
+            'course-*' => get_string('page-course-x', 'pagetype'),
+            'course-view-*' => get_string('page-course-view-x', 'pagetype')
+        );
     }
-    return array('*'=>get_string('page-x', 'pagetype'),
-        'course-*'=>get_string('page-course-x', 'pagetype'),
-        'course-view-*'=>get_string('page-course-view-x', 'pagetype')
-    );
+    return $pagetypes;
 }
 
 /**
@@ -3971,4 +3128,56 @@ function update_module($moduleinfo) {
     list($cm, $moduleinfo) = update_moduleinfo($cm, $moduleinfo, $course, null);
 
     return $moduleinfo;
+}
+
+/**
+ * Compare two objects to find out their correct order based on timestamp (to be used by usort).
+ * Sorts by descending order of time.
+ *
+ * @param stdClass $a First object
+ * @param stdClass $b Second object
+ * @return int 0,1,-1 representing the order
+ */
+function compare_activities_by_time_desc($a, $b) {
+    // Make sure the activities actually have a timestamp property.
+    if ((!property_exists($a, 'timestamp')) && (!property_exists($b, 'timestamp'))) {
+        return 0;
+    }
+    // We treat instances without timestamp as if they have a timestamp of 0.
+    if ((!property_exists($a, 'timestamp')) && (property_exists($b,'timestamp'))) {
+        return 1;
+    }
+    if ((property_exists($a, 'timestamp')) && (!property_exists($b, 'timestamp'))) {
+        return -1;
+    }
+    if ($a->timestamp == $b->timestamp) {
+        return 0;
+    }
+    return ($a->timestamp > $b->timestamp) ? -1 : 1;
+}
+
+/**
+ * Compare two objects to find out their correct order based on timestamp (to be used by usort).
+ * Sorts by ascending order of time.
+ *
+ * @param stdClass $a First object
+ * @param stdClass $b Second object
+ * @return int 0,1,-1 representing the order
+ */
+function compare_activities_by_time_asc($a, $b) {
+    // Make sure the activities actually have a timestamp property.
+    if ((!property_exists($a, 'timestamp')) && (!property_exists($b, 'timestamp'))) {
+      return 0;
+    }
+    // We treat instances without timestamp as if they have a timestamp of 0.
+    if ((!property_exists($a, 'timestamp')) && (property_exists($b, 'timestamp'))) {
+        return -1;
+    }
+    if ((property_exists($a, 'timestamp')) && (!property_exists($b, 'timestamp'))) {
+        return 1;
+    }
+    if ($a->timestamp == $b->timestamp) {
+        return 0;
+    }
+    return ($a->timestamp < $b->timestamp) ? -1 : 1;
 }

@@ -23,7 +23,7 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-$string['activityoverview'] = 'You have upcoming chat';
+$string['activityoverview'] = 'You have upcoming chat sessions';
 $string['ajax'] = 'Version using Ajax';
 $string['autoscroll'] = 'Auto scroll';
 $string['beep'] = 'Beep';
@@ -114,7 +114,7 @@ $string['refreshuserlist'] = 'Refresh user list';
 $string['removemessages'] = 'Remove all messages';
 $string['repeatdaily'] = 'At the same time every day';
 $string['repeatnone'] = 'No repeats - publish the specified time only';
-$string['repeattimes'] = 'Repeat sessions';
+$string['repeattimes'] = 'Repeat/publish session times';
 $string['repeatweekly'] = 'At the same time every week';
 $string['saidto'] = 'said to';
 $string['savemessages'] = 'Save past sessions';

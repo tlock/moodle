@@ -51,7 +51,7 @@ function dndupload_add_to_course($course, $modnames) {
     // Add the javascript to the page.
     $jsmodule = array(
         'name' => 'coursedndupload',
-        'fullpath' => new moodle_url('/course/dndupload.js'),
+        'fullpath' => '/course/dndupload.js',
         'strings' => array(
             array('addfilehere', 'moodle'),
             array('dndworkingfiletextlink', 'moodle'),
@@ -107,7 +107,7 @@ class dndupload_handler {
      * @param object $course The course this is being added to (to check course_allowed_module() )
      */
     public function __construct($course, $modnames = null) {
-        global $CFG;
+        global $CFG, $PAGE;
 
         // Add some default types to handle.
         // Note: 'Files' type is hard-coded into the Javascript as this needs to be ...
@@ -158,6 +158,7 @@ class dndupload_handler {
                     $this->register_type_handler($type['identifier'], $modname, $type['message'], $noname);
                 }
             }
+            $PAGE->requires->string_for_js('pluginname', $modname);
         }
     }
 

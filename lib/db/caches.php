@@ -118,7 +118,6 @@ $definitions = array(
     // This stores the YUI module metadata for Shifted YUI modules in Moodle.
     'yuimodules' => array(
         'mode' => cache_store::MODE_APPLICATION,
-        'persistent' => true,
     ),
 
     // Cache for the list of known plugin and subplugin types - {@see get_plugin_types()}.
@@ -198,4 +197,42 @@ $definitions = array(
         'persistentmaxsize' => 1,
     ),
 
+    // Used to store the full tree of course categories
+    'coursecattree' => array(
+        'mode' => cache_store::MODE_APPLICATION,
+        'persistent' => true,
+        'invalidationevents' => array(
+            'changesincoursecat',
+        )
+    ),
+    // Used to store data for course categories visible to current user. Helps to browse list of categories
+    'coursecat' => array(
+        'mode' => cache_store::MODE_SESSION,
+        'persistent' => true,
+        'invalidationevents' => array(
+            'changesincoursecat',
+            'changesincourse',
+        ),
+        'ttl' => 600,
+    ),
+    // Used to store data for course categories visible to current user. Helps to browse list of categories
+    'coursecatrecords' => array(
+        'mode' => cache_store::MODE_REQUEST,
+        'simplekeys' => true,
+        'persistent' => true,
+        'invalidationevents' => array(
+            'changesincoursecat',
+        ),
+    ),
+    // Cache course contacts for the courses
+    'coursecontacts' => array(
+        'mode' => cache_store::MODE_APPLICATION,
+        'persistent' => true,
+        'simplekeys' => true,
+    ),
+    // Used to store data for repositories to avoid repetitive DB queries within one request
+    'repositories' => array(
+        'mode' => cache_store::MODE_REQUEST,
+        'persistent' => true,
+    ),
 );

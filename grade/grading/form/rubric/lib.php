@@ -505,15 +505,19 @@ class gradingform_rubric_controller extends gradingform_controller {
             throw new coding_exception('It is the caller\'s responsibility to make sure that the form is actually defined');
         }
 
-        $output = $this->get_renderer($page);
         $criteria = $this->definition->rubric_criteria;
         $options = $this->get_options();
         $rubric = '';
         if (has_capability('moodle/grade:managegradingforms', $page->context)) {
             $showdescription = true;
         } else {
+            if (empty($options['alwaysshowdefinition']))  {
+                // ensure we don't display unless show rubric option enabled
+                return '';
+            }
             $showdescription = $options['showdescriptionstudent'];
         }
+        $output = $this->get_renderer($page);
         if ($showdescription) {
             $rubric .= $output->box($this->get_formatted_description(), 'gradingform_rubric-description');
         }
@@ -654,6 +658,36 @@ class gradingform_rubric_controller extends gradingform_controller {
         }
         return $returnvalue;
     }
+
+    /**
+     * @return array An array containing a single key/value pair with the 'rubric_criteria' external_multiple_structure.
+     * @see gradingform_controller::get_external_definition_details()
+     * @since Moodle 2.5
+     */
+    public static function get_external_definition_details() {
+        $rubric_criteria = new external_multiple_structure(
+            new external_single_structure(
+                array(
+                   'id'   => new external_value(PARAM_INT, 'criterion id'),
+                   'sortorder' => new external_value(PARAM_INT, 'sortorder'),
+                   'description' => new external_value(PARAM_RAW, 'description', VALUE_OPTIONAL),
+                   'descriptionformat' => new external_format_value('description', VALUE_OPTIONAL),
+                   'levels' => new external_multiple_structure(
+                                   new external_single_structure(
+                                       array(
+                                        'id' => new external_value(PARAM_INT, 'level id'),
+                                        'score' => new external_value(PARAM_FLOAT, 'score'),
+                                        'definition' => new external_value(PARAM_RAW, 'definition', VALUE_OPTIONAL),
+                                        'definitionformat' => new external_format_value('definition', VALUE_OPTIONAL)
+                                       )
+                                  ), 'levels', VALUE_OPTIONAL
+                              )
+                   )
+              ), 'definition details', VALUE_OPTIONAL
+        );
+        return array('rubric_criteria' => $rubric_criteria);
+    }
+
 }
 
 /**

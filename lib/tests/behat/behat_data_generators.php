@@ -26,7 +26,6 @@
 // NOTE: no MOODLE_INTERNAL test here, this file may be required by behat before including /config.php.
 
 require_once(__DIR__ . '/../../behat/behat_base.php');
-require_once(__DIR__ . '/../../testing/generator/lib.php');
 
 use Behat\Gherkin\Node\TableNode as TableNode;
 use Behat\Behat\Exception\PendingException as PendingException;
@@ -37,10 +36,11 @@ use Behat\Behat\Exception\PendingException as PendingException;
  * Acceptance tests are block-boxed, so this steps definitions should only
  * be used to set up the test environment as we are not replicating user steps.
  *
- * All data generators should be in lib/testing/generator/* and shared between phpunit
+ * All data generators should be in lib/testing/generator/*, shared between phpunit
  * and behat and they should be called from here, if possible using the standard
- * 'create_$elementname($options)' and if not possible (data generators arguments will not be
- * always the same) create an adapter 'adapt_$elementname($options)' that uses the data generator.
+ * 'create_$elementname($options)' and if it's not possible (data generators arguments will not be
+ * always the same) or the element is not suitable to be a data generator, create a
+ * 'process_$elementname($options)' method and use the data generator from there if possible.
  *
  * @todo      If the available elements list grows too much this class must be split into smaller pieces
  * @package   core
@@ -93,6 +93,11 @@ class behat_data_generators extends behat_base {
             'switchids' => array('user' => 'userid', 'course' => 'courseid', 'role' => 'roleid')
 
         ),
+        'system role assigns' => array(
+            'datagenerator' => 'role_assign',
+            'required' => array('user', 'role'),
+            'switchids' => array('user' => 'userid', 'role' => 'roleid')
+        ),
         'group members' => array(
             'datagenerator' => 'group_member',
             'required' => array('user', 'group'),
@@ -102,6 +107,10 @@ class behat_data_generators extends behat_base {
             'datagenerator' => 'grouping_group',
             'required' => array('grouping', 'group'),
             'switchids' => array('grouping' => 'groupingid', 'group' => 'groupid')
+        ),
+        'cohorts' => array(
+            'datagenerator' => 'cohort',
+            'required' => array('idnumber')
         )
     );
 
@@ -116,6 +125,9 @@ class behat_data_generators extends behat_base {
      * @param TableNode $data
      */
     public function the_following_exists($elementname, TableNode $data) {
+
+        // Now that we need them require the data generators.
+        require_once(__DIR__ . '/../../testing/generator/lib.php');
 
         if (empty(self::$elements[$elementname])) {
             throw new PendingException($elementname . ' data generator is not implemented');
@@ -164,9 +176,9 @@ class behat_data_generators extends behat_base {
                 // Using data generators directly.
                 $this->datagenerator->{$methodname}($elementdata);
 
-            } else if (method_exists($this, 'adapt_' . $elementdatagenerator)) {
-                // Using an adaptor to use the data generator.
-                $this->{'adapt_' . $elementdatagenerator}($elementdata);
+            } else if (method_exists($this, 'process_' . $elementdatagenerator)) {
+                // Using an alternative to the direct data generator call.
+                $this->{'process_' . $elementdatagenerator}($elementdata);
             } else {
                 throw new PendingException($elementname . ' data generator is not implemented');
             }
@@ -190,10 +202,11 @@ class behat_data_generators extends behat_base {
     /**
      * Adapter to enrol_user() data generator.
      * @throws Exception
-     * @param mixed $data
+     * @param array $data
      * @return void
      */
-    protected function adapt_enrol_user($data) {
+    protected function process_enrol_user($data) {
+        global $SITE;
 
         if (empty($data['roleid'])) {
             throw new Exception('\'course enrolments\' requires the field \'role\' to be specified');
@@ -211,7 +224,37 @@ class behat_data_generators extends behat_base {
             $data['enrol'] = 'manual';
         }
 
-        $this->datagenerator->enrol_user($data['userid'], $data['courseid'], $data['roleid'], $data['enrol']);
+        // If the provided course shortname is the site shortname we consider it a system role assign.
+        if ($data['courseid'] == $SITE->id) {
+            // Frontpage course assign.
+            $context = context_course::instance($data['courseid']);
+            role_assign($data['roleid'], $data['userid'], $context->id);
+
+        } else {
+            // Course assign.
+            $this->datagenerator->enrol_user($data['userid'], $data['courseid'], $data['roleid'], $data['enrol']);
+        }
+
+    }
+
+    /**
+     * Assigns a role to a user at system level.
+     * @throws Exception
+     * @param array $data
+     * @return void
+     */
+    protected function process_role_assign($data) {
+
+        if (empty($data['roleid'])) {
+            throw new Exception('\'system role assigns\' requires the field \'role\' to be specified');
+        }
+
+        if (!isset($data['userid'])) {
+            throw new Exception('\'system role assigns\' requires the field \'user\' to be specified');
+        }
+
+        $context = context_system::instance();
+        role_assign($data['roleid'], $data['userid'], $context->id);
     }
 
     /**
