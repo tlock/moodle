@@ -301,7 +301,7 @@ class qtype_multichoice_multi_question extends qtype_multichoice_base {
             }
         }
         if (empty($selectedchoices)) {
-            return null;
+            return ' ';
         }
         return implode('; ', $selectedchoices);
     }
