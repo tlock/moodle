@@ -54,4 +54,9 @@ $THEME->plugins_exclude_sheets = array(
 );
 
 $THEME->rendererfactory = 'theme_overridden_renderer_factory';
-$THEME->csspostprocess = 'clean_process_css';
+$THEME->csspostprocess = 'theme_clean_process_css';
+
+$THEME->blockrtlmanipulations = array(
+    'side-pre' => 'side-post',
+    'side-post' => 'side-pre'
+);

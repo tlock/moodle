@@ -1516,6 +1516,7 @@ function &get_mimetypes_array() {
         'mpeg' => array ('type'=>'video/mpeg', 'icon'=>'mpeg', 'groups'=>array('video','web_video'), 'string'=>'video'),
         'mpe'  => array ('type'=>'video/mpeg', 'icon'=>'mpeg', 'groups'=>array('video','web_video'), 'string'=>'video'),
         'mpg'  => array ('type'=>'video/mpeg', 'icon'=>'mpeg', 'groups'=>array('video','web_video'), 'string'=>'video'),
+        'mpr'  => array ('type'=>'application/vnd.moodle.profiling', 'icon'=>'moodle'),
 
         'nbk'       => array ('type'=>'application/x-smarttech-notebook', 'icon'=>'archive'),
         'notebook'  => array ('type'=>'application/x-smarttech-notebook', 'icon'=>'archive'),
@@ -1945,7 +1946,7 @@ function file_get_typegroup($element, $groups) {
         }
         $result = array_merge($result, $cached[$element][$group]);
     }
-    return array_unique($result);
+    return array_values(array_unique($result));
 }
 
 /**
@@ -2021,11 +2022,7 @@ function readfile_accel($file, $mimetype, $accelerate) {
     header('Last-Modified: '. gmdate('D, d M Y H:i:s', $lastmodified) .' GMT');
 
     if (is_object($file)) {
-        if (empty($_SERVER['HTTP_RANGE'])) {
-            // Use Etag only when not byteserving,
-            // is it tag of this range or whole file?
-            header('Etag: ' . $file->get_contenthash());
-        }
+        header('Etag: "' . $file->get_contenthash() . '"');
         if (isset($_SERVER['HTTP_IF_NONE_MATCH']) and $_SERVER['HTTP_IF_NONE_MATCH'] === $file->get_contenthash()) {
             header('HTTP/1.1 304 Not Modified');
             return;
@@ -2674,10 +2671,6 @@ function fulldelete($location) {
 function byteserving_send_file($handle, $mimetype, $ranges, $filesize) {
     // better turn off any kind of compression and buffering
     @ini_set('zlib.output_compression', 'Off');
-
-    // Remove Etag because is is not strictly defined for byteserving,
-    // is it tag of this range or whole file?
-    header_remove('Etag');
 
     $chunksize = 1*(1024*1024); // 1MB chunks - must be less than 2MB!
     if ($handle === false) {

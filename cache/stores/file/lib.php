@@ -266,7 +266,7 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
         $this->definition = $definition;
         $hash = preg_replace('#[^a-zA-Z0-9]+#', '_', $this->definition->get_id());
         $this->path = $this->filestorepath.'/'.$hash;
-        make_writable_directory($this->path);
+        make_writable_directory($this->path, false);
         if ($this->prescan && $definition->get_mode() !== self::MODE_REQUEST) {
             $this->prescan = false;
         }
@@ -314,11 +314,13 @@ class cachestore_file extends cache_store implements cache_is_key_aware, cache_i
             return $this->path . '/' . $key . '.cache';
         } else {
             // We are using a single subdirectory to achieve 1 level.
-            $subdir = substr($key, 0, 3);
+           // We suffix the subdir so it does not clash with any windows
+           // reserved filenames like 'con'.
+            $subdir = substr($key, 0, 3) . '-cache';
             $dir = $this->path . '/' . $subdir;
             if ($create) {
                 // Create the directory. This function does it recursivily!
-                make_writable_directory($dir);
+                make_writable_directory($dir, false);
             }
             return $dir . '/' . $key . '.cache';
         }

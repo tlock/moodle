@@ -123,7 +123,7 @@ class accesslib_testcase extends advanced_testcase {
      * @return void
      */
     public function test_is_siteadmin() {
-        global $DB;
+        global $DB, $CFG;
 
         $this->resetAfterTest();
 
@@ -145,6 +145,20 @@ class accesslib_testcase extends advanced_testcase {
                 $this->assertFalse(is_siteadmin(null));
             }
         }
+
+        // Change the site admin list and check that it still works with
+        // multiple admins. We do this with userids only (not real user
+        // accounts) because it makes the test simpler.
+        $before = $CFG->siteadmins;
+        set_config('siteadmins', '666,667,668');
+        $this->assertTrue(is_siteadmin(666));
+        $this->assertTrue(is_siteadmin(667));
+        $this->assertTrue(is_siteadmin(668));
+        $this->assertFalse(is_siteadmin(669));
+        set_config('siteadmins', '13');
+        $this->assertTrue(is_siteadmin(13));
+        $this->assertFalse(is_siteadmin(666));
+        set_config('siteadmins', $before);
     }
 
     /**
@@ -2275,7 +2289,7 @@ class accesslib_testcase extends advanced_testcase {
                 $this->assertEquals(context_inspection::test_context_cache_size(), CONTEXT_CACHE_MAX_SIZE);
             } else if ($i == CONTEXT_CACHE_MAX_SIZE) {
                 // once the limit is reached roughly 1/3 of records should be removed from cache
-                $this->assertEquals(context_inspection::test_context_cache_size(), (int)(CONTEXT_CACHE_MAX_SIZE * (2/3) +102));
+                $this->assertEquals(context_inspection::test_context_cache_size(), (int)ceil(CONTEXT_CACHE_MAX_SIZE * (2/3) + 101));
             }
         }
         // We keep the first 100 cached

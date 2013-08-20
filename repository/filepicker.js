@@ -1065,7 +1065,16 @@ M.core_filepicker.init = function(Y, options) {
             }, false);
         },
         select_file: function(args) {
+            var argstitle = args.title;
+            // Limit the string length so it fits nicely on mobile devices
+            var titlelength = 30;
+            if (argstitle.length > titlelength) {
+                argstitle = argstitle.substring(0, titlelength) + '...';
+            }
+            Y.one('#fp-file_label_'+this.options.client_id).setContent(Y.Escape.html(M.str.repository.select+' '+argstitle));
+
             this.selectui.show();
+            Y.one('#'+this.selectnode.get('id')).focus();
             var client_id = this.options.client_id;
             var selectnode = this.selectnode;
             var return_types = this.options.repositories[this.active_repo.id].return_types;
@@ -1306,8 +1315,13 @@ M.core_filepicker.init = function(Y, options) {
             }
             // create panel for selecting a file (initially hidden)
             this.selectnode = Y.Node.createWithFilesSkin(M.core_filepicker.templates.selectlayout).
-                set('id', 'filepicker-select-'+client_id);
+                set('id', 'filepicker-select-'+client_id).
+                set('aria-live', 'assertive').
+                set('role', 'dialog');
+
+            var fplabel = 'fp-file_label_'+ client_id;
             this.selectui = new Y.Panel({
+                headerContent: '<span id="' + fplabel +'">'+M.str.repository.select+'</span>',
                 srcNode      : this.selectnode,
                 zIndex       : 7600,
                 centered     : true,
@@ -1317,6 +1331,7 @@ M.core_filepicker.init = function(Y, options) {
             });
             // allow to move the panel dragging it by it's header:
             this.selectui.plug(Y.Plugin.Drag,{handles:['#filepicker-select-'+client_id+' .yui3-widget-hd']});
+            Y.one('#'+this.selectnode.get('id')).setAttribute('aria-labelledby', fplabel);
             this.selectui.hide();
             // event handler for lazy loading of thumbnails and next page
             this.fpnode.one('.fp-content').on(['scroll','resize'], this.content_scrolled, this);
@@ -1551,7 +1566,7 @@ M.core_filepicker.init = function(Y, options) {
             }
         },
         display_response: function(id, obj, args) {
-            var scope = args.scope
+            var scope = args.scope;
             // highlight the current repository in repositories list
             scope.fpnode.all('.fp-repo.active').removeClass('active');
             scope.fpnode.all('#fp-repo-'+scope.options.client_id+'-'+obj.repo_id).addClass('active')
@@ -1562,6 +1577,8 @@ M.core_filepicker.init = function(Y, options) {
             if (obj.repo_id && scope.options.repositories[obj.repo_id]) {
                 scope.fpnode.addClass('repository_'+scope.options.repositories[obj.repo_id].type)
             }
+            Y.one('.file-picker .fp-repo-items').focus();
+
             // display response
             if (obj.login) {
                 scope.viewbar_set_enabled(false);
