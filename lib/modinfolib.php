@@ -257,7 +257,7 @@ class course_modinfo extends stdClass {
 
         // Load sectioncache field into memory as PHP object and check it's valid
         $sectioncache = unserialize($course->sectioncache);
-        if (!is_array($sectioncache) || empty($sectioncache)) {
+        if (!is_array($sectioncache)) {
             // hmm, something is wrong - let's fix it
             rebuild_course_cache($course->id);
             $course->sectioncache = $DB->get_field('course', 'sectioncache', array('id'=>$course->id));
@@ -1278,6 +1278,12 @@ function get_fast_modinfo(&$course, $userid=0) {
  */
 function rebuild_course_cache($courseid=0, $clearonly=false) {
     global $COURSE, $DB, $CFG;
+
+    if (!$clearonly && !empty($CFG->upgraderunning)) {
+        debugging('Function rebuild_course_cache() should not be called from upgrade script unless with argument clearonly.',
+                DEBUG_DEVELOPER);
+        $clearonly = true;
+    }
 
     // Destroy navigation caches
     navigation_cache::destroy_volatile_caches();
