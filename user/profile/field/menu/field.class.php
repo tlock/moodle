@@ -95,6 +95,12 @@ class profile_field_menu extends profile_field_base {
     function convert_external_data($value) {
         $retval = array_search($value, $this->options);
 
+        // If value is a key then return the key. This happens when a default user profile is selected
+        // on the upload users form instead of the need to add a column with the specify value.
+        if (!empty($value) && !empty($this->options[$value])) {
+            return $value;
+        }
+
         // If value is not found in options then return null, so that it can be handled
         // later by edit_save_data_preprocess
         if ($retval === false) {
