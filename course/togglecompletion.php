@@ -44,16 +44,16 @@ if ($courseid) {
     $context = context_course::instance($course->id);
     require_login($course);
 
-    $completion = new completion_info($course);
-    if (!$completion->is_enabled()) {
-        throw new moodle_exception('completionnotenabled', 'completion');
-    } elseif (!$completion->is_tracked_user($USER->id)) {
-        throw new moodle_exception('nottracked', 'completion');
-    }
-
     // Check if we are marking a user complete via the completion report
     $user = optional_param('user', 0, PARAM_INT);
     $rolec = optional_param('rolec', 0, PARAM_INT);
+
+    $completion = new completion_info($course);
+    if (!$completion->is_enabled()) {
+        throw new moodle_exception('completionnotenabled', 'completion');
+    } elseif (empty($rolec) && !$completion->is_tracked_user($USER->id)) {
+        throw new moodle_exception('nottracked', 'completion');
+    }
 
     if ($user && $rolec) {
         require_sesskey();
