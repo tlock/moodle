@@ -706,16 +706,6 @@ class assign {
                 assign_reset_gradebook($data->courseid);
             }
         }
-        // Updating dates - shift may be negative too.
-        if ($data->timeshift) {
-            shift_course_mod_dates('assign',
-                                    array('duedate', 'allowsubmissionsfromdate', 'cutoffdate'),
-                                    $data->timeshift,
-                                    $data->courseid);
-            $status[] = array('component'=>$componentstr,
-                              'item'=>get_string('datechanged'),
-                              'error'=>false);
-        }
 
         return $status;
     }
@@ -1517,8 +1507,8 @@ class assign {
         $timenow   = time();
 
         // Collect all submissions from the past 24 hours that require mailing.
-        $sql = 'SELECT a.course, a.name, a.blindmarking, a.revealidentities,
-                       g.*, g.id as gradeid, g.timemodified as lastmodified
+        $sql = 'SELECT g.id as gradeid, a.course, a.name, a.blindmarking, a.revealidentities,
+                       g.*, g.timemodified as lastmodified
                  FROM {assign} a
                  JOIN {assign_grades} g ON g.assignment = a.id
                  LEFT JOIN {assign_user_flags} uf ON uf.assignment = a.id AND uf.userid = g.userid
@@ -3344,22 +3334,9 @@ class assign {
                 }
             }
 
-            $showsubmit = ($submission || $teamsubmission) && $showlinks && $this->submissions_open($user->id);
-            if ($teamsubmission && ($teamsubmission->status == ASSIGN_SUBMISSION_STATUS_SUBMITTED)) {
-                $showsubmit = false;
-            }
-            if ($teamsubmission && $this->submission_empty($teamsubmission)) {
-                $showsubmit = false;
-            }
-            if ($submission && ($submission->status == ASSIGN_SUBMISSION_STATUS_SUBMITTED)) {
-                $showsubmit = false;
-            }
-            if ($submission && $this->submission_empty($submission)) {
-                $showsubmit = false;
-            }
-            if (!$this->get_instance()->submissiondrafts) {
-                $showsubmit = false;
-            }
+            $showsubmit = ($showlinks && $this->submissions_open($user->id));
+            $showsubmit = ($showsubmit && $this->show_submit_button($submission, $teamsubmission));
+
             $extensionduedate = null;
             if ($flags) {
                 $extensionduedate = $flags->extensionduedate;
@@ -3481,6 +3458,41 @@ class assign {
 
         }
         return $o;
+    }
+
+    /**
+     * Returns true if the submit subsission button should be shown to the user.
+     *
+     * @param stdClass $submission The users own submission record.
+     * @param stdClass $teamsubmission The users team submission record if there is one
+     * @return bool
+     */
+    protected function show_submit_button($submission = null, $teamsubmission = null) {
+        if ($teamsubmission) {
+            if ($teamsubmission->status === ASSIGN_SUBMISSION_STATUS_SUBMITTED) {
+                // The assignment submission has been completed.
+                return false;
+            } else if ($this->submission_empty($teamsubmission)) {
+                // There is nothing to submit yet.
+                return false;
+            } else if ($submission && $submission->status === ASSIGN_SUBMISSION_STATUS_SUBMITTED) {
+                // The user has already clicked the submit button on the team submission.
+                return false;
+            }
+        } else if ($submission) {
+            if ($submission->status === ASSIGN_SUBMISSION_STATUS_SUBMITTED) {
+                // The assignment submission has been completed.
+                return false;
+            } else if ($this->submission_empty($submission)) {
+                // There is nothing to submit.
+                return false;
+            }
+        } else {
+            // We've not got a valid submission or team submission.
+            return false;
+        }
+        // Last check is that this instance allows drafts.
+        return $this->get_instance()->submissiondrafts;
     }
 
     /**
@@ -3651,6 +3663,10 @@ class assign {
         $gradebookgrade = array();
         if ($grade->grade >= 0) {
             $gradebookgrade['rawgrade'] = $grade->grade;
+        }
+        // Allow "no grade" to be chosen.
+        if ($grade->grade == -1) {
+            $gradebookgrade['rawgrade'] = NULL;
         }
         $gradebookgrade['userid'] = $grade->userid;
         $gradebookgrade['usermodified'] = $grade->grader;
@@ -5056,8 +5072,8 @@ class assign {
                     $mform->addHelpButton('gradedisabled', 'gradeoutofhelp', 'assign');
                 }
             } else {
-                $grademenu = make_grades_menu($this->get_instance()->grade);
-                if (count($grademenu) > 0) {
+                $grademenu = array(-1 => get_string("nograde")) + make_grades_menu($this->get_instance()->grade);
+                if (count($grademenu) > 1) {
                     $gradingelement = $mform->addElement('select', 'grade', get_string('grade') . ':', $grademenu);
 
                     // The grade is already formatted with format_float so it needs to be converted back to an integer.
