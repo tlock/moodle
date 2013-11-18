@@ -2834,7 +2834,6 @@ class assign {
                                                '',
                                                array('class'=>'gradeform'));
         }
-        $o .= $this->get_renderer()->heading(get_string('grade'), 3);
         $o .= $this->get_renderer()->render(new assign_form('gradingform', $mform));
 
         if (count($allsubmissions) > 1 && $attemptnumber == -1) {
