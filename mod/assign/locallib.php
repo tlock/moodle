@@ -6279,7 +6279,6 @@ class assign {
                                             $instance->id,
                                             $userid);
 
-            // What do we do if the grade has not been added to the gradebook (e.g. blind marking)?
             $gradingitem = null;
             $gradebookgrade = null;
             if (isset($gradinginfo->items[0])) {
@@ -6298,6 +6297,17 @@ class assign {
                 }
                 if ($gradebookgrade->grade >= $gradingitem->gradepass) {
                     $shouldreopen = false;
+                }
+
+                if ($this->is_blind_marking() && $shouldreopen) {
+                    if (empty($attemptnumber)) {
+                        $grade = $this->get_user_grade($userid, false, 1);
+                    } else {
+                        $grade = $this->get_user_grade($userid, false, $attemptnumber);
+                    }
+                    if ($grade->grade > $gradingitem->gradepass || $maxattemptsreached) {
+                        $shouldreopen = false;
+                    }
                 }
             }
         }
