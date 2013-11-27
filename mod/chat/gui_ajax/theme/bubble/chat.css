@@ -12,9 +12,7 @@
 
 #input-message {background:#FFFFFF url(input.png) repeat-x scroll 0 0;padding:0 9px;border: 1px solid #999;border-radius: 9px;-moz-border-radius: 9px;}
 .mdl-chat-entry,
-.mdl-chat-my-entry {clear:both;}
-.dir-rtl .mdl-chat-entry,
-.dir-rtl .mdl-chat-my-entry {height: 90px;}
+.mdl-chat-my-entry {clear:both; height: 90px;}
 
 .mdl-chat-entry .chat-event {padding-bottom:15px;}
 
