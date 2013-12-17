@@ -1689,6 +1689,13 @@ M.core_filepicker.init = function(Y, options) {
                     scope.print_msg(M.str.repository.nofilesattached, 'error');
                     return false;
                 }
+                var files = Y.one('.fp-content .fp-file input').get('files'); //will return null in IE8 and IE9
+                if (typeof files !== 'undefined') {
+                    if (this.options.maxbytes > 0 && files._nodes[0].size > this.options.maxbytes) {
+                        scope.print_msg("'" + files._nodes[0].name + "' " + M.str.moodle.filetoolarge, 'error');
+                        return false;
+                    }
+                }
                 this.hide_header();
                 scope.request({
                         scope: scope,
