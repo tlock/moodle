@@ -657,6 +657,7 @@ class page_requirements_manager {
                                                         array('nofilesavailable', 'repository'), array('norepositoriesavailable', 'repository'),
                                                         array('fileexistsdialogheader', 'repository'), array('fileexistsdialog_editor', 'repository'),
                                                         array('fileexistsdialog_filemanager', 'repository'), array('renameto', 'repository'),
+                                                        array('filetoolarge', 'moodle'),
                                                         array('referencesexist', 'repository'), array('select', 'repository')
                                                     ));
                     break;
