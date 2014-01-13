@@ -4672,7 +4672,9 @@ function get_role_names_with_caps_in_context($context, $capabilities) {
 
     $roles = array();
     foreach ($rolesthatcanrate as $r) {
-        $roles[$r] = $allroles[$r];
+        if (isset($allroles[$r])) {
+            $roles[$r] = $allroles[$r];
+        }
     }
 
     return role_fix_names($roles, $context, ROLENAME_ALIAS, true);
