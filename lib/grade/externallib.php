@@ -18,7 +18,7 @@
 /**
  * External grade API
  *
- * @package    core_grade
+ * @package    core_grades
  * @category   external
  * @copyright  2012 Andrew Davis
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -29,7 +29,7 @@ require_once("$CFG->libdir/externallib.php");
 /**
  * Grade external functions
  *
- * @package    core_grade
+ * @package    core_grades
  * @category   external
  * @copyright  2012 Andrew Davis
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -60,8 +60,11 @@ class core_grade_external extends external_api {
     /**
      * Retrieve grade items and, optionally, student grades
      *
-     * @param array $grades array of grade information
-     * @return array of newly created groups
+     * @param  int $courseid        Course id
+     * @param  string $component    Component name
+     * @param  int $activityid      Activity id
+     * @param  array  $userids      Array of user ids
+     * @return array                Array of grades
      * @since Moodle 2.6
      */
     public static function get_grades($courseid, $component = null, $activityid = null, $userids = array()) {
@@ -171,13 +174,13 @@ class core_grade_external extends external_api {
 
             if (!empty($gradeitem->grades)) {
                 foreach ($gradeitem->grades as $studentid => $studentgrade) {
-                    $$gradegradeinstance = grade_grade::fetch(
+                    $gradegradeinstance = grade_grade::fetch(
                         array(
                             'userid' => $studentid,
                             'itemid' => $gradeiteminstance->id
                         )
                     );
-                    if (!$canviewhidden && $$gradegradeinstance->is_hidden()) {
+                    if (!$canviewhidden && $gradegradeinstance->is_hidden()) {
                         continue;
                     }
                     $gradeitemarray['grades'][$studentid] = (array)$studentgrade;
@@ -217,14 +220,14 @@ class core_grade_external extends external_api {
                         // Need to load the grade_grade object to check visibility.
                         $gradeiteminstance = self::get_grade_item(
                             $course->id, $outcome->itemtype, $outcome->itemmodule, $outcome->iteminstance, $outcome->itemnumber);
-                        $$gradegradeinstance = grade_grade::fetch(
+                        $gradegradeinstance = grade_grade::fetch(
                             array(
                                 'userid' => $studentid,
                                 'itemid' => $gradeiteminstance->id
                             )
                         );
                         // The grade grade may be legitimately missing if the student has no grade.
-                        if (!empty($$gradegradeinstance) && $$gradegradeinstance->is_hidden()) {
+                        if (!empty($gradegradeinstance ) && $gradegradeinstance->is_hidden()) {
                             continue;
                         }
                     }
@@ -239,6 +242,15 @@ class core_grade_external extends external_api {
         return $gradesarray;
     }
 
+    /**
+     * Get a grade item
+     * @param  int $courseid        Course id
+     * @param  string $itemtype     Item type
+     * @param  string $itemmodule   Item module
+     * @param  int $iteminstance    Item instance
+     * @param  int $itemnumber      Item number
+     * @return grade_item           A grade_item instance
+     */
     private static function get_grade_item($courseid, $itemtype, $itemmodule = null, $iteminstance = null, $itemnumber = null) {
         $gradeiteminstance = null;
         if ($itemtype == 'course') {
@@ -407,6 +419,18 @@ class core_grade_external extends external_api {
      *
      * @param array $grade array of grade information
      * @since Moodle 2.6
+     */
+
+    /**
+     * [update_grades description]
+     * @param  string $source       The source of the grade update
+     * @param  int $courseid        The course id
+     * @param  string $component    Component name
+     * @param  int $activityid      The activity id
+     * @param  int $itemnumber      The item number
+     * @param  array  $grades      Array of grades
+     * @param  array  $itemdetails Array of item details
+     * @return int                  A status flag
      */
     public static function update_grades($source, $courseid, $component, $activityid,
         $itemnumber, $grades = array(), $itemdetails = array()) {

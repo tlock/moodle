@@ -17,7 +17,7 @@
 /**
  * Unit tests for the grade API at /lib/grade/externallib.php
  *
- * @package    core_grade
+ * @package    core_grades
  * @category   external
  * @copyright  2012 Andrew Davis
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -31,8 +31,24 @@ global $CFG;
 require_once($CFG->dirroot . '/webservice/tests/helpers.php');
 require_once($CFG->libdir . '/grade/externallib.php');
 
+/**
+ * Grades functions unit tests
+ *
+ * @package core_grades
+ * @category external
+ * @copyright 2012 Andrew Davis
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class core_grade_external_testcase extends externallib_advanced_testcase {
 
+    /**
+     * Load initial test information
+     *
+     * @param  string $assignmentname   Assignment name
+     * @param  int $student1rawgrade    Student 1 grade
+     * @param  int $student2rawgrade    Student 2 grade
+     * @return array                    Array of vars with test information
+     */
     protected function load_test_data($assignmentname, $student1rawgrade, $student2rawgrade) {
         global $DB;
 
@@ -298,6 +314,13 @@ class core_grade_external_testcase extends externallib_advanced_testcase {
         $this->assertEquals($student1rawgrade, $this->get_activity_student_grade($grades, $assigmentcm->id, $student1->id));
     }
 
+    /**
+     * Get an activity
+     *
+     * @param  array $grades    Array of grades
+     * @param  int $cmid        Activity course module id
+     * @return strdClass        Activity object
+     */
     private function get_activity($grades, $cmid) {
         foreach ($grades['items'] as $item) {
             if ($item['activityid'] == $cmid) {
@@ -307,6 +330,14 @@ class core_grade_external_testcase extends externallib_advanced_testcase {
         return null;
     }
 
+    /**
+     * Get a grade for an activity
+     *
+     * @param  array $grades    Array of grades
+     * @param  int $cmid        Activity course module id
+     * @param  int $studentid   Student it
+     * @return stdClass         Activity Object
+     */
     private function get_activity_student_grade($grades, $cmid, $studentid) {
         $item = $this->get_activity($grades, $cmid);
         foreach ($item['grades'] as $grade) {
@@ -317,6 +348,13 @@ class core_grade_external_testcase extends externallib_advanced_testcase {
         return null;
     }
 
+    /**
+     * Get an ouctome
+     *
+     * @param  array $grades    Array of grades
+     * @param  int $cmid        Activity course module id
+     * @return stdClass         Outcome object
+     */
     private function get_outcome($grades, $cmid) {
         foreach ($grades['outcomes'] as $outcome) {
             if ($outcome['activityid'] == $cmid) {
@@ -326,6 +364,14 @@ class core_grade_external_testcase extends externallib_advanced_testcase {
         return null;
     }
 
+    /**
+     * Get a grade from an outcome
+     *
+     * @param  array $grades    Array of grades
+     * @param  int $cmid        Activity course module id
+     * @param  int $studentid   Student id
+     * @return stdClass         Outcome object
+     */
     private function get_outcome_student_grade($grades, $cmid, $studentid) {
         $outcome = $this->get_outcome($grades, $cmid);
         foreach ($outcome['grades'] as $grade) {
@@ -337,7 +383,7 @@ class core_grade_external_testcase extends externallib_advanced_testcase {
     }
 
     /**
-     * Test get_grades()
+     * Test update_grades()
      */
     public function test_update_grades() {
         global $DB;
