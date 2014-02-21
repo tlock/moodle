@@ -46,10 +46,12 @@ class core_grade_external extends external_api {
         return new external_function_parameters(
             array(
                 'courseid' => new external_value(PARAM_INT, 'id of course'),
-                'component' => new external_value(PARAM_COMPONENT, 'A component, for example mod_forum or mod_quiz', VALUE_DEFAULT, ''),
+                'component' => new external_value(
+                    PARAM_COMPONENT, 'A component, for example mod_forum or mod_quiz', VALUE_DEFAULT, ''),
                 'activityid' => new external_value(PARAM_INT, 'The activity ID', VALUE_DEFAULT, null),
                 'userids' => new external_multiple_structure(
-                    new external_value(PARAM_INT, 'user ID'), 'An array of user IDs, leave empty to just retrieve grade item information', VALUE_DEFAULT, array()
+                    new external_value(PARAM_INT, 'user ID'),
+                    'An array of user IDs, leave empty to just retrieve grade item information', VALUE_DEFAULT, array()
                 )
             )
         );
@@ -123,11 +125,11 @@ class core_grade_external extends external_api {
         }
         $grades = grade_get_grades($params['courseid'], $itemtype, $itemmodule, $cminstanceid, $params['userids']);
 
-        $activity_instances = null;
+        $acitivityinstances = null;
         if (empty($cm)) {
             // If we're dealing with multiple activites load all the module info.
             $modinfo = get_fast_modinfo($params['courseid']);
-            $activity_instances = $modinfo->get_instances();
+            $acitivityinstances = $modinfo->get_instances();
         }
 
         foreach ($grades->items as $gradeitem) {
@@ -135,7 +137,7 @@ class core_grade_external extends external_api {
                 // If they only requested one activity we will already have the cm.
                 $modulecm = $cm;
             } else if (!empty($gradeitem->itemmodule)) {
-                $modulecm = $activity_instances[$gradeitem->itemmodule][$gradeitem->iteminstance];
+                $modulecm = $acitivityinstances[$gradeitem->itemmodule][$gradeitem->iteminstance];
             } else {
                 // Course grade item.
                 continue;
@@ -152,97 +154,101 @@ class core_grade_external extends external_api {
         }
 
         // Convert from objects to arrays so all web service clients are supported.
-        // While we're doing that we also remove grades the current user can't see due to hiding
-        $grades_array = array();
+        // While we're doing that we also remove grades the current user can't see due to hiding.
+        $gradesarray = array();
         $canviewhidden = has_capability('moodle/grade:viewhidden', context_course::instance($params['courseid']));
 
-        $grades_array['items'] = array();
-        foreach ($grades->items as $grade_item) {
+        $gradesarray['items'] = array();
+        foreach ($grades->items as $gradeitem) {
             // Switch the stdClass instance for a grade item instance so we can call is_hidden() and use the ID.
-            $grade_item_instance = self::get_grade_item($course->id, $grade_item->itemtype, $grade_item->itemmodule, $grade_item->iteminstance, 0);
-            if (!$canviewhidden && $grade_item_instance->is_hidden()) {
+            $gradeiteminstance = self::get_grade_item(
+                $course->id, $gradeitem->itemtype, $gradeitem->itemmodule, $gradeitem->iteminstance, 0);
+            if (!$canviewhidden && $gradeiteminstance->is_hidden()) {
                 continue;
             }
-            $grade_item_array = (array)$grade_item;
-            $grade_item_array['grades'] = array();
+            $gradeitemarray = (array)$gradeitem;
+            $gradeitemarray['grades'] = array();
 
-            if (!empty($grade_item->grades)) {
-                foreach ($grade_item->grades as $studentid => $studentgrade) {
-                    $grade_grade_instance = grade_grade::fetch(
+            if (!empty($gradeitem->grades)) {
+                foreach ($gradeitem->grades as $studentid => $studentgrade) {
+                    $$gradegradeinstance = grade_grade::fetch(
                         array(
                             'userid' => $studentid,
-                            'itemid' => $grade_item_instance->id
+                            'itemid' => $gradeiteminstance->id
                         )
                     );
-                    if (!$canviewhidden && $grade_grade_instance->is_hidden()) {
+                    if (!$canviewhidden && $$gradegradeinstance->is_hidden()) {
                         continue;
                     }
-                    $grade_item_array['grades'][$studentid] = (array)$studentgrade;
+                    $gradeitemarray['grades'][$studentid] = (array)$studentgrade;
                     // Add the student ID as some WS clients can't access the array key.
-                    $grade_item_array['grades'][$studentid]['userid'] = $studentid;
+                    $gradeitemarray['grades'][$studentid]['userid'] = $studentid;
                 }
             }
 
             // If they requested grades for multiple activities load the cm object now.
             $modulecm = $cm;
-            if (empty($modulecm) && !empty($grade_item_instance->itemmodule)) {
-                $modulecm = $activity_instances[$grade_item_instance->itemmodule][$grade_item_instance->iteminstance];
+            if (empty($modulecm) && !empty($gradeiteminstance->itemmodule)) {
+                $modulecm = $acitivityinstances[$gradeiteminstance->itemmodule][$gradeiteminstance->iteminstance];
             }
-            if ($grade_item_instance->itemtype == 'course') {
-                $grades_array['items']['course'] = $grade_item_array;
-                $grades_array['items']['course']['activityid'] = 'course';
+            if ($gradeiteminstance->itemtype == 'course') {
+                $gradesarray['items']['course'] = $gradeitemarray;
+                $gradesarray['items']['course']['activityid'] = 'course';
             } else {
-                $grades_array['items'][$modulecm->id] = $grade_item_array;
+                $gradesarray['items'][$modulecm->id] = $gradeitemarray;
                 // Add the activity ID as some WS clients can't access the array key.
-                $grades_array['items'][$modulecm->id]['activityid'] = $modulecm->id;
+                $gradesarray['items'][$modulecm->id]['activityid'] = $modulecm->id;
             }
         }
 
-        $grades_array['outcomes'] = array();
+        $gradesarray['outcomes'] = array();
         foreach ($grades->outcomes as $outcome) {
             $modulecm = $cm;
             if (empty($modulecm)) {
-                $modulecm = $activity_instances[$outcome->itemmodule][$outcome->iteminstance];
+                $modulecm = $acitivityinstances[$outcome->itemmodule][$outcome->iteminstance];
             }
-            $grades_array['outcomes'][$modulecm->id] = (array)$outcome;
-            $grades_array['outcomes'][$modulecm->id]['activityid'] = $modulecm->id;
+            $gradesarray['outcomes'][$modulecm->id] = (array)$outcome;
+            $gradesarray['outcomes'][$modulecm->id]['activityid'] = $modulecm->id;
 
-            $grades_array['outcomes'][$modulecm->id]['grades'] = array();
+            $gradesarray['outcomes'][$modulecm->id]['grades'] = array();
             if (!empty($outcome->grades)) {
                 foreach ($outcome->grades as $studentid => $studentgrade) {
                     if (!$canviewhidden) {
                         // Need to load the grade_grade object to check visibility.
-                        $grade_item_instance = self::get_grade_item($course->id, $outcome->itemtype, $outcome->itemmodule, $outcome->iteminstance, $outcome->itemnumber);
-                        $grade_grade_instance = grade_grade::fetch(
+                        $gradeiteminstance = self::get_grade_item(
+                            $course->id, $outcome->itemtype, $outcome->itemmodule, $outcome->iteminstance, $outcome->itemnumber);
+                        $$gradegradeinstance = grade_grade::fetch(
                             array(
                                 'userid' => $studentid,
-                                'itemid' => $grade_item_instance->id
+                                'itemid' => $gradeiteminstance->id
                             )
                         );
                         // The grade grade may be legitimately missing if the student has no grade.
-                        if (!empty($grade_grade_instance) && $grade_grade_instance->is_hidden()) {
+                        if (!empty($$gradegradeinstance) && $$gradegradeinstance->is_hidden()) {
                             continue;
                         }
                     }
-                    $grades_array['outcomes'][$modulecm->id]['grades'][$studentid] = (array)$studentgrade;
+                    $gradesarray['outcomes'][$modulecm->id]['grades'][$studentid] = (array)$studentgrade;
 
                     // Add the student ID into the grade structure as some WS clients can't access the key.
-                    $grades_array['outcomes'][$modulecm->id]['grades'][$studentid]['userid'] = $studentid;
+                    $gradesarray['outcomes'][$modulecm->id]['grades'][$studentid]['userid'] = $studentid;
                 }
             }
         }
 
-        return $grades_array;
+        return $gradesarray;
     }
 
     private static function get_grade_item($courseid, $itemtype, $itemmodule = null, $iteminstance = null, $itemnumber = null) {
-        $grade_item_instance = null;
+        $gradeiteminstance = null;
         if ($itemtype == 'course') {
-            $grade_item_instance = grade_item::fetch(array('courseid' => $courseid, 'itemtype' => $itemtype));
+            $gradeiteminstance = grade_item::fetch(array('courseid' => $courseid, 'itemtype' => $itemtype));
         } else {
-            $grade_item_instance = grade_item::fetch(array('courseid' => $courseid, 'itemtype' => $itemtype, 'itemmodule' => $itemmodule, 'iteminstance' => $iteminstance, 'itemnumber' => $itemnumber));
+            $gradeiteminstance = grade_item::fetch(
+                array('courseid' => $courseid, 'itemtype' => $itemtype,
+                    'itemmodule' => $itemmodule, 'iteminstance' => $iteminstance, 'itemnumber' => $itemnumber));
         }
-        return $grade_item_instance;
+        return $gradeiteminstance;
     }
 
     /**
@@ -257,7 +263,8 @@ class core_grade_external extends external_api {
                 'items'  => new external_multiple_structure(
                     new external_single_structure(
                         array(
-                            'activityid' => new external_value(PARAM_ALPHANUM, 'The ID of the activity or "course" for the course grade item'),
+                            'activityid' => new external_value(
+                                PARAM_ALPHANUM, 'The ID of the activity or "course" for the course grade item'),
                             'itemnumber'  => new external_value(PARAM_INT, 'Will be 0 unless the module has multiple grades'),
                             'scaleid' => new external_value(PARAM_INT, 'The ID of the custom scale or 0'),
                             'name' => new external_value(PARAM_RAW, 'The module name'),
@@ -269,19 +276,32 @@ class core_grade_external extends external_api {
                             'grades' => new external_multiple_structure(
                                 new external_single_structure(
                                     array(
-                                        'userid' => new external_value(PARAM_INT, 'Student ID'),
-                                        'grade' => new external_value(PARAM_FLOAT, 'Student grade'),
-                                        'locked' => new external_value(PARAM_BOOL, 'Is the student\'s grade locked?'),
-                                        'hidden' => new external_value(PARAM_BOOL, 'Is the student\'s grade hidden?'),
-                                        'overridden' => new external_value(PARAM_BOOL, 'Is the student\'s grade overridden?'),
-                                        'feedback' => new external_value(PARAM_RAW, 'Feedback from the grader'),
-                                        'feedbackformat' => new external_value(PARAM_INT, 'The format of the feedback'),
-                                        'usermodified' => new external_value(PARAM_INT, 'The ID of the last user to modify this student grade'),
-                                        'datesubmitted' => new external_value(PARAM_INT, 'A timestamp indicating when the student submitted the activity'), 
-                                        'dategraded' => new external_value(PARAM_INT, 'A timestamp indicating when the assignment was grades'),
-                                        'str_grade' => new external_value(PARAM_RAW, 'A string representation of the grade'),
-                                        'str_long_grade' => new external_value(PARAM_RAW, 'A nicely formatted string representation of the grade'),
-                                        'str_feedback' => new external_value(PARAM_TEXT, 'A string representation of the feedback from the grader'),
+                                        'userid' => new external_value(
+                                            PARAM_INT, 'Student ID'),
+                                        'grade' => new external_value(
+                                            PARAM_FLOAT, 'Student grade'),
+                                        'locked' => new external_value(
+                                            PARAM_BOOL, 'Is the student\'s grade locked?'),
+                                        'hidden' => new external_value(
+                                            PARAM_BOOL, 'Is the student\'s grade hidden?'),
+                                        'overridden' => new external_value(
+                                            PARAM_BOOL, 'Is the student\'s grade overridden?'),
+                                        'feedback' => new external_value(
+                                            PARAM_RAW, 'Feedback from the grader'),
+                                        'feedbackformat' => new external_value(
+                                            PARAM_INT, 'The format of the feedback'),
+                                        'usermodified' => new external_value(
+                                            PARAM_INT, 'The ID of the last user to modify this student grade'),
+                                        'datesubmitted' => new external_value(
+                                            PARAM_INT, 'A timestamp indicating when the student submitted the activity'),
+                                        'dategraded' => new external_value(
+                                            PARAM_INT, 'A timestamp indicating when the assignment was grades'),
+                                        'str_grade' => new external_value(
+                                            PARAM_RAW, 'A string representation of the grade'),
+                                        'str_long_grade' => new external_value(
+                                            PARAM_RAW, 'A nicely formatted string representation of the grade'),
+                                        'str_feedback' => new external_value(
+                                            PARAM_TEXT, 'A string representation of the feedback from the grader'),
                                     )
                                 )
                             ),
@@ -291,7 +311,8 @@ class core_grade_external extends external_api {
                 'outcomes'  => new external_multiple_structure(
                     new external_single_structure(
                         array(
-                            'activityid' => new external_value(PARAM_ALPHANUM, 'The ID of the activity or "course" for the course grade item'),
+                            'activityid' => new external_value(
+                                PARAM_ALPHANUM, 'The ID of the activity or "course" for the course grade item'),
                             'itemnumber'  => new external_value(PARAM_INT, 'Will be 0 unless the module has multiple grades'),
                             'scaleid' => new external_value(PARAM_INT, 'The ID of the custom scale or 0'),
                             'name' => new external_value(PARAM_RAW, 'The module name'),
@@ -300,15 +321,24 @@ class core_grade_external extends external_api {
                             'grades' => new external_multiple_structure(
                                 new external_single_structure(
                                     array(
-                                        'userid' => new external_value(PARAM_INT, 'Student ID'),
-                                        'grade' => new external_value(PARAM_FLOAT, 'Student grade'),
-                                        'locked' => new external_value(PARAM_BOOL, 'Is the student\'s grade locked?'),
-                                        'hidden' => new external_value(PARAM_BOOL, 'Is the student\'s grade hidden?'),
-                                        'feedback' => new external_value(PARAM_RAW, 'Feedback from the grader'),
-                                        'feedbackformat' => new external_value(PARAM_INT, 'The feedback format'),
-                                        'usermodified' => new external_value(PARAM_INT, 'The ID of the last user to modify this student grade'),
-                                        'str_grade' => new external_value(PARAM_RAW, 'A string representation of the grade'),
-                                        'str_feedback' => new external_value(PARAM_TEXT, 'A string representation of the feedback from the grader'),
+                                        'userid' => new external_value(
+                                            PARAM_INT, 'Student ID'),
+                                        'grade' => new external_value(
+                                            PARAM_FLOAT, 'Student grade'),
+                                        'locked' => new external_value(
+                                            PARAM_BOOL, 'Is the student\'s grade locked?'),
+                                        'hidden' => new external_value(
+                                            PARAM_BOOL, 'Is the student\'s grade hidden?'),
+                                        'feedback' => new external_value(
+                                            PARAM_RAW, 'Feedback from the grader'),
+                                        'feedbackformat' => new external_value(
+                                            PARAM_INT, 'The feedback format'),
+                                        'usermodified' => new external_value(
+                                            PARAM_INT, 'The ID of the last user to modify this student grade'),
+                                        'str_grade' => new external_value(
+                                            PARAM_RAW, 'A string representation of the grade'),
+                                        'str_feedback' => new external_value(
+                                            PARAM_TEXT, 'A string representation of the feedback from the grader'),
                                     )
                                 )
                             ),
@@ -333,27 +363,39 @@ class core_grade_external extends external_api {
                 'courseid' => new external_value(PARAM_INT, 'id of course'),
                 'component' => new external_value(PARAM_COMPONENT, 'A component, for example mod_forum or mod_quiz'),
                 'activityid' => new external_value(PARAM_INT, 'The activity ID'),
-                'itemnumber' => new external_value(PARAM_INT, 'grade item ID number for modules that have multiple grades. Typically this is 0.'),
+                'itemnumber' => new external_value(
+                    PARAM_INT, 'grade item ID number for modules that have multiple grades. Typically this is 0.'),
                 'grades' => new external_multiple_structure(
                     new external_single_structure(
                         array(
                             'studentid' => new external_value(PARAM_INT, 'Student ID'),
                             'grade' => new external_value(PARAM_FLOAT, 'Student grade'),
-                            'str_feedback' => new external_value(PARAM_TEXT, 'A string representation of the feedback from the grader', VALUE_OPTIONAL),
+                            'str_feedback' => new external_value(
+                                PARAM_TEXT, 'A string representation of the feedback from the grader', VALUE_OPTIONAL),
                         )
                 ), 'Any student grades to alter', VALUE_OPTIONAL),
                 'itemdetails' => new external_single_structure(
                     array(
-                        'itemname' => new external_value(PARAM_ALPHANUMEXT, 'The grade item name', VALUE_OPTIONAL),
-                        'idnumber' => new external_value(PARAM_INT, 'Arbitrary ID provided by the module responsible for the grade item', VALUE_OPTIONAL),
-                        'gradetype' => new external_value(PARAM_INT, 'The type of grade (0 = none, 1 = value, 2 = scale, 3 = text)', VALUE_OPTIONAL),
-                        'grademax' => new external_value(PARAM_FLOAT, 'Maximum grade allowed', VALUE_OPTIONAL),
-                        'grademin' => new external_value(PARAM_FLOAT, 'Minimum grade allowed', VALUE_OPTIONAL),
-                        'scaleid' => new external_value(PARAM_INT, 'The ID of the custom scale being is used', VALUE_OPTIONAL),
-                        'multfactor' => new external_value(PARAM_FLOAT, 'Multiply all grades by this number', VALUE_OPTIONAL),
-                        'plusfactor' => new external_value(PARAM_FLOAT, 'Add this to all grades', VALUE_OPTIONAL),
-                        'deleted' => new external_value(PARAM_BOOL, 'True if the grade item should be deleted', VALUE_OPTIONAL),
-                        'hidden' => new external_value(PARAM_BOOL, 'True if the grade item is hidden', VALUE_OPTIONAL),
+                        'itemname' => new external_value(
+                            PARAM_ALPHANUMEXT, 'The grade item name', VALUE_OPTIONAL),
+                        'idnumber' => new external_value(
+                            PARAM_INT, 'Arbitrary ID provided by the module responsible for the grade item', VALUE_OPTIONAL),
+                        'gradetype' => new external_value(
+                            PARAM_INT, 'The type of grade (0 = none, 1 = value, 2 = scale, 3 = text)', VALUE_OPTIONAL),
+                        'grademax' => new external_value(
+                            PARAM_FLOAT, 'Maximum grade allowed', VALUE_OPTIONAL),
+                        'grademin' => new external_value(
+                            PARAM_FLOAT, 'Minimum grade allowed', VALUE_OPTIONAL),
+                        'scaleid' => new external_value(
+                            PARAM_INT, 'The ID of the custom scale being is used', VALUE_OPTIONAL),
+                        'multfactor' => new external_value(
+                            PARAM_FLOAT, 'Multiply all grades by this number', VALUE_OPTIONAL),
+                        'plusfactor' => new external_value(
+                            PARAM_FLOAT, 'Add this to all grades', VALUE_OPTIONAL),
+                        'deleted' => new external_value(
+                            PARAM_BOOL, 'True if the grade item should be deleted', VALUE_OPTIONAL),
+                        'hidden' => new external_value(
+                            PARAM_BOOL, 'True if the grade item is hidden', VALUE_OPTIONAL),
                     ), 'Any grade item settings to alter', VALUE_OPTIONAL
                 )
             )
@@ -366,7 +408,8 @@ class core_grade_external extends external_api {
      * @param array $grade array of grade information
      * @since Moodle 2.6
      */
-    public static function update_grades($source, $courseid, $component, $activityid, $itemnumber, $grades = array(), $itemdetails = array()) {
+    public static function update_grades($source, $courseid, $component, $activityid,
+        $itemnumber, $grades = array(), $itemdetails = array()) {
         global $CFG;
 
         require_once("$CFG->libdir/gradelib.php");
@@ -401,7 +444,7 @@ class core_grade_external extends external_api {
             $exceptionparam->courseid = $params['courseid'];
             throw new moodle_exception('errorcoursecontextnotvalid' , 'webservice', '', $exceptionparam);
         }
-        
+
         $hidinggrades = false;
         $editinggradeitem = false;
         $editinggrades = false;
@@ -420,16 +463,21 @@ class core_grade_external extends external_api {
         }
 
         if ($editinggradeitem && !has_capability('moodle/grade:manage', $coursecontext)) {
-            throw new moodle_exception('nopermissiontoviewgrades', 'error', '', null, 'moodle/grade:manage required to edit grade information');
+            throw new moodle_exception('nopermissiontoviewgrades', 'error', '', null,
+                'moodle/grade:manage required to edit grade information');
         }
-        if ($hidinggrades && !has_capability('moodle/grade:hide', $coursecontext) && !has_capability('moodle/grade:hide', $coursecontext)) {
-            throw new moodle_exception('nopermissiontoviewgrades', 'error', '', null, 'moodle/grade:hide required to hide grade items');
+        if ($hidinggrades && !has_capability('moodle/grade:hide', $coursecontext) &&
+            !has_capability('moodle/grade:hide', $coursecontext)) {
+            throw new moodle_exception('nopermissiontoviewgrades', 'error', '', null,
+                'moodle/grade:hide required to hide grade items');
         }
         if ($editinggrades && !has_capability('moodle/grade:edit', $coursecontext)) {
-            throw new moodle_exception('nopermissiontoviewgrades', 'error', '', null, 'moodle/grade:edit required to edit grades');
+            throw new moodle_exception('nopermissiontoviewgrades', 'error', '', null,
+                'moodle/grade:edit required to edit grades');
         }
 
-        return grade_update($params['source'], $params['courseid'], $itemtype, $itemmodule, $iteminstance, $itemnumber, $gradestructure, $params['itemdetails']);
+        return grade_update($params['source'], $params['courseid'], $itemtype,
+            $itemmodule, $iteminstance, $itemnumber, $gradestructure, $params['itemdetails']);
     }
 
     /**
@@ -441,7 +489,10 @@ class core_grade_external extends external_api {
     public static function update_grades_returns() {
         return new external_single_structure(
             array (
-                'result' => new external_value(PARAM_INT, 'A value like ' . GRADE_UPDATE_OK . ' => OK, ' . GRADE_UPDATE_FAILED . ' => FAILED  as defined in lib/grade/constants.php')
+                'result' => new external_value(
+                    PARAM_INT,
+                    'A value like ' . GRADE_UPDATE_OK . ' => OK, ' . GRADE_UPDATE_FAILED . ' => FAILED
+                    as defined in lib/grade/constants.php')
             )
         );
     }
