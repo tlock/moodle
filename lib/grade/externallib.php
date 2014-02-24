@@ -33,14 +33,14 @@ require_once("$CFG->libdir/externallib.php");
  * @category   external
  * @copyright  2012 Andrew Davis
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @since Moodle 2.6
+ * @since Moodle 2.7
  */
-class core_grade_external extends external_api {
+class core_grades_external extends external_api {
     /**
      * Returns description of method parameters
      *
      * @return external_function_parameters
-     * @since Moodle 2.6
+     * @since Moodle 2.7
      */
     public static function get_grades_parameters() {
         return new external_function_parameters(
@@ -65,7 +65,7 @@ class core_grade_external extends external_api {
      * @param  int $activityid      Activity id
      * @param  array  $userids      Array of user ids
      * @return array                Array of grades
-     * @since Moodle 2.6
+     * @since Moodle 2.7
      */
     public static function get_grades($courseid, $component = null, $activityid = null, $userids = array()) {
         global $CFG, $USER, $DB;
@@ -267,7 +267,7 @@ class core_grade_external extends external_api {
      * Returns description of method result value
      *
      * @return external_description
-     * @since Moodle 2.6
+     * @since Moodle 2.7
      */
     public static function get_grades_returns() {
         return new external_single_structure(
@@ -366,7 +366,7 @@ class core_grade_external extends external_api {
      * Returns description of method parameters
      *
      * @return external_function_parameters
-     * @since Moodle 2.6
+     * @since Moodle 2.7
      */
     public static function update_grades_parameters() {
         return new external_function_parameters(
@@ -417,12 +417,6 @@ class core_grade_external extends external_api {
     /**
      * Update a grade item and, optionally, student grades
      *
-     * @param array $grade array of grade information
-     * @since Moodle 2.6
-     */
-
-    /**
-     * [update_grades description]
      * @param  string $source       The source of the grade update
      * @param  int $courseid        The course id
      * @param  string $component    Component name
@@ -431,6 +425,7 @@ class core_grade_external extends external_api {
      * @param  array  $grades      Array of grades
      * @param  array  $itemdetails Array of item details
      * @return int                  A status flag
+     * @since Moodle 2.7
      */
     public static function update_grades($source, $courseid, $component, $activityid,
         $itemnumber, $grades = array(), $itemdetails = array()) {
@@ -508,7 +503,7 @@ class core_grade_external extends external_api {
      * Returns description of method result value
      *
      * @return external_description
-     * @since Moodle 2.6
+     * @since Moodle 2.7
      */
     public static function update_grades_returns() {
         return new external_single_structure(

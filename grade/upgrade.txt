@@ -5,4 +5,4 @@ information provided here is intended especially for developers.
 === 2.7.0 ===
 * The class core_grade_external in grade/externallib.php has been renamed to core_grading_external.
   grade/externallib.php is concerned with the grading API not the grades API.
-  The change was necessary to avoid a duplicate class name with core_grade_external in lib/grade/externallib.php.
+  The change was necessary to avoid a duplicate class name with core_grades_external in lib/grade/externallib.php.
