@@ -24,6 +24,8 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+defined('MOODLE_INTERNAL') || die;
+
 require_once("$CFG->libdir/externallib.php");
 
 /**
@@ -85,7 +87,7 @@ class core_grades_external extends external_api {
             throw new moodle_exception('errorcoursecontextnotvalid' , 'webservice', '', $exceptionparam);
         }
 
-        $course = $DB->get_record('course', array('id' => $params['courseid']));
+        $course = $DB->get_record('course', array('id' => $params['courseid']), '*', MUST_EXIST);
 
         $access = false;
         if (has_capability('moodle/grade:viewall', $coursecontext)) {
