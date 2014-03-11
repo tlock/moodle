@@ -99,6 +99,25 @@ $functions = array(
         'type'        => 'read',
         'capabilities'=> 'moodle/cohort:view',
     ),
+    // Grade related functions.
+
+    'core_grades_get_grades' => array(
+        'classname'     => 'core_grades_external',
+        'methodname'    => 'get_grades',
+        'classpath'     => 'lib/grade/externallib.php',
+        'description'   => 'Returns grade item details and optionally student grades.',
+        'type'          => 'read',
+        'capabilities'  => 'moodle/grade:view, moodle/grade:viewall',
+    ),
+
+    'core_grades_update_grades' => array(
+        'classname'     => 'core_grades_external',
+        'methodname'    => 'update_grades',
+        'classpath'     => 'lib/grade/externallib.php',
+        'description'   => 'Update a grade item and associated student grades.',
+        'type'          => 'write',
+        'capabilities'  => '',
+    ),
 
     // === group related functions ===
 
@@ -795,14 +814,6 @@ $functions = array(
 
     'core_grading_get_definitions' => array(
         'classname'   => 'core_grading_external',
-        'methodname'  => 'get_definitions',
-        'classpath'   => 'grade/externallib.php',
-        'description' => 'Get grading definitions',
-        'type'        => 'read'
-    ),
-
-    'core_grade_get_definitions' => array(
-        'classname'   => 'core_grade_external',
         'methodname'  => 'get_definitions',
         'classpath'   => 'grade/externallib.php',
         'description' => 'DEPRECATED: this deprecated function will be removed in a future version. This function has been renamed as core_grading_get_definitions()',
