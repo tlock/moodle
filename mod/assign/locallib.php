@@ -1885,14 +1885,14 @@ class assign {
             }
             foreach ($allusers as $user) {
                 if ($this->get_submission_group($user->id)) {
-                    $members[] = $user;
+                    $members[$user->id] = $user;
                 }
             }
         } else {
             $allusers = $this->list_participants(null, $onlyids);
             foreach ($allusers as $user) {
                 if ($this->get_submission_group($user->id) == null) {
-                    $members[] = $user;
+                    $members[$user->id] = $user;
                 }
             }
         }
