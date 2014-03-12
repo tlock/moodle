@@ -34,6 +34,8 @@ define('ASSIGN_SUBMISSION_STATUS_SUBMITTED', 'submitted');
 // Search filters for grading page.
 define('ASSIGN_FILTER_SUBMITTED', 'submitted');
 define('ASSIGN_FILTER_SINGLE_USER', 'singleuser');
+define('ASSIGN_FILTER_HAS_EXTENSION', 'has_extension');
+define('ASSIGN_FILTER_LATE', 'late');
 define('ASSIGN_FILTER_REQUIRE_GRADING', 'require_grading');
 
 // Reopen attempt methods.
@@ -3065,6 +3067,7 @@ class assign {
                                           'userid'=>$USER->id,
                                           'submissionsenabled'=>$this->is_any_submission_plugin_enabled(),
                                           'showquickgrading'=>$showquickgrading,
+                                          'allowlate' => $this->get_instance()->cutoffdate != $this->get_instance()->duedate,
                                           'quickgrading'=>$quickgrading,
                                           'markingworkflowopt'=>$markingworkflowoptions,
                                           'markingallocationopt'=>$markingallocationoptions,
@@ -5253,6 +5256,7 @@ class assign {
                                       'userid'=>$USER->id,
                                       'submissionsenabled'=>$this->is_any_submission_plugin_enabled(),
                                       'showquickgrading'=>$showquickgrading,
+                                      'allowlate' => $this->get_instance()->cutoffdate != $this->get_instance()->duedate,
                                       'quickgrading'=>false,
                                       'markingworkflowopt' => $markingworkflowoptions,
                                       'markingallocationopt' => $markingallocationoptions,
