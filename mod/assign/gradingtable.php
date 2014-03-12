@@ -175,11 +175,15 @@ class assign_grading_table extends table_sql implements renderable {
                                  s.status = :submitted AND
                                  (s.timemodified > g.timemodified OR g.timemodified IS NULL))';
                 $params['submitted'] = ASSIGN_SUBMISSION_STATUS_SUBMITTED;
-
             } else if (strpos($filter, ASSIGN_FILTER_SINGLE_USER) === 0) {
                 $userfilter = (int) array_pop(explode('=', $filter));
                 $where .= ' AND (u.id = :userid)';
                 $params['userid'] = $userfilter;
+            } else if ($filter == ASSIGN_FILTER_LATE) {
+                $from .= ' LEFT JOIN {assign} a ON s.assignment = a.id';
+                $where .= ' AND (s.timemodified > GREATEST(uf.extensionduedate, a.duedate))';
+            } else if ($filter == ASSIGN_FILTER_HAS_EXTENSION) {
+                $where .= ' AND (uf.extensionduedate > 0)';
             }
         }
 
