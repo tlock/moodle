@@ -118,8 +118,21 @@ class assign_feedback_offline extends assign_feedback_plugin {
         $adminconfig = $this->assignment->get_admin_config();
         $gradebookplugin = $adminconfig->feedback_plugin_for_gradebook;
 
+        $checkduplicateuserids = array();
+        $idsandrecords = array();
         $updatecount = 0;
-        while ($record = $gradeimporter->next()) {
+        while ($rawrecord = $gradeimporter->next()) {
+            if (isset($checkduplicateuserids[$rawrecord->user->id])) {
+                // Remove all users if they are found duplicate to avoid ambiguity.
+                unset($idsandrecords[$rawrecord->user->id]);
+            } else {
+                $idsandrecords[$rawrecord->user->id] = $rawrecord;
+            }
+            $checkduplicateuserids[$rawrecord->user->id] = true;
+        }
+        $gradeimporter->close(true);
+
+        foreach ($idsandrecords as $record) {
             $user = $record->user;
             $modified = $record->modified;
             $userdesc = fullname($user);
@@ -134,11 +147,17 @@ class assign_feedback_offline extends assign_feedback_plugin {
                     $record->grade = '';
                 }
             } else {
-                $record->grade = unformat_float($record->grade);
+                if(is_numeric($record->grade)) {
+                    $record->grade = unformat_float($record->grade);
+                } else {
+                    // Let it out whatever it is so it can be handled in the error msgs.
+                    $record->grade = $record->grade;
+                }
             }
 
             // Note: Do not count the seconds when comparing modified dates.
             $skip = false;
+            $feedbackskip = false;
             $stalemodificationdate = ($usergrade && $usergrade->timemodified > ($modified + 60));
 
             if ($usergrade && $usergrade->grade == $record->grade) {
@@ -147,16 +166,24 @@ class assign_feedback_offline extends assign_feedback_plugin {
             } else if (!isset($record->grade) || $record->grade === '' || $record->grade < 0) {
                 // Skip - grade has no value.
                 $skip = true;
+                $feedbackskip = true;
             } else if (!$ignoremodified && $stalemodificationdate) {
                 // Skip - grade has been modified.
                 $skip = true;
+                $feedbackskip = true;
             } else if ($this->assignment->grading_disabled($record->user->id)) {
                 // Skip grade is locked.
                 $skip = true;
+                $feedbackskip = true;
             } else if (($this->assignment->get_instance()->grade > -1) &&
                       (($record->grade < 0) || ($record->grade > $this->assignment->get_instance()->grade))) {
                 // Out of range.
                 $skip = true;
+                $feedbackskip = true;
+            } else if(!is_numeric($record->grade) && ($this->assignment->get_instance()->grade > -1) && !empty($record->grade)) {
+                // Numeric value expected and text entered.
+                $skip = true;
+                $feedbackskip = true;
             }
 
             if (!$skip) {
@@ -184,7 +211,7 @@ class assign_feedback_offline extends assign_feedback_plugin {
                             $oldvalue = '';
                         }
                     }
-                    if ($newvalue != $oldvalue) {
+                    if (($newvalue != $oldvalue) && !$feedbackskip) {
                         $updatecount += 1;
                         $grade = $this->assignment->get_user_grade($record->user->id, true);
                         $this->assignment->notify_grade_modified($grade);
@@ -207,7 +234,6 @@ class assign_feedback_offline extends assign_feedback_plugin {
                 }
             }
         }
-        $gradeimporter->close(true);
 
         $renderer = $this->assignment->get_renderer();
         $o = '';

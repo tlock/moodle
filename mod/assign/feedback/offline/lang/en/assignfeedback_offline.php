@@ -31,11 +31,18 @@ $string['enabled_help'] = 'If enabled, the teacher will be able to download and 
 $string['feedbackupdate'] = 'Set field "{$a->field}" for "{$a->student}" to "{$a->text}"';
 $string['graderecentlymodified'] = 'The grade has been modified in Moodle more recently than in the grading worksheet for {$a}';
 $string['gradelockedingradebook'] = 'The grade has been locked in the gradebook for {$a}';
-$string['gradeupdate'] = 'Set grade for {$a->student} to {$a->grade}';
+$string['gradeupdate'] = 'Set grade for {$a->student} to {$a->grade} (was {$a->previousgrade})';
 $string['ignoremodified'] = 'Allow updating records that have been modified more recently in Moodle than in the spreadsheet.';
 $string['ignoremodified_help'] = 'When the grading worksheet is downloaded from Moodle it contains the last modified date for each of the grades. If any of the grades are updated in Moodle after this worksheet is downloaded, by default Moodle will refuse to overwrite this updated information when importing the grades. By selecting this option Moodle will disable this safety check and it may be possible for multiple markers to overwrite each others grades.';
 $string['importgrades'] = 'Confirm changes in grading worksheet';
 $string['invalidgradeimport'] = 'Moodle could not read the uploaded worksheet. Make sure it is saved in comma separated value format (.csv) and try again.';
+$string['invalidgrademsgupdate'] = 'Grade for {$a->student} is invalid {$a->invalidgrade}';
+$string['invalidtextgrademsgupdate'] = 'Grade for {$a->student} is invalid (the entered value: {$a->invalidgrade}) (text entered, expecting number)';
+$string['invalidgradeoutofrangemsgupdate'] = 'Grade for {$a->student} is invalid (the entered value: {$a->invalidgrade}) (the grade must be in the range
+                                              between 0 and {$a->maxgrade})';
+$string['invalidduplicateusermsgupdate'] = 'There are DUPLICATE entry rows for {$a->student} which make all entries are invalid (duplicates error)';
+$string['invalidmodifiedgrademsgupdate'] = 'Grade for {$a->student} has been modified more recently in Moodle so this grade {$a->invalidgrade} from
+                                            the offline worksheet will not update the latest grade in Moodle';
 $string['gradesfile'] = 'Grading worksheet (csv format)';
 $string['gradesfile_help'] = 'Grading worksheet with modified grades. This file must be a csv file that has been downloaded from this assignment and must contain columns for the student grade, and identifier. The encoding for the file must be &quot;UTF-8&quot;';
 $string['nochanges'] = 'No modified grades found in uploaded worksheet';

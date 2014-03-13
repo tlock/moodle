@@ -84,6 +84,8 @@ class assignfeedback_offline_import_grades_form extends moodleform implements re
         $mform->addElement('header', 'importgrades', get_string('importgrades', 'assignfeedback_offline'));
 
         $updates = array();
+        $checkduplicateuserids = array();
+        $duplicate_more_than_two = array();
         while ($record = $gradeimporter->next()) {
             $user = $record->user;
             $grade = $record->grade;
@@ -96,6 +98,7 @@ class assignfeedback_offline_import_grades_form extends moodleform implements re
             $usergrade = $assignment->get_user_grade($user->id, false);
             // Note: we lose the seconds when converting to user date format - so must not count seconds in comparision.
             $skip = false;
+            $feedbackskip = false;
 
             $stalemodificationdate = ($usergrade && $usergrade->timemodified > ($modified + 60));
 
@@ -108,39 +111,111 @@ class assignfeedback_offline_import_grades_form extends moodleform implements re
                     $grade = '';
                 }
             } else {
-                $grade = unformat_float($grade);
+                if(is_numeric($grade)) {
+                    $grade = unformat_float($grade);
+                } else {
+                    // Let it out whatever it is so it can be handled in the error msgs.
+                    $grade = $grade;
+                }
             }
 
+            $duplicate = false;
             if ($usergrade && $usergrade->grade == $grade) {
                 // Skip - grade not modified.
                 $skip = true;
             } else if (!isset($grade) || $grade === '' || $grade < 0) {
                 // Skip - grade has no value.
                 $skip = true;
+                $feedbackskip = false;
             } else if (!$ignoremodified && $stalemodificationdate) {
                 // Skip - grade has been modified.
                 $skip = true;
+                $feedbackskip = false;
             } else if ($assignment->grading_disabled($user->id)) {
                 // Skip grade is locked.
                 $skip = true;
+                $feedbackskip = false;
             } else if (($assignment->get_instance()->grade > -1) &&
                       (($grade < 0) || ($grade > $assignment->get_instance()->grade))) {
                 // Out of range.
                 $skip = true;
+                $feedbackskip = false;
+            }
+
+            if(!is_numeric($grade) && ($assignment->get_instance()->grade > -1) && !empty($grade)) {
+                // Numeric value expected and text entered.
+                $skip = true;
+                $feedbackskip = true;
+            } else if (isset($checkduplicateuserids[$user->id])){
+                // Duplicate user in the worksheet.
+                $skip = true;
+                $feedbackskip = true;
+                $duplicate = true;
+                // Remove all users if they are found duplicate to avoid ambiguity.
+                unset($updates['grade_' . $user->id]);
+                foreach ($record->feedback as $feedback) {
+                    $plugin = $feedback['plugin'];
+                    unset($updates['feedback_' . $user->id . '_' . $plugin->get_type()]);
+                }
             }
 
             if (!$skip) {
                 $update = true;
+                $formattedgrade = $grade;
                 if (!empty($scaleoptions)) {
                     $formattedgrade = $scaleoptions[$grade];
-                } else {
-                    $formattedgrade = format_float($grade, 2);
                 }
-                $updates[] = get_string('gradeupdate', 'assignfeedback_offline',
-                                            array('grade'=>$formattedgrade, 'student'=>$userdesc));
+
+                $previousgrade = '';
+                if (!isset($usergrade->grade) || empty($usergrade->grade)) {
+                     $previousgrade = '0';
+                } else {
+                     $previousgrade = $usergrade->grade;
+                }
+
+                $updates['grade_' . $user->id] = get_string('gradeupdate', 'assignfeedback_offline',
+                                            array('grade'=>format_float($formattedgrade, 2), 'student'=>$userdesc,
+                                                  'previousgrade'=> format_float($previousgrade,2)));
             }
 
-            if ($ignoremodified || !$stalemodificationdate) {
+            if ($skip) {
+                if ($grade < 0) {
+                     $updates[] = get_string('invalidgrademsgupdate', 'assignfeedback_offline',
+                                                    array('invalidgrade'=>$grade, 'student'=>$userdesc));
+                } else if(!is_numeric($grade) && ($assignment->get_instance()->grade > -1) && !empty($grade)) {
+                    // Numbers expected but text entered.
+                     $updates[] = get_string('invalidtextgrademsgupdate', 'assignfeedback_offline',
+                                                    array('invalidgrade'=> $grade , 'student'=>$userdesc));
+                } else if (($assignment->get_instance()->grade > -1) && (($grade < 0) || ($grade > $assignment->get_instance()->grade))) {
+                     // Error msg if out of range entered.
+                     $updates[] = get_string('invalidgradeoutofrangemsgupdate', 'assignfeedback_offline',
+                                                    array('invalidgrade'=> $grade , 'student'=>$userdesc,
+                                                          'maxgrade'=> $assignment->get_instance()->grade));
+                } else if (isset($checkduplicateuserids[$user->id])) {
+                    // Check duplicate user.
+                    // Remove all users if they are found duplicate to avoid ambiguity.
+                    unset($updates['grade_' . $user->id]);
+                    foreach ($record->feedback as $feedback) {
+                    $plugin = $feedback['plugin'];
+                    unset($updates['feedback_' . $user->id . '_' . $plugin->get_type()]);
+                    }
+                    if(!isset($duplicate_more_than_two[$user->id])) {
+                        $updates[] = get_string('invalidduplicateusermsgupdate', 'assignfeedback_offline',
+                                     array('student'=>$userdesc));
+                    }
+                    $duplicate_more_than_two[$user->id] = true;
+
+                } else if (!$ignoremodified && $stalemodificationdate) {
+                    // Grade has been modified more recently in Moodle.
+                    $updates[] = get_string('invalidmodifiedgrademsgupdate', 'assignfeedback_offline',
+                                                    array('invalidgrade'=> $grade , 'student'=>$userdesc));
+                } else if ($usergrade && $usergrade->grade == $grade) {
+                    // Skip - grade not modified because current value and the latest one are the same value.
+                   $updates[] = '';
+                }
+           }
+
+           if (!$duplicate && ($ignoremodified || !$stalemodificationdate)) {
                 foreach ($record->feedback as $feedback) {
                     $plugin = $feedback['plugin'];
                     $field = $feedback['field'];
@@ -150,22 +225,20 @@ class assignfeedback_offline_import_grades_form extends moodleform implements re
                     if ($usergrade) {
                         $oldvalue = $plugin->get_editor_text($field, $usergrade->id);
                     }
-                    if ($newvalue != $oldvalue) {
+                    if (($newvalue != $oldvalue) && !$feedbackskip) {
                         $update = true;
-                        $updates[] = get_string('feedbackupdate', 'assignfeedback_offline',
-                                                    array('text'=>$newvalue, 'field'=>$description, 'student'=>$userdesc));
+                        $updates['feedback_' . $user->id . '_' . $plugin->get_type()] = get_string('feedbackupdate', 'assignfeedback_offline', array('text'=>$newvalue,
+                                                                                                   'field'=>$description,
+                                                                                                   'student'=>$userdesc));
                     }
                 }
             }
 
+            $checkduplicateuserids[$user->id] = true;
         }
         $gradeimporter->close(false);
 
-        if ($update) {
-            $mform->addElement('html', $renderer->list_block_contents(array(), $updates));
-        } else {
-            $mform->addElement('html', get_string('nochanges', 'assignfeedback_offline'));
-        }
+        $mform->addElement('html', $renderer->list_block_contents(array(), $updates));
 
         $mform->addElement('hidden', 'id', $assignment->get_course_module()->id);
         $mform->setType('id', PARAM_INT);
