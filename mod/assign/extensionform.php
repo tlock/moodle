@@ -43,6 +43,7 @@ class mod_assign_extension_form extends moodleform {
      * Define the form - called by parent constructor
      */
     public function definition() {
+        global $DB;
         $mform = $this->_form;
 
         list($coursemoduleid, $userid, $batchusers, $instance, $data) = $this->_customdata;
@@ -52,6 +53,23 @@ class mod_assign_extension_form extends moodleform {
         if ($batchusers) {
             $listusersmessage = get_string('grantextensionforusers', 'assign', count(explode(',', $batchusers)));
             $mform->addElement('static', 'applytoselectedusers', '', $listusersmessage);
+            $uids = explode(',', $batchusers);
+            // Display names of users who are getting extensions granted.
+            list($insql,$params) = $DB->get_in_or_equal($uids);
+            $rs = $DB->get_records_sql("SELECT * FROM {user} u ".
+                                       "WHERE u.deleted=0 AND u.id $insql", $params);
+            if (!$instance->blindmarking || $instance->revealidentities) {
+              foreach ($uids as $u) {
+                  $mform->addElement('static', 'user' . $u, '', '<ul><li>'. fullname($rs[$u]) . '</li></ul>');
+              }
+            }
+        } else {
+            $listusersmessage = get_string('grantextensionforusers', 'assign', 1);
+            $mform->addElement('static', 'applytoselectedusers', '', $listusersmessage);
+            if (!$instance->blindmarking || $instance->revealidentities) {
+              $userinfo = $DB->get_record('user', array('id' => $userid));
+              $mform->addElement('static', 'user1', '', '<ul><li>'. fullname($userinfo) . '</li></ul>');
+            }
         }
         if ($instance->allowsubmissionsfromdate) {
             $mform->addElement('static', 'allowsubmissionsfromdate', get_string('allowsubmissionsfromdate', 'assign'),
