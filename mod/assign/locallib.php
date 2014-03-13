@@ -5517,6 +5517,8 @@ class assign {
         }
 
         $pluginerror = false;
+        $unacceptablefiles = false;
+        $invalid_files =array();
         foreach ($this->submissionplugins as $plugin) {
             if ($plugin->is_enabled() && $plugin->is_visible()) {
                 if (!$plugin->save($submission, $data)) {
@@ -5525,11 +5527,19 @@ class assign {
                 }
             }
         }
+        $invalid_files = array_values($this->get_plugin_by_type('assignsubmission','file')->invalid_files($submission));
+        if ($invalid_files) {
+            $unacceptablefiles = true;
+        }
         $allempty = $this->submission_empty($submission);
-        if ($pluginerror || $allempty) {
+        if ($pluginerror || $allempty || $unacceptablefiles) {
             if ($allempty) {
                 $notices[] = get_string('submissionempty', 'mod_assign');
             }
+            if ($unacceptablefiles && !$allempty) {
+                $notices[] = get_string('invalidfileextensions', 'mod_assign', implode(", ",$invalid_files));
+            }
+
             return false;
         }
 

@@ -547,6 +547,15 @@ abstract class assign_plugin {
     }
 
     /**
+     * Get all invalid submitted file extensions
+     * @param stdClass $submission submission plugin data
+     * @return array - An array of invalid file extensions
+     */
+    public function invalid_files(stdClass $submission) {
+        return array();
+    }
+
+    /**
      * Get file areas returns a list of areas this plugin stores files
      * @return array - An array of fileareas (keys) and descriptions (values)
      */

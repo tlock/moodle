@@ -241,6 +241,20 @@ class mod_assign_mod_form extends moodleform_mod {
                 $errors['cutoffdate'] = get_string('cutoffdatefromdatevalidation', 'assign');
             }
         }
+        if ($data['assignsubmission_file_otherdocs']) {
+            if (empty($data['assignsubmission_file_otherdocstext'])) {
+                $errors['assignsubmission_file_otherdocstext'] = get_string('requiredothertext', 'assign');
+            }
+
+        }
+        if (!empty($data['assignsubmission_file_restrictfiletypes'])) {
+            if (empty($data['assignsubmission_file_worddocs']) &&  empty($data['assignsubmission_file_pdfdocs']) &&
+                empty($data['assignsubmission_file_imagedocs']) && empty($data['assignsubmission_file_videodocs']) &&
+                empty($data['assignsubmission_file_audiodocs']) && empty($data['assignsubmission_file_otherdocs'])) {
+                $errors['assignsubmission_file_restrictfiletypes'] = get_string('noemptyfiletypes', 'assign');
+            }
+
+        }
 
         return $errors;
     }

@@ -217,6 +217,8 @@ $string['hideshow'] = 'Hide/Show';
 $string['hiddenuser'] = 'Participant ';
 $string['instructionfiles'] = 'Instruction files';
 $string['invalidgradeforscale'] = 'The grade supplied was not valid for the current scale';
+$string['invalidfileextensions'] = 'The submitted files have invalid file extensions i.e: {$a}.
+                                        To remove a file, click on it then select Delete.';
 $string['invalidfloatforgrade'] = 'The grade provided could not be understood: {$a}';
 $string['lastmodifiedsubmission'] = 'Last modified (submission)';
 $string['lastmodifiedgrade'] = 'Last modified (grade)';
@@ -299,6 +301,8 @@ $string['quickgrading'] = 'Quick grading';
 $string['quickgradingresult'] = 'Quick grading';
 $string['quickgradingchangessaved'] = 'The grade changes were saved';
 $string['quickgrading_help'] = 'Quick grading allows you to assign grades (and outcomes) directly in the submissions table. Quick grading is not compatible with advanced grading and is not recommended when there are multiple markers.';
+$string['requiredothertext'] = ' File format(s) can not be left blank/empty, If other checkbox above is ticked';
+$string['noemptyfiletypes'] = ' One or more file types must be selected, If restrict file types is enabled';
 $string['requiresubmissionstatement'] = 'Require that students accept the submission statement';
 $string['requiresubmissionstatement_help'] = 'Require that students accept the submission statement for all submissions to this assignment.';
 $string['requireallteammemberssubmit'] = 'Require all group members submit';

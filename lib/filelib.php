@@ -1409,8 +1409,8 @@ function &get_mimetypes_array() {
         'dv'   => array ('type'=>'video/x-dv', 'icon'=>'quicktime', 'groups'=>array('video'), 'string'=>'video'),
         'dmg'  => array ('type'=>'application/octet-stream', 'icon'=>'unknown'),
 
-        'doc'  => array ('type'=>'application/msword', 'icon'=>'document', 'groups'=>array('document')),
-        'docx' => array ('type'=>'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'icon'=>'document', 'groups'=>array('document')),
+        'doc'  => array ('type'=>'application/msword', 'icon'=>'document', 'groups'=>array('document', 'msword')),
+        'docx' => array ('type'=>'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'icon'=>'document', 'groups'=>array('document', 'msword')),
         'docm' => array ('type'=>'application/vnd.ms-word.document.macroEnabled.12', 'icon'=>'document'),
         'dotx' => array ('type'=>'application/vnd.openxmlformats-officedocument.wordprocessingml.template', 'icon'=>'document'),
         'dotm' => array ('type'=>'application/vnd.ms-word.template.macroEnabled.12', 'icon'=>'document'),
