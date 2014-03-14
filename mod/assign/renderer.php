@@ -85,6 +85,25 @@ class mod_assign_renderer extends plugin_renderer_base {
     }
 
     /**
+     * Utility function to add a row of data to a table with 2 columns and attribute
+     * the table param and does not return a value
+     *
+     * @param html_table $table The table to append the row of data to
+     * @param string $first The first column text
+     * @param string $second The second column text
+     * @param string $attribute The attribute
+     * @return void
+     */
+    private function add_table_row_tuple_attribute(html_table $table, $first, $second, $attribute = '') {
+        $row = new html_table_row();
+        $cell1 = new html_table_cell($first);
+        $cell2 = new html_table_cell($second);
+        $cell2->attributes = array('class'=> $attribute);
+        $row->cells = array($cell1, $cell2);
+        $table->data[] = $row;
+    }
+
+    /**
      * Render a grading message notification
      * @param assign_gradingmessage $result The result to render
      * @return string
@@ -276,6 +295,15 @@ class mod_assign_renderer extends plugin_renderer_base {
                 $this->add_table_row_tuple($t, get_string('numberofsubmissionsneedgrading', 'assign'),
                                            $summary->submissionsneedgradingcount);
             }
+        }
+
+        // If the grades are hidden in the gradebook.
+        if ($summary->hiddengrade) {
+            $this->add_table_row_tuple_attribute($t, get_string('gradesvisibility', 'assign'),
+                                       get_string('gradeshidden', 'assign'), 'gradeshidden');
+        } else {
+            $this->add_table_row_tuple_attribute($t, get_string('gradesvisibility', 'assign'),
+                                       get_string('gradesvisible', 'assign'), 'gradesvisible');
         }
 
         $time = time();
@@ -533,19 +561,21 @@ class mod_assign_renderer extends plugin_renderer_base {
             $t->data[] = $row;
         }
 
-        // Grading status.
-        $row = new html_table_row();
-        $cell1 = new html_table_cell(get_string('gradingstatus', 'assign'));
+        if (!$status->hiddengrade) {
+            // Grading status.
+            $row = new html_table_row();
+            $cell1 = new html_table_cell(get_string('gradingstatus', 'assign'));
 
-        if ($status->graded) {
-            $cell2 = new html_table_cell(get_string('graded', 'assign'));
-            $cell2->attributes = array('class'=>'submissiongraded');
-        } else {
-            $cell2 = new html_table_cell(get_string('notgraded', 'assign'));
-            $cell2->attributes = array('class'=>'submissionnotgraded');
+            if ($status->graded) {
+                $cell2 = new html_table_cell(get_string('graded', 'assign'));
+                $cell2->attributes = array('class'=>'submissiongraded');
+            } else {
+                $cell2 = new html_table_cell(get_string('notgraded', 'assign'));
+                $cell2->attributes = array('class'=>'submissionnotgraded');
+            }
+            $row->cells = array($cell1, $cell2);
+            $t->data[] = $row;
         }
-        $row->cells = array($cell1, $cell2);
-        $t->data[] = $row;
 
         $duedate = $status->duedate;
         if ($duedate > 0) {

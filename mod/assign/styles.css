@@ -105,6 +105,16 @@ div.earlysubmission {
     background-color: #cfefcf;
 }
 
+td.gradeshidden {
+    color: black;
+    background-color: #edf2d0 !important;
+}
+
+td.gradesvisible {
+    color: black;
+    background-color: #caf5d0 !important;
+}
+
 .gradingtable .c0 { display: none; }
 .jsenabled .gradingtable .c0 { display: table-cell; }
 .gradingbatchoperationsform { display: none; }
