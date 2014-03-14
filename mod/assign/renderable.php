@@ -371,6 +371,8 @@ class assign_submission_status implements renderable {
     public $attemptreopenmethod = 'none';
     /** @var int maxattempts */
     public $maxattempts = -1;
+    /** @var bool hiddengrade */
+    public $hiddengrade = false;
 
     /**
      * Constructor
@@ -428,7 +430,8 @@ class assign_submission_status implements renderable {
                                 $blindmarking,
                                 $gradingcontrollerpreview,
                                 $attemptreopenmethod,
-                                $maxattempts) {
+                                $maxattempts,
+                                $hiddengrade) {
         $this->allowsubmissionsfromdate = $allowsubmissionsfromdate;
         $this->alwaysshowdescription = $alwaysshowdescription;
         $this->submission = $submission;
@@ -456,6 +459,7 @@ class assign_submission_status implements renderable {
         $this->gradingcontrollerpreview = $gradingcontrollerpreview;
         $this->attemptreopenmethod = $attemptreopenmethod;
         $this->maxattempts = $maxattempts;
+        $this->hiddengrade = $hiddengrade;
     }
 }
 
@@ -598,6 +602,8 @@ class assign_grading_summary implements renderable {
     public $coursemoduleid = 0;
     /** @var boolean teamsubmission - Are team submissions enabled for this assignment */
     public $teamsubmission = false;
+    /** @var bool hiddengrade */
+    public $hiddengrade = false;
 
     /**
      * constructor
@@ -622,7 +628,8 @@ class assign_grading_summary implements renderable {
                                 $duedate,
                                 $coursemoduleid,
                                 $submissionsneedgradingcount,
-                                $teamsubmission) {
+                                $teamsubmission,
+                                $hiddengrade) {
         $this->participantcount = $participantcount;
         $this->submissiondraftsenabled = $submissiondraftsenabled;
         $this->submissiondraftscount = $submissiondraftscount;
@@ -633,6 +640,7 @@ class assign_grading_summary implements renderable {
         $this->coursemoduleid = $coursemoduleid;
         $this->submissionsneedgradingcount = $submissionsneedgradingcount;
         $this->teamsubmission = $teamsubmission;
+        $this->hiddengrade = $hiddengrade;
     }
 }
 
