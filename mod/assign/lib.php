@@ -467,10 +467,16 @@ function assign_print_overview($courses, &$htmlarray) {
             } else {
                 $str .= get_string('submissionstatus_' . $submission->status, 'assign');
             }
-            if (!$submission->grade || $submission->grade < 0) {
-                $str .= ', ' . get_string('notgraded', 'assign');
-            } else {
-                $str .= ', ' . get_string('graded', 'assign');
+            $hiddengrades = $DB->get_field("grade_items", 'hidden', array("iteminstance"=> $assignment->id,
+                                                                          "courseid"=> $assignment->course,
+                                                                          "itemnumber" => 0,
+                                                                          "itemmodule"=> 'assign'));
+            if(!$hiddengrades) {
+                if (!$submission->grade || $submission->grade < 0) {
+                    $str .= ', ' . get_string('notgraded', 'assign');
+                } else {
+                    $str .= ', ' . get_string('graded', 'assign');
+                }
             }
             $str .= '</div>';
         }

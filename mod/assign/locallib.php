@@ -286,6 +286,25 @@ class assign {
     }
 
     /**
+     * is the grade hidden in the gradebook ?
+     *
+     * @return bool
+     */
+    public function is_the_grade_hidden_in_gradebook() {
+        global $DB;
+        $assignid = $this->get_course_module()->instance;
+        $courseid = $this->get_course()->id;
+        $hiddengrades = $DB->get_field("grade_items", 'hidden', array("iteminstance"=> $assignid,
+                                                                      "courseid"=> $courseid,
+                                                                      "itemnumber" => 0,
+                                                                      "itemmodule"=> 'assign'));
+        if ($hiddengrades) {
+           return true;
+        }
+        return false;
+    }
+
+    /**
      * Get a specific submission plugin by its type.
      *
      * @param string $subtype assignsubmission | assignfeedback
@@ -2798,7 +2817,8 @@ class assign {
                                                              $this->is_blind_marking(),
                                                              '',
                                                              $instance->attemptreopenmethod,
-                                                             $instance->maxattempts);
+                                                             $instance->maxattempts,
+                                                             $this->is_the_grade_hidden_in_gradebook());
             $o .= $this->get_renderer()->render($submissionstatus);
         }
 
@@ -3623,7 +3643,8 @@ class assign {
                                                               $this->is_blind_marking(),
                                                               $gradingcontrollerpreview,
                                                               $instance->attemptreopenmethod,
-                                                              $instance->maxattempts);
+                                                              $instance->maxattempts,
+                                                              $this->is_the_grade_hidden_in_gradebook());
             $o .= $this->get_renderer()->render($submissionstatus);
 
             require_once($CFG->libdir.'/gradelib.php');
@@ -3889,7 +3910,8 @@ class assign {
                                                       $instance->duedate,
                                                       $this->get_course_module()->id,
                                                       $this->count_submissions_need_grading(),
-                                                      $instance->teamsubmission);
+                                                      $instance->teamsubmission,
+                                                      $this->is_the_grade_hidden_in_gradebook());
                 $o .= $this->get_renderer()->render($summary);
             } else {
                 $summary = new assign_grading_summary($this->count_participants(0),
@@ -3901,7 +3923,8 @@ class assign {
                                                       $instance->duedate,
                                                       $this->get_course_module()->id,
                                                       $this->count_submissions_need_grading(),
-                                                      $instance->teamsubmission);
+                                                      $instance->teamsubmission,
+                                                      $this->is_the_grade_hidden_in_gradebook());
                 $o .= $this->get_renderer()->render($summary);
             }
         }
