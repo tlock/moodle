@@ -1563,16 +1563,22 @@ class assign {
      * @param int $limitfrom return a subset of records, starting at this point (optional, required if $limitnum is set).
      * @param int $limitnum return a subset comprising this many records (optional, required if $limitfrom is set).
      * @param bool $onlyactive consider only active enrolments in enabled plugins and time restrictions
+     * @param int $selecteduserid selected user id
      *
      * @return array of user records
      */
-    public function get_students_by_filtereduserids(context $context, $withcapability = '', $groupid = 0, $userfields = 'u.*', $orderby = '', $limitfrom = 0, $limitnum = 0, $onlyactive = false) {
+    public function get_students_by_userids(context $context, $withcapability = '', $groupid = 0, $userfields = 'u.*', $orderby = '',
+                                            $limitfrom = 0, $limitnum = 0, $onlyactive = false, $selecteduserids = array()) {
         global $DB;
         $filter = get_user_preferences('assign_filter', '');
         $table = new assign_grading_table($this, 0, $filter, 0, false, null);
 
-        $useridlist = $table->get_column_data('userid');
-        $filtereduserids = implode(',', $useridlist);
+        if ($selecteduserids) {
+            $filtereduserids = implode(',', $selecteduserids);
+        } else {
+            $useridlist = $table->get_column_data('userid');
+            $filtereduserids = implode(',', $useridlist);
+        }
 
         list($esql, $params) = get_enrolled_sql($context, $withcapability, $groupid, $onlyactive);
         $sql = "SELECT $userfields
@@ -2434,11 +2440,11 @@ class assign {
     }
 
     /**
-     * Download a zip file of all assignment submissions.
+     * Download a zip file of filtered/selected assignment submissions
      *
      * @return string - If an error occurs, this will contain the error page.
      */
-    protected function download_submissions() {
+    private function download_submissions($selecteduserids = array()) {
         global $CFG, $DB;
 
         // More efficient to load this here.
@@ -2446,9 +2452,14 @@ class assign {
 
         $this->require_view_grades();
 
-        // Load filtered list of users used in the assign_grading_table.
-        $students = $this->get_students_by_filtereduserids($this->context, "mod/assign:submit", 0,
-                                                           'u.*', '', 0, 0, $this->show_only_active_users());
+        if($selecteduserids) {
+            // Load selected list of users.
+            $students = $this->get_students_by_userids($this->context, "mod/assign:submit", 0,
+                                                       'u.*', '', 0, 0, $this->show_only_active_users(), $selecteduserids);
+        } else {
+            // Load filtered list of users used in the assign_grading_table.
+            $students = $this->get_students_by_userids($this->context, "mod/assign:submit", 0, 'u.*', '', 0, 0, $this->show_only_active_users());
+        }
 
         // Build a list of files to zip.
         $filesforzipping = array();
@@ -3490,6 +3501,10 @@ class assign {
                     if (!$this->get_instance()->teamsubmission) {
                         $this->process_add_attempt($userid);
                     }
+                }
+
+                if ($data->operation == 'downloadselectedsubmissions') {
+                    $this->download_submissions($userlist);
                 }
             }
             if ($this->get_instance()->teamsubmission && $data->operation == 'addattempt') {
