@@ -597,8 +597,9 @@ class assign_feedback_file extends assign_feedback_plugin {
 
         $fs = get_file_storage();
 
-        // load all users with submit
-        $students = get_enrolled_users($this->assignment->get_context(), "mod/assign:submit");
+        // Load filtered list of users used in the assign_grading_table.
+        $students = $this->assignment->get_students_by_filtereduserids($this->assignment->get_context(), "mod/assign:submit", null,
+                                                                       'u.*', null, null, null, $this->assignment->show_only_active_users());
 
         // build a list of files to zip
         $filesforzipping = array();

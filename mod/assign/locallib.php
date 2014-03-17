@@ -1533,6 +1533,41 @@ class assign {
     }
 
     /**
+     * Returns filtered list of students used in the assign_grading_table.
+     * @param context $context
+     * @param string $withcapability
+     * @param int $groupid 0 means ignore groups, any other value limits the result by group id
+     * @param string $userfields requested user record fields
+     * @param string $orderby
+     * @param int $limitfrom return a subset of records, starting at this point (optional, required if $limitnum is set).
+     * @param int $limitnum return a subset comprising this many records (optional, required if $limitfrom is set).
+     * @param bool $onlyactive consider only active enrolments in enabled plugins and time restrictions
+     *
+     * @return array of user records
+     */
+    public function get_students_by_filtereduserids(context $context, $withcapability = '', $groupid = 0, $userfields = 'u.*', $orderby = '', $limitfrom = 0, $limitnum = 0, $onlyactive = false) {
+        global $DB;
+        $filter = get_user_preferences('assign_filter', '');
+        $table = new assign_grading_table($this, 0, $filter, 0, false, null);
+
+        $useridlist = $table->get_column_data('userid');
+        $filtereduserids = implode(',', $useridlist);
+
+        list($esql, $params) = get_enrolled_sql($context, $withcapability, $groupid, $onlyactive);
+        $sql = "SELECT $userfields
+                FROM {user} u
+                JOIN ($esql) je ON je.id = u.id
+                WHERE u.deleted = 0 AND u.id IN($filtereduserids)";
+        if ($orderby) {
+            $sql = "$sql ORDER BY $orderby";
+        } else {
+            $sql = "$sql ORDER BY u.lastname ASC, u.firstname ASC";
+        }
+
+        return $DB->get_records_sql($sql, $params, $limitfrom, $limitnum);
+    }
+
+    /**
      * Generate zip file from array of given files.
      *
      * @param array $filesforzipping - array of files to pass into archive_to_pathname.
@@ -2356,9 +2391,9 @@ class assign {
 
         require_capability('mod/assign:grade', $this->context);
 
-        // Load all users with submit.
-        $students = get_enrolled_users($this->context, "mod/assign:submit", null, 'u.*', null, null, null,
-                        $this->show_only_active_users());
+        // Load filtered list of users used in the assign_grading_table.
+        $students = $this->get_students_by_filtereduserids($this->context, "mod/assign:submit", 0,
+                                                           'u.*', '', 0, 0, $this->show_only_active_users());
 
         // Build a list of files to zip.
         $filesforzipping = array();
