@@ -210,9 +210,17 @@ class assign_grading_table extends table_sql implements renderable {
                 $headers[] = get_string('recordid', 'assign');
             }
 
-            // Fullname.
-            $columns[] = 'fullname';
-            $headers[] = get_string('fullname');
+            if (!$this->show_firstlastname()) {
+                // Fullname.
+                $columns[] = 'fullname';
+                $headers[] = get_string('fullname');
+            } else {
+                // firstname and lastname in worksheet
+                $columns[] = 'firstname';
+                $headers[] = get_string('firstname');
+                $columns[] = 'lastname';
+                $headers[] = get_string('lastname');
+            }
 
             foreach ($extrauserfields as $extrafield) {
                 $columns[] = $extrafield;
@@ -335,7 +343,11 @@ class assign_grading_table extends table_sql implements renderable {
              $this->column_class($extrafield, $extrafield);
         }
         // We require at least one unique column for the sort.
-        $this->sortable(true, 'userid');
+        if (in_array('username', $columns)) {
+            $this->sortable(true, 'username');
+        } else {
+            $this->sortable(true, 'userid');
+        }
         $this->no_sorting('recordid');
         $this->no_sorting('finalgrade');
         $this->no_sorting('userid');
@@ -589,6 +601,26 @@ class assign_grading_table extends table_sql implements renderable {
         } else {
             return fullname($row);
         }
+    }
+
+    /**
+     * Format user firstname
+     *
+     * @param stdClass $row
+     * @return string
+     */
+    function col_firstname($row) {
+        return $row->firstname;
+    }
+
+    /**
+     * Format user lastname
+     *
+     * @param stdClass $row
+     * @return string
+     */
+    function col_lastname($row) {
+        return $row->lastname;
     }
 
     /**
@@ -1109,6 +1141,28 @@ class assign_grading_table extends table_sql implements renderable {
         $context = $this->assignment->get_course_context();
         return has_capability('gradereport/grader:view', $context) &&
                has_capability('moodle/grade:viewall', $context);
+    }
+
+    /**
+     * Is show firstname & lastname instead of fullname
+     *
+     * @return bool
+     */
+    public function show_firstlastname() {
+        if (get_config('assign', 'showfirstlastnamenotfullname')) {
+            $showwhen = get_config('assign', 'showfirstlastnamenotfullnamewhen');
+            if ($this->is_downloading()) {
+                if ($showwhen == 'both' or $showwhen == 'downloading') {
+                    return true;
+                }
+            } else {
+                if ($showwhen == 'gradetable') {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

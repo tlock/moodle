@@ -369,3 +369,11 @@ $string['submissiontypes'] = 'Submission types';
 $string['feedbacktypes'] = 'Feedback types';
 $string['groupsubmissionsettings'] = 'Group submission settings';
 
+
+$string['showfirstlastnamenotfullname'] = 'Show first / last name';
+$string['showfirstlastnamenotfullname_help'] = 'Show first / last name instead of full name in grading table';
+$string['showfirstlastnamenotfullname_gradetable'] = 'Show first / last name in grading table';
+$string['showfirstlastnamenotfullname_download'] = 'Show first / last name when downloading';
+$string['showfirstlastnamenotfullname_both'] = 'Show first / last name when downloading and grading table';
+$string['showfirstlastnamenotfullnamewhen'] = 'When to show first / last name';
+$string['showfirstlastnamenotfullnamewhen_help'] = 'When to show first / last name instead of full name';
