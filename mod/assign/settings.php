@@ -55,6 +55,27 @@ if ($ADMIN->fulltree) {
                                                     $description,
                                                     0));
 
+    $name = new lang_string('showfirstlastnamenotfullname', 'mod_assign');
+    $description = new lang_string('showfirstlastnamenotfullname_help', 'mod_assign');
+    $settings->add(new admin_setting_configcheckbox('assign/showfirstlastnamenotfullname',
+                                                    $name,
+                                                    $description,
+                                                    0));
+
+    $options = array(
+        'gradetable' => get_string('showfirstlastnamenotfullname_gradetable', 'mod_assign'),
+        'download' => get_string('showfirstlastnamenotfullname_download', 'mod_assign'),
+        'both' => get_string('showfirstlastnamenotfullname_both', 'mod_assign')
+    );
+    $name = new lang_string('showfirstlastnamenotfullnamewhen', 'mod_assign');
+    $description = new lang_string('showfirstlastnamenotfullnamewhen_help', 'mod_assign');
+    $setting = new admin_setting_configselect('assign/showfirstlastnamenotfullnamewhen',
+                                                    $name,
+                                                    $description,
+                                                    'none',
+                                                    $options);
+    $settings->add($setting);
+
     $name = new lang_string('sendsubmissionreceipts', 'mod_assign');
     $description = new lang_string('sendsubmissionreceipts_help', 'mod_assign');
     $settings->add(new admin_setting_configcheckbox('assign/submissionreceipts',
