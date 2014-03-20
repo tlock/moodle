@@ -294,6 +294,18 @@ class assign_submission_file extends assign_submission_plugin {
 
         $fileoptions = $this->get_file_options();
         $submissionid = $submission ? $submission->id : 0;
+        $rawfiletypes = $this->acceptable_files();
+
+        if (!empty($rawfiletypes)) {
+            $acceptablefiletypes = array_values($rawfiletypes);
+            $filetypes = '';
+            foreach ($acceptablefiletypes as $filetype) {
+                $filetypes .= html_writer::tag('li', $filetype);
+            }
+            // List of acceptable file types.
+            $filetypelist = html_writer::tag('ul', $filetypes);
+            $mform->addElement('html', get_string('permittedfiletypes', 'assignsubmission_file', $filetypelist));
+        }
 
         $data = file_prepare_standard_filemanager($data,
                                                   'files',
@@ -518,6 +530,72 @@ class assign_submission_file extends assign_submission_plugin {
       }
 
       return $arraydiffer;
+
+    }
+
+    /**
+     * The list of acceptable files
+     *
+     * @return array of acceptable file types
+     */
+    public function acceptable_files() {
+
+        // Restrict file type is not enabled.
+        if(!$this->get_config('restrictfiletypes')) {
+            return array();
+        }
+
+        $worddocs = $this->get_config('worddocs');
+        $pdfdocs = $this->get_config('pdfdocs');
+        $imagedocs = $this->get_config('imagedocs');
+        $videodocs = $this->get_config('videodocs');
+        $audiodocs = $this->get_config('audiodocs');
+        $otherdocs = $this->get_config('otherdocs');
+        $otherdocstext = $this->get_config('otherdocstext');
+        $accepted_types = array();
+        $worddocs_types = array();
+        $pdfdocs_types = array();
+        $imagedocs_types = array();
+        $videodocs_types = array();
+        $audiodocs_types = array();
+        $otherdocs_types = array();
+        $arraydiffer = array();
+
+        if ($worddocs) {
+            // Word (*.doc, *.docx, *.rtf).
+            $worddocs_types = array('Word (.doc/.docx/.rtf)');
+        }
+        if ($pdfdocs) {
+            // PDF (*.pdf).
+            $pdfdocs_types = array('PDF (.pdf)');
+        }
+        if ($imagedocs) {
+            // Image (*.gif, *.jpg, *.jpeg, *.png), *.svg, *.tiff).
+            $imagedocs_types = array('Image (.gif/.jpg/.jpeg/.png/.svg/.tiff)');
+        }
+        if ($videodocs) {
+            // Video (*.mp4, *.flv, *.mov, *.avi).
+            $videodocs_types = array('Video (.mp4/.flv/.mov/.avi)');
+        }
+        if ($audiodocs) {
+            // Audio (*.mp3, *.ogg, *.wav, *.aac, *.wma).
+            $audiodocs_types = array('Audio (.mp3/.ogg/.wav/.aac/.wma)');
+        }
+
+        if ($otherdocs) {
+            $cleaneddocs_types = array();
+            $nowhitespace = str_replace(' ','',$otherdocstext);
+            $filetypes = explode('*', $nowhitespace);
+            foreach ($filetypes as $key => $filetype) {
+                $cleaneddocs_types[$key] = str_replace(',','', $filetype);
+            }
+            array_shift($cleaneddocs_types); // Skipping 0 index as it is always empty value.
+            $otherdocs_types = $cleaneddocs_types;
+        }
+        $accepted_types = array_merge($worddocs_types, $pdfdocs_types, $imagedocs_types,
+                                      $videodocs_types, $audiodocs_types, $otherdocs_types);
+
+        return $accepted_types;
 
     }
 

@@ -35,6 +35,7 @@ $string['file'] = 'File submissions';
 $string['imagedocs'] = 'Image (*.gif, *.jpg, *.jpeg, *.png, *.svg, *.tiff)';
 $string['otherdocs'] = 'Other';
 $string['otherdocstext'] = 'In format *.ext, Comma-separated';
+$string['permittedfiletypes'] = 'Only the following file type(s) can be uploaded to this assignment: <br /> <strong> {$a} </strong>';
 $string['pdfdocs'] = 'PDF (*.pdf)';
 $string['maxbytes'] = 'Maximum file size';
 $string['maxfilessubmission'] = 'Maximum number of uploaded files';
@@ -48,7 +49,7 @@ $string['restrictfiletypes'] = 'Restrict file types';
 $string['restrictfiletypes_help'] = '* If Restrict File Types is enabled, you can specify the file formats you will accept for this assignment.
                                        Students will not be able to upload files that are not in the format you select.<br /><br />
                                      * If Restrict File Types is set to No, there will be no restriction on the type of files students may submit. <br />
-                                     * If \'Other\' checkbox is ticked then then the file type validation will be checked when the submitted files are saved. ';
+                                     * If \'Other\' checkbox is ticked then the file type validation will be checked * when the submitted files are saved. ';
 $string['incorrectformatothertext'] = ' Incorrect file format. The file format(s) must be like *.ext, *.sql (separated with comma)';
 $string['videodocs'] = 'Video (*.mp4, *.flv)';
 $string['worddocs'] = 'Word documents (*.doc, *.docx, *.rtf)';
