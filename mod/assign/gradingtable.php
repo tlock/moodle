@@ -383,6 +383,12 @@ class assign_grading_table extends table_sql implements renderable {
             $headers[] = get_string('outcomes', 'grades');
         }
 
+        // Add submitted late column in downloaded grading worksheets FLO-360/MDL-39988.
+        if ($this->is_downloading()) {
+            $columns[] = 'worksheetssubmittedlate';
+            $headers[] = get_string('worksheetssubmittedlate', 'assign');
+        }
+
         // Set the columns.
         $this->define_columns($columns);
         $this->define_headers($headers);
@@ -780,6 +786,33 @@ class assign_grading_table extends table_sql implements renderable {
             return $this->gradinginfo->items[0]->grades[$userid];
         }
         return false;
+    }
+
+    /**
+     * Format a column of data for display
+     *
+     * @param stdClass $row
+     * @return string
+     */
+    public function col_worksheetssubmittedlate(stdClass $row) {
+        $o = '';
+
+        if ($this->assignment->is_any_submission_plugin_enabled()) {
+
+            if ($this->assignment->get_instance()->duedate && $row->timesubmitted > $this->assignment->get_instance()->duedate) {
+                if (!$row->extensionduedate || $row->timesubmitted > $row->extensionduedate) {
+                    $latemessage = get_string('submittedlateshort', 'assign',
+                                              format_time($row->timesubmitted - $this->assignment->get_instance()->duedate));
+                    $o .= $this->output->container($latemessage, 'latesubmission');
+                }
+            }
+
+
+        }
+
+        $o = strip_tags(str_replace('</div>', "\n", $o));
+
+        return $o;
     }
 
     /**
