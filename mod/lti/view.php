@@ -65,6 +65,12 @@ if ($l) {  // Two ways to specify the module
 $course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST);
 
 $tool = lti_get_tool_by_url_match($lti->toolurl);
+// If lti activity doesn't define an url, look up by typeid to find the tool used.
+if (!$tool) {
+    $typeconfig = lti_get_type_config($lti->typeid);
+    $tool = lti_get_tool_by_url_match($typeconfig['toolurl']);
+}
+
 if ($tool) {
     $toolconfig = lti_get_type_config($tool->id);
 } else {
