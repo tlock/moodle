@@ -32,6 +32,7 @@ $courseid = required_param('course', PARAM_INT);
 $instanceid = required_param('instanceid', PARAM_INT);
 
 $errormsg = optional_param('lti_errormsg', '', PARAM_RAW);
+$msg = optional_param('lti_msg', '', PARAM_RAW);
 $unsigned = optional_param('unsigned', '0', PARAM_INT);
 
 $launchcontainer = optional_param('launch_container', LTI_LAUNCH_CONTAINER_WINDOW, PARAM_INT);
@@ -40,7 +41,7 @@ $course = $DB->get_record('course', array('id' => $courseid));
 
 require_login($course);
 
-if (!empty($errormsg)) {
+if (!empty($errormsg) || !empty($msg)) {
     $url = new moodle_url('/mod/lti/return.php', array('course' => $courseid));
     $PAGE->set_url($url);
 
@@ -56,7 +57,9 @@ if (!empty($errormsg)) {
     }
 
     echo $OUTPUT->header();
+}
 
+if (!empty($errormsg)) {
     echo get_string('lti_launch_error', 'lti');
 
     echo htmlspecialchars($errormsg);
@@ -79,6 +82,12 @@ if (!empty($errormsg)) {
     }
 
     echo $OUTPUT->footer();
+} else if (!empty($msg)) {
+
+    echo htmlspecialchars($msg);
+
+    echo $OUTPUT->footer();
+
 } else {
     $courseurl = new moodle_url('/course/view.php', array('id' => $courseid));
     $url = $courseurl->out();
