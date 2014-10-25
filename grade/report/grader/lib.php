@@ -263,7 +263,9 @@ class grade_report_grader extends grade_report {
                         $skip = false;
 
                         $dategraded = $oldvalue->get_dategraded();
-                        if (!empty($dategraded) && $timepageload < $dategraded) {
+                        // In unit tests, there is a chance that $timepageload / $dategraded aren't done in the same
+                        // second, therefore this will fail when not relevant for unit tests.
+                        if (!PHPUNIT_TEST && !empty($dategraded) && $timepageload < $dategraded) {
                             // Warn if the grade was updated while we were editing this form.
                             $errorstr = 'gradewasmodifiedduringediting';
                             $skip = true;
