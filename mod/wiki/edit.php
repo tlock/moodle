@@ -68,6 +68,12 @@ if (!$cm = get_coursemodule_from_instance('wiki', $wiki->id)) {
 
 $course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST);
 
+// If the current page is HTML, process section name as RAW to prevent issues determining the section when it contains HTML code.
+$current = wiki_get_current_version($page->id);
+if ($current->contentformat == 'html') {
+    $section = optional_param('section', "", PARAM_RAW);
+}
+
 if (!empty($section) && !$sectioncontent = wiki_get_section_page($page, $section)) {
     print_error('invalidsection', 'wiki');
 }
