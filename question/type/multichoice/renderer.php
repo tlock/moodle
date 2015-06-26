@@ -72,7 +72,13 @@ abstract class qtype_multichoice_renderer_base extends qtype_with_combined_feedb
         $feedbackimg = array();
         $feedback = array();
         $classes = array();
+        $settings = get_config('qtype_multichoice');
         foreach ($question->get_order($qa) as $value => $ansid) {
+            // See if we should replace missing answer with configured details.
+            if (!empty($settings->replacemissinganswer) && !isset($question->answers[$ansid])) {
+               $question->answers[$ansid] = new question_answer($ansid, get_string('missinganswer', 'qtype_multichoice'),
+                                                                        $settings->missinganswergrade, null, null);
+            }
             $ans = $question->answers[$ansid];
             $inputattributes['name'] = $this->get_input_name($qa, $value);
             $inputattributes['value'] = $this->get_input_value($value);
