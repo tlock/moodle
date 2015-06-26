@@ -87,7 +87,13 @@ abstract class qtype_multichoice_base extends question_graded_automatically {
     public function get_question_summary() {
         $question = $this->html_to_text($this->questiontext, $this->questiontextformat);
         $choices = array();
+        $settings = get_config('qtype_multichoice');
         foreach ($this->order as $ansid) {
+            // See if we should replace missing answer with configured details.
+            if (!empty($settings->replacemissinganswer) && !isset($this->answers[$ansid])) {
+               $this->answers[$ansid] = new question_answer($ansid, get_string('missinganswer', 'qtype_multichoice'),
+                                                                        $settings->missinganswergrade, null, null);
+            }
             $choices[] = $this->html_to_text($this->answers[$ansid]->answer,
                     $this->answers[$ansid]->answerformat);
         }
