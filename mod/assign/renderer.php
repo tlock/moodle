@@ -664,6 +664,9 @@ class mod_assign_renderer extends plugin_renderer_base {
             $row = new html_table_row();
             $cell1 = new html_table_cell(get_string('timemodified', 'assign'));
             $cell2 = new html_table_cell(userdate($submission->timemodified));
+            if (empty($submission->timemodified)) {
+                $cell2 = new html_table_cell('-');
+            }
             $row->cells = array($cell1, $cell2);
             $t->data[] = $row;
 

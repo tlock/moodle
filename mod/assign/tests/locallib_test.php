@@ -1669,7 +1669,7 @@ class mod_assign_locallib_testcase extends mod_assign_base_testcase {
 
         // Add a second submission.
         $now = time();
-        $submission = $assign->get_user_submission($this->students[0]->id, true, 1);
+        $submission = $assign->get_user_submission($this->students[0]->id, true, true, 1);
         $data = new stdClass();
         $data->onlinetext_editor = array('itemid' => file_get_unused_draft_itemid(),
                 'text' => 'Submission text',
