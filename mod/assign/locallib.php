@@ -2164,10 +2164,11 @@ class assign {
      *                     case it is determined from the userid.
      * @param bool $create If set to true a new submission object will be created in the database
      *                     with the status set to "new".
+     * @param bool $modifiedtime If set to true then modified time will be now, other set to 0
      * @param int $attemptnumber - -1 means the latest attempt
      * @return stdClass The submission
      */
-    public function get_group_submission($userid, $groupid, $create, $attemptnumber=-1) {
+    public function get_group_submission($userid, $groupid, $create, $modifiedtime = true, $attemptnumber=-1) {
         global $DB;
 
         if ($groupid == 0) {
@@ -2200,6 +2201,9 @@ class assign {
             $submission->groupid = $groupid;
             $submission->timecreated = time();
             $submission->timemodified = $submission->timecreated;
+            if (empty($modifiedtime)) {
+                $submission->timemodified = 0;
+            }
             if ($attemptnumber >= 0) {
                 $submission->attemptnumber = $attemptnumber;
             } else {
@@ -2826,10 +2830,11 @@ class assign {
      *
      * @param int $userid The id of the user whose submission we want or 0 in which case USER->id is used
      * @param bool $create If set to true a new submission object will be created in the database with the status set to "new".
+     * @param bool $modifiedtime If set to true then modified time will be now, other set to 0
      * @param int $attemptnumber - -1 means the latest attempt
      * @return stdClass The submission
      */
-    public function get_user_submission($userid, $create, $attemptnumber=-1) {
+    public function get_user_submission($userid, $create, $modifiedtime = true, $attemptnumber=-1) {
         global $DB, $USER;
 
         if (!$userid) {
@@ -2857,6 +2862,9 @@ class assign {
             $submission->userid       = $userid;
             $submission->timecreated = time();
             $submission->timemodified = $submission->timecreated;
+            if (empty($modifiedtime)) {
+                $submission->timemodified = 0;
+            }
             $submission->status = ASSIGN_SUBMISSION_STATUS_NEW;
             if ($attemptnumber >= 0) {
                 $submission->attemptnumber = $attemptnumber;
@@ -2966,10 +2974,11 @@ class assign {
         $params = array('assignment'=>$this->get_instance()->id, 'userid'=>$userid);
         if ($attemptnumber < 0 || $create) {
             // Make sure this grade matches the latest submission attempt.
+            // Force creation of submission record to have a modified value of 0.
             if ($this->get_instance()->teamsubmission) {
-                $submission = $this->get_group_submission($userid, 0, true);
+                $submission = $this->get_group_submission($userid, 0, true, false);
             } else {
-                $submission = $this->get_user_submission($userid, true);
+                $submission = $this->get_user_submission($userid, true, false);
             }
             if ($submission) {
                 $attemptnumber = $submission->attemptnumber;
@@ -3091,12 +3100,12 @@ class assign {
                                                    !$this->is_active_user($userid));
             $o .= $this->get_renderer()->render($usersummary);
         }
-        $submission = $this->get_user_submission($userid, false, $attemptnumber);
+        $submission = $this->get_user_submission($userid, false, false, $attemptnumber);
         $submissiongroup = null;
         $teamsubmission = null;
         $notsubmitted = array();
         if ($instance->teamsubmission) {
-            $teamsubmission = $this->get_group_submission($userid, 0, false, $attemptnumber);
+            $teamsubmission = $this->get_group_submission($userid, 0, false, false, $attemptnumber);
             $submissiongroup = $this->get_submission_group($userid);
             $groupid = 0;
             if ($submissiongroup) {
@@ -4507,7 +4516,7 @@ class assign {
         }
 
         // First update the submission for the current user.
-        $mysubmission = $this->get_user_submission($userid, true, $submission->attemptnumber);
+        $mysubmission = $this->get_user_submission($userid, true, true, $submission->attemptnumber);
         $mysubmission->status = $submission->status;
 
         $this->update_submission($mysubmission, 0, $updatetime, false);
@@ -4520,7 +4529,7 @@ class assign {
         $result = true;
         if ($submission->status != ASSIGN_SUBMISSION_STATUS_REOPENED) {
             foreach ($team as $member) {
-                $membersubmission = $this->get_user_submission($member->id, false, $submission->attemptnumber);
+                $membersubmission = $this->get_user_submission($member->id, false, false, $submission->attemptnumber);
 
                 // If no submission found for team member and member is active then everyone has not submitted.
                 if (!$membersubmission || $membersubmission->status != ASSIGN_SUBMISSION_STATUS_SUBMITTED
@@ -4551,7 +4560,7 @@ class assign {
         } else {
             // Set the group submission to reopened.
             foreach ($team as $member) {
-                $membersubmission = $this->get_user_submission($member->id, true, $submission->attemptnumber);
+                $membersubmission = $this->get_user_submission($member->id, true, true, $submission->attemptnumber);
                 $membersubmission->status = ASSIGN_SUBMISSION_STATUS_REOPENED;
                 $result = $DB->update_record('assign_submission', $membersubmission) && $result;
             }
@@ -5843,9 +5852,9 @@ class assign {
 
         // Find the previous submission.
         if ($instance->teamsubmission) {
-            $previoussubmission = $this->get_group_submission($USER->id, 0, true, $submission->attemptnumber - 1);
+            $previoussubmission = $this->get_group_submission($USER->id, 0, true, true, $submission->attemptnumber - 1);
         } else {
-            $previoussubmission = $this->get_user_submission($USER->id, true, $submission->attemptnumber - 1);
+            $previoussubmission = $this->get_user_submission($USER->id, true, true, $submission->attemptnumber - 1);
         }
 
         if (!$previoussubmission) {
@@ -6146,9 +6155,9 @@ class assign {
 
         $submission = null;
         if ($this->get_instance()->teamsubmission) {
-            $submission = $this->get_group_submission($userid, 0, false, $attemptnumber);
+            $submission = $this->get_group_submission($userid, 0, false, false, $attemptnumber);
         } else {
-            $submission = $this->get_user_submission($userid, false, $attemptnumber);
+            $submission = $this->get_user_submission($userid, false, false, $attemptnumber);
         }
 
         // Add advanced grading.
@@ -6942,9 +6951,9 @@ class assign {
         $instance = $this->get_instance();
         $submission = null;
         if ($instance->teamsubmission) {
-            $submission = $this->get_group_submission($userid, 0, false, $data->attemptnumber);
+            $submission = $this->get_group_submission($userid, 0, false, false, $data->attemptnumber);
         } else {
-            $submission = $this->get_user_submission($userid, false, $data->attemptnumber);
+            $submission = $this->get_user_submission($userid, false, false, $data->attemptnumber);
         }
         if ($instance->teamsubmission && $data->applytoall) {
             $groupid = 0;
@@ -7178,9 +7187,9 @@ class assign {
 
         // Create the new submission record for the group/user.
         if ($this->get_instance()->teamsubmission) {
-            $newsubmission = $this->get_group_submission($userid, 0, true, $oldsubmission->attemptnumber + 1);
+            $newsubmission = $this->get_group_submission($userid, 0, true, true, $oldsubmission->attemptnumber + 1);
         } else {
-            $newsubmission = $this->get_user_submission($userid, true, $oldsubmission->attemptnumber + 1);
+            $newsubmission = $this->get_user_submission($userid, true, true, $oldsubmission->attemptnumber + 1);
         }
 
         // Set the status of the new attempt to reopened.
