@@ -470,8 +470,8 @@ class assign_events_testcase extends mod_assign_base_testcase {
         $this->setUser($this->students[0]);
 
         $assign = $this->create_instance();
-        $submission1 = $assign->get_user_submission($this->students[0]->id, true, 0);
-        $submission2 = $assign->get_user_submission($this->students[0]->id, true, 1);
+        $submission1 = $assign->get_user_submission($this->students[0]->id, true, true, 0);
+        $submission2 = $assign->get_user_submission($this->students[0]->id, true, true, 1);
         $submission2->status = ASSIGN_SUBMISSION_STATUS_REOPENED;
         $assign->testable_update_submission($submission2, $this->students[0]->id, time(), $assign->get_instance()->teamsubmission);
 
