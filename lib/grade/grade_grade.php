@@ -823,12 +823,12 @@ class grade_grade extends grade_object {
 
                     } else {
                         // depends on altered grades - we should try to recalculate if possible
-                        if ($grade_items[$do]->is_calculated() or
+                        if ($grade_items[$do]->is_calculated() and
                             (!$grade_items[$do]->is_category_item() and !$grade_items[$do]->is_course_item())
                         ) {
-                            // This is a grade item that is not a category or course and has been affected by grade hiding.
-                            // I guess this means it is a calculation that needs to be recalculated.
-                            $unknown[$do] = $do;
+                            // This is a calculated grade item that is not a category or course and has been affected by grade hiding.
+                            // By setting this to zero will force re-calculation.
+                            $unknown[$do] = 0;
                             unset($todo[$key]);
                             $found = true;
                             continue;
