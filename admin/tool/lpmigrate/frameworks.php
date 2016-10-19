@@ -38,10 +38,12 @@ $PAGE->set_heading(get_string('pluginname', 'tool_lpmigrate'));
 
 $output = $PAGE->get_renderer('tool_lpmigrate');
 
-echo $output->header();
-echo $output->heading($title);
-
 $form = new \tool_lpmigrate\form\migrate_framework($context);
+if (!$form->is_cancelled()) {
+    echo $output->header();
+    echo $output->heading($title);
+}
+
 if ($form->is_cancelled()) {
     redirect($url);
 
