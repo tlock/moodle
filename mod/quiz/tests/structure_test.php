@@ -545,6 +545,35 @@ class mod_quiz_structure_testcase extends advanced_testcase {
             ), $structure);
     }
 
+    public function test_move_slot_down_to_last_page() {
+        $quizobj = $this->create_test_quiz(array(
+                'Heading 1',
+                array('TF1', 1, 'truefalse'),
+                'Heading 2',
+                array('TF2', 2, 'truefalse'),
+                'Heading 3',
+                array('TF3', 3, 'truefalse'),
+                'Heading 4',
+                array('TF4', 4, 'truefalse'),
+            ));
+        $structure = \mod_quiz\structure::create_for_quiz($quizobj);
+
+        $idtomove = $structure->get_question_in_slot(1)->slotid;
+        $idmoveafter = $structure->get_question_in_slot(3)->slotid;
+        $structure->move_slot($idtomove, $idmoveafter, '3');
+
+        $structure = \mod_quiz\structure::create_for_quiz($quizobj);
+        $this->assert_quiz_layout(array(
+                'Heading 1',
+                array('TF1', 1, 'truefalse'),
+                'Heading 2',
+                array('TF2', 2, 'truefalse'),
+                'Heading 3',
+                array('TF3', 3, 'truefalse'),
+                array('TF4', 3, 'truefalse'),
+            ), $structure);
+    }
+
     public function test_move_first_slot_down_to_start_of_page_2() {
         $quizobj = $this->create_test_quiz(array(
                 'Heading 1',
