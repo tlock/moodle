@@ -198,7 +198,7 @@ class dropbox extends \oauth2_client {
                 break;
             case 409:
                 // Endpoint-specific error. Look to the response body for the specifics of the error.
-                throw new \coding_exception('Endpoint specific error: ' . $data);
+                throw new endpoint_exception($data);
                 break;
             case 429:
                 // Your app is making too many requests for the given user or team and is being rate limited. Your app
