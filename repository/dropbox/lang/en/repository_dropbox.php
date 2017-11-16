@@ -35,3 +35,10 @@ $string['cachelimit_info'] = 'Enter the maximum size of files (in bytes) to be c
 $string['dropbox:view'] = 'View a Dropbox folder';
 $string['logoutdesc'] = '(Logout when you finish using Dropbox)';
 $string['oauth2redirecturi'] = 'OAuth 2 Redirect URI';
+
+$string['endpointerror'] = 'Dropbox Endpoint error: {$a}';
+$string['error_path'] = 'Lookup Error';
+$string['error_email_not_verified'] = 'User\'s email should be verified.';
+$string['error_shared_link_already_exists'] = 'The shared link already exists.';
+$string['error_settings_error'] = 'There is an error with the given settings.';
+$string['error_access_denied'] = 'Access to the requested path is forbidden.';
