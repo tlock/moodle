@@ -117,8 +117,9 @@ class repository_dropbox_api_testcase extends advanced_testcase {
             '409 http_code' => [
                 ['http_code' => 409],
                 'Some data here',
-                'coding_exception',
-                'Endpoint specific error: Some data here',
+                '\repository_dropbox\endpoint_exception',
+                'error/Dropbox Endpoint error: Some data here',
+
             ],
             '429 http_code' => [
                 ['http_code' => 429],
