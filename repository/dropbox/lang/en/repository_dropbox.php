@@ -40,3 +40,10 @@ $string['uselegacyapi'] = 'Use the deprecated v1 API';
 $string['legacyapihelpsupported'] = 'Dropbox introduced the OAuth 2 API in June 2015. You can configure a new application at <a href="https://www.dropbox.com/developers/apps/" target="_blank">https://www.dropbox.com/developers/apps/</a> and specify the OAuth 2 Redirect URI shown below.';
 $string['oauth2redirecturi'] = 'OAuth 2 Redirect URI';
 $string['oauth2title'] = 'OAuth 2 API';
+
+$string['endpointerror'] = 'Dropbox Endpoint error: {$a}';
+$string['error_path'] = 'Lookup Error';
+$string['error_email_not_verified'] = 'User\'s email should be verified.';
+$string['error_shared_link_already_exists'] = 'The shared link already exists.';
+$string['error_settings_error'] = 'There is an error with the given settings.';
+$string['error_access_denied'] = 'Access to the requested path is forbidden.';
