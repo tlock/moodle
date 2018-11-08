@@ -12584,6 +12584,8 @@ var PlayToggle = function (_Button) {
 
 
   PlayToggle.prototype.handlePlay = function handlePlay(event) {
+    // remove the ended class
+    this.removeClass('vjs-ended');
     this.removeClass('vjs-paused');
     this.addClass('vjs-playing');
     // change the button text to "Pause"
