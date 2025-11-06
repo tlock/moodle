@@ -1045,6 +1045,14 @@ class participants_search {
                     // Already covered above.
                     continue;
                 }
+                // MDL-87123.
+                if (in_array($extrasearchfield, ['id', 'mnethostid', 'firstaccess', 'lastaccess', 'lastlogin', 'currentlogin',
+                                                 'picture', 'timecreated', 'timemodified', 'trustbitmask', 'confirmed',
+                                                 'policyagreed', 'deleted', 'suspended', 'emailstop', 'descriptionformat',
+                                                 'mailformat', 'maildigest', 'maildisplay', 'autosubscribe', 'trackforums'])) {
+                    // Not text based fields.
+                    continue;
+                }
                 // The param must be short (max 32 characters) so don't include field name.
                 $param = $searchkey3 . '_ident' . $fieldindex;
                 $fieldsql = $mappings[$extrasearchfield];
