@@ -421,15 +421,22 @@ class add_item extends dynamic_form {
 
         // Form submission handling.
 
-        // This is a new item, and the category chosen is different than the default category.
-        if (empty($gradeitem->id) && isset($data->parentcategory) && $parentcategory->id != $data->parentcategory) {
+        // This is a new item or sub-category, and the category chosen is different than the default category.
+        // Implement handling of grade categories that isn't the course grade category so parent category is determined correctly
+        // for aggregation calculations.
+        if (isset($data->parentcategory) && $parentcategory->id != $data->parentcategory) {
             $parentcategory = grade_category::fetch(['id' => $data->parentcategory]);
         }
 
         // If unset, give the aggregation values a default based on parent aggregation method.
         $defaults = grade_category::get_default_aggregation_coefficient_values($parentcategory->aggregation);
-        if (!isset($data->aggregationcoef) || $data->aggregationcoef == '') {
-            $data->aggregationcoef = $defaults['aggregationcoef'];
+        // Ensure parentcategory->aggregation is checked and does't default for all aggregation types.
+        if ($parentcategory->aggregation == GRADE_AGGREGATE_SUM || $parentcategory->aggregation == GRADE_AGGREGATE_WEIGHTED_MEAN2) {
+            $data->aggregationcoef = 0;
+        } else {
+            if (!isset($data->aggregationcoef) || $data->aggregationcoef == '') {
+                $data->aggregationcoef = $defaults['aggregationcoef'];
+            }
         }
         if (!isset($data->weightoverride)) {
             $data->weightoverride = $defaults['weightoverride'];
